@@ -1,0 +1,24 @@
+{
+  "name": "错事",
+  "appid": "__UNI__CUOSHI_DEV",
+  "description": "错了就错了，先放在这里吧。",
+  "versionName": "0.4.0-alpha.2",
+  "versionCode": "40",
+  "transformPx": false,
+  "h5": {
+    "title": "错事",
+    "router": {
+      "mode": "hash"
+    }
+  },
+  "mp-weixin": {
+    "appid": "",
+    "setting": {
+      "urlCheck": true
+    },
+    "usingComponents": true
+  },
+  "app-plus": {
+    "usingComponents": true
+  }
+}

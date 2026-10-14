@@ -1,0 +1,16 @@
+{
+  "pages": [
+    { "path": "pages/today/index", "style": { "navigationStyle": "custom" } },
+    { "path": "pages/calendar/index", "style": { "navigationStyle": "custom" } },
+    { "path": "pages/stats/index", "style": { "navigationStyle": "custom" } },
+    { "path": "pages/settings/index", "style": { "navigationStyle": "custom" } },
+    { "path": "pages/detail/index", "style": { "navigationStyle": "custom" } }
+  ],
+  "globalStyle": { "backgroundColor": "#f7f3eb", "navigationBarTextStyle": "black", "navigationBarTitleText": "错事" },
+  "tabBar": { "color": "#837d73", "selectedColor": "#292723", "backgroundColor": "#f7f3eb", "borderStyle": "black", "list": [
+    { "pagePath": "pages/today/index", "text": "今天" },
+    { "pagePath": "pages/calendar/index", "text": "日历" },
+    { "pagePath": "pages/stats/index", "text": "统计" },
+    { "pagePath": "pages/settings/index", "text": "设置" }
+  ] }
+}

@@ -1,0 +1,106 @@
+import {ref} from 'vue'
+import {fresh,cloneState,validate,setCount,appendNote,editNote,deleteNote,undoCount,dayOf,localDate,type Skin,type Records} from './model'
+
+// Local-only data. WeChat/APP uni storage is NOT an IndexedDB transaction and is not cloud sync.
+const KEY='cuoshi-uni-v1'
+const DRAFTS_KEY='cuoshi-uni-drafts-v1'
+export const records=ref<Records>(fresh())
+export const drafts=ref<Record<string,string>>({})
+export const ready=ref(false)
+export const storageError=ref('')
+export const lastUndo=ref<{date:string;before:number|null;after:number|null}|null>(null)
+let snapshot=''
+let undoExpiry=0
+let undoTimer:ReturnType<typeof setTimeout>|undefined
+function read(key:string):unknown{
+  const value=uni.getStorageSync(key)
+  if(value===''||value===null||value===undefined)return undefined
+  return typeof value==='string'?JSON.parse(value):value
+}
+export function initialize():void{
+  if(ready.value)return
+  try {
+    const existing=read(KEY) as Records|undefined
+    if(existing){validate(existing);records.value=existing;snapshot=JSON.stringify(existing)}
+    else{records.value=fresh();snapshot=''}
+    const draftData=read(DRAFTS_KEY)
+    if(draftData&&typeof draftData==='object'&&!Array.isArray(draftData)){
+      drafts.value=Object.fromEntries(Object.entries(draftData).filter(([key,value])=>/^\d{4}-\d{2}-\d{2}$/.test(key)&&typeof value==='string'&&value.length<=300)) as Record<string,string>
+    }
+    ready.value=true
+  }catch(e){storageError.value='本机记录无法读取，已暂停写入，避免覆盖旧数据';console.error(e)}
+}
+/** A synchronous stale-write guard. This is NOT a cross-process atomic transaction. */
+export function commit(fn:(next:Records)=>boolean):boolean{
+  if(!ready.value)initialize()
+  if(storageError.value)throw Error(storageError.value)
+  const disk=read(KEY) as Records|undefined
+  if((disk?JSON.stringify(disk):'')!==snapshot){
+    if(disk){validate(disk);records.value=disk;snapshot=JSON.stringify(disk)}
+    else{records.value=fresh();snapshot=''}
+    throw Error('另一个页面更新了记录，请确认后重试')
+  }
+  const next=cloneState(records.value),changed=fn(next)
+  if(!changed)return false
+  validate(next)
+  try{uni.setStorageSync(KEY,next);records.value=next;snapshot=JSON.stringify(next);return true}
+  catch(e){storageError.value='本机记录保存失败，请检查存储空间';throw e}
+}
+export function syncFromStorage():void{
+  if(!ready.value)return initialize()
+  try{
+    const disk=read(KEY) as Records|undefined
+    if((disk?JSON.stringify(disk):'')===snapshot)return
+    if(disk)validate(disk)
+    records.value=disk||fresh();snapshot=disk?JSON.stringify(disk):'';lastUndo.value=null
+  }catch(e){storageError.value='本机数据出现异常，已暂停写入';console.error(e)}
+}
+export function changeCount(key:string,value:number|null):boolean{
+  const old=dayOf(records.value,key).count
+  const changed=commit(s=>setCount(s,key,value))
+  if(changed){
+    lastUndo.value={date:key,before:old,after:value};undoExpiry=Date.now()+12000
+    if(undoTimer)clearTimeout(undoTimer)
+    undoTimer=setTimeout(()=>{lastUndo.value=null},12000)
+  }
+  return changed
+}
+export function adjustCount(key:string,delta:number):boolean{
+  if(!ready.value)initialize()
+  const before=dayOf(records.value,key).count
+  if(before===null&&delta<0)return false
+  const to=Math.max(0,Math.min(9999,(before??0)+delta))
+  return changeCount(key,to)
+}
+export function canUndo(key:string):boolean{return lastUndo.value?.date===key && Date.now()<undoExpiry}
+export function reverseCount(key:string):boolean{
+  const pending=lastUndo.value
+  if(!pending||pending.date!==key||Date.now()>=undoExpiry)throw Error('撤销窗口已结束')
+  const changed=commit(s=>undoCount(s,key,pending.after,pending.before))
+  lastUndo.value=null;if(undoTimer)clearTimeout(undoTimer);return changed
+}
+export function addNote(key:string,text:string):boolean{return commit(s=>appendNote(s,key,text))}
+export function updateNote(key:string,noteId:string,text:string):boolean{return commit(s=>editNote(s,key,noteId,text))}
+export function removeNote(key:string,noteId:string):boolean{return commit(s=>deleteNote(s,key,noteId))}
+export function setTheme(skin:Skin):boolean{return commit(s=>{if(s.theme===skin)return false;s.theme=skin;return true})}
+export function saveDraft(key:string,body:string):boolean{
+  const next={...drafts.value}
+  if(body)next[key]=body;else delete next[key]
+  try{uni.setStorageSync(DRAFTS_KEY,next);drafts.value=next;return true}
+  catch{throw Error('草稿保存失败：请及时提交简记')}
+}
+export function removeDraft(key:string):void{try{saveDraft(key,'')}catch(e){console.error(e)}}
+export function day(key:string){return dayOf(records.value,key)}
+export function recentPastChanges():number{return records.value.events.filter(e=>e.opDate===localDate()&&e.targetDate<e.opDate&&['initial','count','unrecord'].includes(e.type)).length}
+/** Destructive replacement only AFTER user confirmation in UI; keep drafts until successful write. */
+export function replaceRecords(next:Records):void{
+  validate(next)
+  if(!ready.value)initialize()
+  if(storageError.value)throw Error(storageError.value)
+  const disk=read(KEY) as Records|undefined
+  if((disk?JSON.stringify(disk):'')!==snapshot)throw Error('另一个页面刚修改了数据，请先重新打开再导入')
+  try{uni.setStorageSync(KEY,cloneState(next));records.value=cloneState(next);snapshot=JSON.stringify(next);lastUndo.value=null}
+  catch{throw Error('导入写入失败，原有内容可能未被替换，请重新检查')}
+  try{uni.removeStorageSync(DRAFTS_KEY);drafts.value={}}catch(e){console.warn('草稿未清理',e)}
+}
+export function clearRecords():void{replaceRecords({...fresh(),theme:records.value.theme})}

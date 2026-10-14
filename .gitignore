@@ -1,0 +1,13 @@
+node_modules/
+dist/
+.unicloud/
+.env
+.env.*
+!.env.example
+*.log
+.DS_Store
+qa-*.png
+*.tsbuildinfo
+.idea/
+.vscode/
+coverage/
