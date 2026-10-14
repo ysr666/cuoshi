@@ -14,7 +14,8 @@
     "test:store": "node tests/check-store.mjs",
     "test": "npm run test:core && npm run test:v04 && npm run test:store",
     "typecheck": "vue-tsc --noEmit",
-    "test:h5": "node tests/check-h5-flow.cjs"
+    "test:h5": "node tests/check-h5-flow.cjs",
+    "test:h5:extended": "node tests/check-h5-extended.cjs"
   },
   "dependencies": {
     "@dcloudio/uni-app": "3.0.0-4080720251210001",
