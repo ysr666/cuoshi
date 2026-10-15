@@ -88,6 +88,6 @@ function clear(){uni.showModal({title:'清除全部记录？',content:'这将删
 .privacy-link { display:flex;justify-content:space-between;gap:20rpx;padding:33rpx 0;font-size:23rpx;color:var(--muted);line-height:1.6; }
 .privacy-detail { display:block;margin:-10rpx 0 30rpx;color:var(--muted);font-size:24rpx;line-height:1.9; }
 .warning { color:#995343;padding:20rpx 0;font-size:24rpx; }
-.footer { display:flex;flex-direction:column;gap:20rpx;margin-top:105rpx;padding-top:35rpx;border-top:1px solid var(--line);color:var(--muted);font-family:var(--display-font);font-size:25rpx;line-height:1.7; }
+.footer { display:flex;flex-direction:column;gap:17rpx;margin-top:65rpx;padding-top:27rpx;border-top:1px solid var(--line);color:var(--muted);font-family:var(--display-font);font-size:25rpx;line-height:1.7; }
 .version { font-family:sans-serif;color:var(--soft);font-size:21rpx;letter-spacing:1rpx; }
 </style>
