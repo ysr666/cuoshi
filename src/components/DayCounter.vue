@@ -26,10 +26,15 @@ function undo(){try{reverseCount(props.date);notify('已撤销；修改历史仍
       <text v-if="value===null" class="zero" role="button" @click="markZero">或者，记为 0 件</text>
       <text v-if="undoVisible" class="undo" role="button" @click="undo">撤销刚才的修改</text>
     </view>
-    <view v-if="editing" class="editor">
-      <text class="editor-title">修改这一天的数量</text>
-      <input class="number-input" type="number" v-model="numberDraft" placeholder="0 至 9999"/>
-      <view class="editor-actions"><text @click="editing=false">取消</text><text @click="saveNumber">保存</text></view>
+    <view v-if="editing" class="editor-layer" role="presentation" @click="editing=false">
+      <view class="editor" role="dialog" aria-modal="true" aria-label="修改这一天的数量" @click.stop>
+        <text class="editor-title">修改这一天的数量</text>
+        <input class="number-input" type="number" :focus="true" :cursor-spacing="110" :adjust-position="true" v-model="numberDraft" placeholder="0 至 9999" />
+        <view class="editor-actions">
+          <text class="editor-action" role="button" @click="editing=false">取消</text>
+          <text class="editor-action confirm" role="button" @click="saveNumber">保存</text>
+        </view>
+      </view>
     </view>
   </view>
 </template>
@@ -45,10 +50,13 @@ function undo(){try{reverseCount(props.date);notify('已撤销；修改历史仍
 .round[disabled] {opacity:.32;}
 .extra-actions {display:flex;justify-content:center;align-items:center;flex-direction:column;gap:0;margin-top:4px;min-height:42px;}
 .zero,.undo {display:block;padding:12px 9px;color:var(--muted);font-size:12px;line-height:1.5;text-decoration:underline;text-decoration-color:var(--line);text-underline-offset:4px;}
-.editor {margin:16px auto 0;padding:22px;max-width:300px;background:var(--panel);border:1px solid var(--line);border-radius:12px;}
-.editor-title {display:block;font-size:13px;color:var(--muted);}
-.number-input {height:55px;font-size:24px;text-align:center;color:var(--ink);margin-top:9px;}
-.editor-actions {display:flex;justify-content:space-around;margin-top:13px;font-size:14px;}
+.editor-layer {position:fixed;inset:0;z-index:110;display:flex;justify-content:center;align-items:center;padding:24px;background:rgba(30,28,25,.22);}
+.editor {width:100%;max-width:335px;padding:28px 26px 20px;background:var(--bg);border:1px solid var(--line);border-radius:15px;box-shadow:0 16px 55px rgba(25,22,19,.12);}
+.editor-title {display:block;text-align:center;font-size:15px;color:var(--ink);font-family:var(--display-font);}
+.number-input {height:55px;font-size:26px;text-align:center;color:var(--ink);margin:18px 0 13px;}
+.editor-actions {display:flex;justify-content:space-around;border-top:1px solid var(--line);gap:12px;}
+.editor-action {display:flex;align-items:center;justify-content:center;min-height:48px;flex:1;padding:12px 6px 0;font-size:14px;color:var(--muted);}
+.editor-action.confirm {color:var(--accent);font-weight:600;}
 .compact {padding:30px 0 21px;}
 .compact .number {font-size:101px;margin-top:8px;}
 .compact .number.unfilled {font-size:96px;}
