@@ -6,7 +6,6 @@ const props=defineProps<{date:string}>()
 const input=ref(drafts.value[props.date]||'')
 const composerRevision=ref(0)
 const draftOkay=ref(true)
-const composerFocused=ref(false)
 watch(()=>props.date,k=>{input.value=drafts.value[k]||'';editing.value='';draftOkay.value=true})
 const notes=computed(()=>day(props.date).notes)
 const editing=ref(''), editText=ref('')
@@ -29,7 +28,7 @@ function confirmRemove(id:string){uni.showModal({title:'删除这条简记？',c
       <template v-else><text class="note-mark"/><text class="note-body">{{item.text}}</text><text class="edit-link" @click="begin(item.id,item.text)">编辑</text></template>
     </view>
     <view class="entry">
-      <textarea :key="composerRevision" :value="input" @input="onChange" @focus="composerFocused=true" @blur="composerFocused=false" maxlength="300" :cursor-spacing="148" :adjust-position="true" auto-height class="field" placeholder="想留几个字也可以……"/>
+      <textarea :key="composerRevision" :value="input" @input="onChange" maxlength="300" :cursor-spacing="148" :adjust-position="true" auto-height class="field" placeholder="想留几个字也可以……"/>
       <text class="save" :class="{inactive:!input.trim()}" role="button" @click="submit">留下</text>
     </view>
     <text v-if="input" class="foot">{{draftOkay?'草稿暂存在本机，点「留下」才会成为正式记录。':'草稿暂存失败，关闭页面可能丢失。'}}</text>
@@ -46,9 +45,9 @@ function confirmRemove(id:string){uni.showModal({title:'删除这条简记？',c
 .entry {display:flex;align-items:center;gap:8px;margin-top:18px;}
 .field {flex:1;width:100%;min-width:0;min-height:47px;padding:12px 0 8px;line-height:1.6;border:0;border-bottom:1px solid var(--line);border-radius:0;background:transparent;color:var(--ink);font-size:17px;}
 .save {display:flex;align-items:center;justify-content:center;min-width:44px;min-height:44px;padding:8px 0 8px 5px;color:var(--accent);font-size:15px;font-weight:600;white-space:nowrap;}
-.save.inactive {color:var(--soft);}
+.save.inactive {color:var(--soft);font-weight:400;}
 .edit-field {width:100%;min-height:56px;font-size:16px;line-height:1.7;color:var(--ink);}
-.note-actions {width:100%;display:flex;justify-content:flex-end;gap:20px;color:var(--muted);font-size:14px;}
+.note-actions {width:100%;display:flex;justify-content:flex-end;gap:16px;color:var(--muted);font-size:14px;}
 .note-actions text {display:flex;align-items:center;min-height:44px;padding:0 5px;}
 .foot {display:block;margin-top:7px;color:var(--muted);font-size:13px;line-height:1.5;}
 </style>

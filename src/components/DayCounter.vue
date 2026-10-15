@@ -19,8 +19,8 @@ function undo(){try{reverseCount(props.date);notify('已撤销；修改历史仍
     <text class="number" :class="{unfilled:value===null}" role="button" aria-label="修改这一天的数量" @click="openEditor">{{value===null?'—':value}}</text>
     <text class="unit">{{value===null?'还没有记录':'件'}}</text>
     <view class="controls">
-      <button class="round" aria-label="减少一件" :disabled="value===null||value===0" @click="bump(-1)">−</button>
-      <button class="round primary" aria-label="增加一件" :disabled="value===MAX_COUNT" @click="bump(1)">＋</button>
+      <button class="round" hover-class="round-pressed" aria-label="减少一件" :disabled="value===null||value===0" @click="bump(-1)">−</button>
+      <button class="round primary" hover-class="round-pressed" aria-label="增加一件" :disabled="value===MAX_COUNT" @click="bump(1)">＋</button>
     </view>
     <view class="extra-actions">
       <text v-if="value===null" class="zero" role="button" @click="markZero">或者，记为 0 件</text>
@@ -46,11 +46,12 @@ function undo(){try{reverseCount(props.date);notify('已撤销；修改历史仍
 .unit {display:block;color:var(--muted);font-size:14px;letter-spacing:.04em;line-height:1.65;}
 .controls {display:flex;align-items:center;justify-content:center;gap:28px;margin-top:30px;}
 .round {margin:0;width:58px;height:58px;padding:0;display:flex;align-items:center;justify-content:center;background:transparent;border:1px solid var(--line);border-radius:100px;color:var(--ink);font-size:29px;font-weight:300;line-height:1;}
+.round-pressed {opacity:.68;}
 .round.primary {border-color:var(--ink);background:var(--ink);color:var(--bg);}
 .round[disabled] {opacity:.32;}
 .extra-actions {display:flex;justify-content:center;align-items:center;flex-direction:column;gap:0;margin-top:4px;min-height:42px;}
 .zero,.undo {display:block;padding:12px 9px;color:var(--muted);font-size:14px;line-height:1.5;text-decoration:underline;text-decoration-color:var(--line);text-underline-offset:4px;}
-.editor-layer {position:fixed;inset:0;z-index:110;display:flex;justify-content:center;align-items:center;padding:24px;background:rgba(30,28,25,.22);}
+.editor-layer {position:fixed;inset:0;z-index:110;display:flex;justify-content:center;align-items:center;padding:24px;padding-bottom:calc(24px + env(safe-area-inset-bottom,0px));background:rgba(30,28,25,.22);}
 .editor {width:100%;max-width:335px;padding:28px 26px 20px;background:var(--bg);border:1px solid var(--line);border-radius:15px;box-shadow:0 16px 55px rgba(25,22,19,.12);}
 .editor-title {display:block;text-align:center;font-size:16px;color:var(--ink);font-family:var(--display-font);}
 .number-input {height:55px;font-size:26px;text-align:center;color:var(--ink);margin:18px 0 13px;}

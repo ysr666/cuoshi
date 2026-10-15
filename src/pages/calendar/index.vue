@@ -43,7 +43,7 @@ const title=computed(()=>{const [y,m]=month.value.split('-');return `${y}年 ${N
 .grid {display:grid;grid-template-columns:repeat(7,minmax(0,1fr));text-align:center;row-gap:0;}
 .cell {aspect-ratio:.84;min-height:46px;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:6px;border-radius:14px;font-size:15px;font-variant-numeric:tabular-nums;color:var(--ink);}
 .cell.today {box-shadow:inset 0 0 0 1px var(--ink);}
-.cell.today text {font-weight:750;}
+.cell.today text {font-weight:600;}
 .cell.future {opacity:.28;}
 .cell.recorded:not(.today) {background:var(--raised);}
 .dot {width:5px;height:5px;border-radius:50%;background:var(--accent);}
