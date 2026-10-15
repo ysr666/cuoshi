@@ -33,7 +33,7 @@ function confirmRemove(id:string){uni.showModal({title:'删除这条简记？',c
 .hint { color:var(--muted);font-size:22rpx;font-weight:400;letter-spacing:.4rpx; }
 .entry { display:flex;flex-direction:column;gap:16rpx;margin-top:28rpx;padding:28rpx 28rpx 21rpx;border:1px solid var(--line);border-radius:16rpx;background:var(--panel); }
 .field { display:block;width:100%;min-height:100rpx;font-size:29rpx;line-height:1.7;color:var(--ink);background:transparent; }
-.save { display:block;align-self:flex-end;padding:9rpx 24rpx;border-radius:80rpx;font-size:25rpx;letter-spacing:1rpx;background:var(--ink);color:var(--bg); }
+.save { display:flex;align-items:center;justify-content:center;align-self:flex-end;min-height:44px;min-width:64px;padding:9rpx 24rpx;border-radius:80rpx;font-size:25rpx;letter-spacing:1rpx;background:var(--ink);color:var(--bg); }
 .note { display:flex;align-items:flex-start;justify-content:space-between;gap:16rpx;flex-wrap:wrap;padding:25rpx 0 26rpx;border-bottom:1px solid var(--line); }
 .note-body { flex:1;font-size:29rpx;line-height:1.85;white-space:pre-wrap;word-break:break-word; }
 .edit-link { color:var(--muted);font-size:24rpx;padding:6rpx 2rpx 6rpx 12rpx; }
