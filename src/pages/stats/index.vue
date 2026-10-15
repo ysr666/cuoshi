@@ -3,7 +3,7 @@ import {ref,computed} from 'vue'
 import {onShow} from '@dcloudio/uni-app'
 import Screen from '../../components/Screen.vue'
 import { records,initialize } from '../../core/store'
-import {countsInRange,dateOffset,localDate,monthlySeries} from '../../core/model'
+import {countsInRange,dateOffset,localDate,monthlySeries,dayOf} from '../../core/model'
 type Period = 'week'|'month'|'year'
 const period=ref<Period>('month')
 function setPeriod(p:string){if(p==='week'||p==='month'||p==='year')period.value=p}
@@ -13,6 +13,25 @@ const bars=computed(()=>{
   return monthlySeries(records.value,year)
 })
 const maxVal=computed(()=>Math.max(1,...bars.value.map(b=>b.value)))
+const dailyBars=computed(()=>{
+  const today=localDate()
+  const first=period.value==='week'
+    ?dateOffset(today,-((new Date().getDay()+6)%7))
+    :today.slice(0,7)+'-01'
+  const end=period.value==='week'?dateOffset(first,6)
+    :today.slice(0,7)+'-'+String(new Date(Number(today.slice(0,4)),Number(today.slice(5,7)),0).getDate()).padStart(2,'0')
+  const result:Array<{key:string;count:number|null;label:string;future:boolean}>=[]
+  for(let key=first;key<=end;key=dateOffset(key,1)){
+    const index=result.length
+    const future=key>today
+    const value=future?null:dayOf(records.value,key).count
+    const day=Number(key.slice(-2))
+    const label=period.value==='week'?'一二三四五六日'[index]:(day===1||day%5===0?String(day):'')
+    result.push({key,count:value,label,future})
+  }
+  return result
+})
+const maxDaily=computed(()=>Math.max(1,...dailyBars.value.map(d=>d.count??0)))
 const totals=computed(()=>{const now=new Date(),nowKey=localDate();let first='';if(period.value==='week'){const offset=(now.getDay()+6)%7;first=dateOffset(nowKey,-offset)}else if(period.value==='month')first=nowKey.slice(0,7)+'-01';else first=nowKey.slice(0,4)+'-01-01';return countsInRange(records.value,first,nowKey)})
 </script>
 <template>
@@ -29,14 +48,19 @@ const totals=computed(()=>{const now=new Date(),nowKey=localDate();let first='';
     </view>
     <view class="graph-area">
       <view class="graph-title"><text>记录分布</text><text class="graph-caption">{{period==='week'?'本周':period==='month'?'本月':'今年'}}{{period==='year'?'每月':'每日'}}</text></view>
-      <view v-if="period==='year' && totals.days>0" class="chart" aria-label="今年每月记录分布">
+      <view v-if="period==='year' && totals.withNumber>0" class="chart" aria-label="今年每月记录分布">
         <view v-for="bar in bars" :key="bar.month" class="bar-group">
           <view class="bar" :style="{height:bar.filled===0?'0%':Math.max(2,bar.value/maxVal*100)+'%'}"/>
           <text>{{bar.month}}</text>
         </view>
       </view>
-      <text v-if="totals.days===0" class="quiet-stats">暂时还没有数字记录。留下几个字也可以。</text>
-      <text v-else-if="period!=='year'" class="quiet-stats">这些数字只是当前记录的汇总。</text>
+      <view v-if="period!=='year' && totals.withNumber>0" class="daily-chart" :aria-label="period==='week'?'本周每日数字记录':'本月每日数字记录'">
+        <view v-for="bar in dailyBars" :key="bar.key" class="daily-group" :class="{future:bar.future}">
+          <view v-if="bar.count!==null" class="daily-bar" :class="{zero:bar.count===0}" :style="{height:bar.count===0?'2px':Math.max(6,bar.count/maxDaily*100)+'%'}"/>
+          <text class="daily-label">{{bar.label}}</text>
+        </view>
+      </view>
+      <text v-if="totals.withNumber===0" class="quiet-stats">{{totals.days>0?'这段时间只留下了简记，还没有数字记录。':'暂时还没有数字记录。留下几个字也可以。'}}</text>
     </view>
     <view class="stats-foot">这里采用各日期现在记录的数字。未记录数量的日子不会当成 0。</view>
   </Screen>
@@ -55,6 +79,12 @@ const totals=computed(()=>{const now=new Date(),nowKey=localDate();let first='';
 .graph-title {display:flex;justify-content:space-between;align-items:center;gap:14px;font-size:15px;}
 .graph-caption {color:var(--muted);font-size:13px;}
 .quiet-stats {display:block;color:var(--muted);font-size:14px;line-height:1.8;padding:37px 0 25px;}
+.daily-chart {display:flex;align-items:flex-end;justify-content:space-between;gap:3px;height:138px;margin-top:22px;border-bottom:1px solid var(--line);}
+.daily-group {display:flex;flex:1;min-width:0;height:100%;flex-direction:column;align-items:center;justify-content:flex-end;position:relative;padding-bottom:20px;}
+.daily-group.future {opacity:.22;}
+.daily-bar {width:65%;max-width:18px;min-width:2px;background:var(--accent);opacity:.47;border-radius:2px 2px 0 0;}
+.daily-bar.zero {width:55%;min-width:4px;opacity:.6;border-radius:0;}
+.daily-label {position:absolute;bottom:0;min-height:17px;color:var(--muted);font-size:11px;line-height:1.4;text-align:center;}
 .stats-foot {border-top:1px solid var(--line);padding:20px 0 0;margin-top:20px;color:var(--muted);font-size:14px;line-height:1.8;}
 .chart {height:162px;border-bottom:1px solid var(--line);display:flex;align-items:flex-end;justify-content:space-between;gap:4px;margin-top:19px;}
 .bar-group {height:100%;flex:1;display:flex;flex-direction:column;justify-content:flex-end;align-items:center;gap:8px;color:var(--muted);font-size:12px;}

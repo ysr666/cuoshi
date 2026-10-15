@@ -14,7 +14,7 @@ function onChange(e:Event){input.value=textValue(e);try{draftOkay.value=saveDraf
 function submit(){if(!input.value.trim())return;try{if(addNote(props.date,input.value)){removeDraft(props.date);input.value='';composerRevision.value++;notify('这几个字也留下了')}}catch(e){notify(String(e))}}
 function begin(id:string,text:string){editing.value=id;editText.value=text}
 function editChange(e:Event){editText.value=textValue(e)}
-function saveEdit(){try{updateNote(props.date,editing.value,editText.value);editing.value='';notify('简记已更新，旧文仍在历史里')}catch(e){notify(String(e))}}
+function saveEdit(){try{const changed=updateNote(props.date,editing.value,editText.value);editing.value='';if(changed)notify('简记已更新，旧文仍在历史里')}catch(e){notify(String(e))}}
 function confirmRemove(id:string){uni.showModal({title:'删除这条简记？',content:'正文将不再显示，但修改历史仍会保留。',success:res=>{if(!res.confirm)return;try{removeNote(props.date,id);editing.value='';notify('已删除简记，历史仍保留')}catch(e){notify(String(e))}}})}
 </script>
 <template>
