@@ -3,13 +3,13 @@ const {chromium}=require('playwright-core');const assert=require('node:assert/st
  const browser=await chromium.launch({headless:true,executablePath:'/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',args:['--no-first-run']});
  const context=await browser.newContext({viewport:{width:390,height:844},locale:'zh-CN'}),page=await context.newPage();
  const errors=[];page.on('pageerror',e=>errors.push(e.message));
- await page.goto('http://127.0.0.1:4177/',{waitUntil:'networkidle'});
+ await page.goto((process.env.CUOSHI_H5_URL||'http://127.0.0.1:4177/'),{waitUntil:'networkidle'});
  const number=page.locator('.number');
- assert.equal((await number.innerText()).trim(),'未记录');
+ assert.equal((await number.innerText()).trim(),'—');
  await page.locator('.round.primary').click();
  assert.equal((await number.innerText()).trim(),'1');
  await page.getByText('撤销刚才的修改').click();
- assert.equal((await number.innerText()).trim(),'未记录');
+ assert.equal((await number.innerText()).trim(),'—');
  await page.locator('.round.primary').click();await page.locator('.round.primary').click();
  assert.equal((await number.innerText()).trim(),'2');
  const note='自动化测试简记：这一天只是测试。';
