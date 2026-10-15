@@ -23,5 +23,5 @@ function calendar(){uni.switchTab({url:'/pages/calendar/index'})}
 </template>
 <style scoped>
 .warning {font-size:13px;line-height:1.8;color:#934f40;padding:15px 0;}
-.quiet {display:block;border-top:1px solid var(--line);padding:14px 0;margin-top:43px;color:var(--muted);font-size:12px;line-height:1.8;}
+.quiet {display:block;border-top:1px solid var(--line);padding:14px 0;margin-top:43px;color:var(--muted);font-size:13px;line-height:1.8;}
 </style>
