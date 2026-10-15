@@ -16,7 +16,8 @@
     "typecheck": "vue-tsc --noEmit",
     "test:h5": "node tests/check-h5-flow.cjs",
     "test:h5:extended": "node tests/check-h5-extended.cjs",
-    "test:h5:layout": "node tests/check-h5-layout.cjs"
+    "test:h5:layout": "node tests/check-h5-layout.cjs",
+    "test:h5:notes": "node tests/check-h5-notes-ux.cjs"
   },
   "dependencies": {
     "@dcloudio/uni-app": "3.0.0-4080720251210001",
