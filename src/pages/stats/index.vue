@@ -29,7 +29,7 @@ const totals=computed(()=>{const now=new Date(),nowKey=localDate();let first='';
 </template>
 <style scoped>
 .period { display:flex;gap:22rpx;margin-top:62rpx;border-bottom:1px solid var(--line); }
-.period text { position:relative;flex:1;text-align:center;padding:17rpx 5rpx 25rpx;color:var(--muted);font-size:27rpx; }
+.period text { position:relative;flex:1;min-height:44px;text-align:center;padding:17rpx 5rpx 25rpx;color:var(--muted);font-size:27rpx; }
 .period text.active { color:var(--ink);font-weight:600; }
 .period text.active::after { content:"";position:absolute;bottom:-1px;left:25%;width:50%;height:3rpx;background:var(--ink); }
 .stat-row { display:flex;justify-content:space-between;gap:15rpx;margin-top:75rpx;padding-bottom:60rpx;border-bottom:1px solid var(--line); }
