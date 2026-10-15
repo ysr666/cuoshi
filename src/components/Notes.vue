@@ -28,5 +28,16 @@ function confirmRemove(id:string){uni.showModal({title:'删除这条简记？',c
   </view>
 </template>
 <style scoped>
-.notes{border-top:1px solid var(--line);padding:34rpx 0;margin-top:20rpx}.head{display:flex;justify-content:space-between;align-items:center;font-size:30rpx}.hint,.foot{font-size:24rpx;color:var(--muted)}.note{font-size:28rpx;line-height:1.7;white-space:pre-wrap;padding:21rpx 0;border-bottom:1px solid var(--line);display:flex;align-items:flex-start;justify-content:space-between;gap:14rpx;flex-wrap:wrap}.note-body{flex:1;word-break:break-word}.edit-link{font-size:24rpx;color:var(--muted);padding:5rpx 10rpx}.edit-field{width:100%;font-size:16px;min-height:80rpx;line-height:1.6}.note-actions{width:100%;display:flex;justify-content:flex-end;gap:45rpx;font-size:25rpx;color:var(--muted);padding:12rpx 0}.entry{display:flex;align-items:flex-start;gap:20rpx;margin-top:32rpx}.field{flex:1;font-size:16px;line-height:1.6;min-height:65rpx;border-bottom:1px solid var(--line);color:var(--ink)}.save{padding:12rpx 4rpx;font-size:28rpx;white-space:nowrap}.foot{display:block;margin-top:16rpx;line-height:1.6}
+.notes { border-top:1px solid var(--line);padding:40rpx 0 15rpx;margin-top:6rpx; }
+.head { display:flex;justify-content:space-between;align-items:baseline;gap:20rpx;font-size:29rpx;font-weight:500; }
+.hint { color:var(--muted);font-size:22rpx;font-weight:400;letter-spacing:.4rpx; }
+.entry { display:flex;flex-direction:column;gap:16rpx;margin-top:28rpx;padding:28rpx 28rpx 21rpx;border:1px solid var(--line);border-radius:16rpx;background:var(--panel); }
+.field { display:block;width:100%;min-height:100rpx;font-size:29rpx;line-height:1.7;color:var(--ink);background:transparent; }
+.save { display:block;align-self:flex-end;padding:9rpx 24rpx;border-radius:80rpx;font-size:25rpx;letter-spacing:1rpx;background:var(--ink);color:var(--bg); }
+.note { display:flex;align-items:flex-start;justify-content:space-between;gap:16rpx;flex-wrap:wrap;padding:25rpx 0 26rpx;border-bottom:1px solid var(--line); }
+.note-body { flex:1;font-size:29rpx;line-height:1.85;white-space:pre-wrap;word-break:break-word; }
+.edit-link { color:var(--muted);font-size:24rpx;padding:6rpx 2rpx 6rpx 12rpx; }
+.edit-field { width:100%;min-height:100rpx;font-size:29rpx;line-height:1.8;color:var(--ink); }
+.note-actions { width:100%;display:flex;justify-content:flex-end;gap:38rpx;font-size:25rpx;color:var(--muted);padding:12rpx 0; }
+.foot { display:block;margin-top:17rpx;font-size:23rpx;line-height:1.7;color:var(--muted); }
 </style>
