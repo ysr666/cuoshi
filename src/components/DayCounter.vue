@@ -58,11 +58,11 @@ function undo(){try{reverseCount(props.date);notify('已撤销；修改历史仍
 .action-line {display:flex;align-items:center;justify-content:space-between;gap:20rpx;padding-top:26rpx;}
 .unit {color:var(--muted);font-size:23rpx;letter-spacing:.5rpx;line-height:1.7;}
 .controls {display:flex;align-items:center;gap:17rpx;flex-shrink:0;}
-.round {display:flex;align-items:center;justify-content:center;border:1px solid var(--line);border-radius:50%;background:transparent;color:var(--ink);width:92rpx;height:92rpx;padding:0;font-size:45rpx;line-height:1;font-weight:300;}
+.round {display:flex;align-items:center;justify-content:center;border:1px solid var(--line);border-radius:50%;background:transparent;color:var(--ink);width:92rpx;height:92rpx;min-width:44px;min-height:44px;padding:0;font-size:45rpx;line-height:1;font-weight:300;}
 .round.primary {border-color:var(--ink);background:var(--ink);color:var(--bg);}
 .round[disabled] {opacity:.25;}
 .extra-actions {display:flex;justify-content:flex-end;align-items:center;min-height:54rpx;padding-top:9rpx;gap:20rpx;}
-.zero,.undo {color:var(--muted);font-size:23rpx;text-decoration:underline;line-height:1.8;text-underline-offset:4rpx;}
+.zero,.undo {display:inline-block;padding:12px 0;color:var(--muted);font-size:23rpx;text-decoration:underline;line-height:1.8;text-underline-offset:4rpx;}
 .editor {margin-top:24rpx;padding:25rpx 30rpx;background:var(--panel);border:1px solid var(--line);border-radius:14rpx;}
 .editor-title {display:block;color:var(--muted);font-size:23rpx;text-align:center;line-height:1.7;}
 .number-input {margin-top:16rpx;text-align:center;color:var(--ink);font-size:40rpx;height:70rpx;}
