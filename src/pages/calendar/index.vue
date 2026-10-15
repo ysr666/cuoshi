@@ -30,7 +30,7 @@ const title=computed(()=>{const [y,m]=month.value.split('-');return `${y}年 ${N
 .month-row .dim { opacity:.27; }
 .week { display:grid;grid-template-columns:repeat(7,minmax(0,1fr));margin-top:46rpx;padding-bottom:20rpx;border-bottom:1px solid var(--line);color:var(--muted);text-align:center;font-size:23rpx; }
 .grid { display:grid;grid-template-columns:repeat(7,minmax(0,1fr));text-align:center;margin-top:21rpx;row-gap:12rpx; }
-.cell { height:92rpx;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:10rpx;position:relative;border-radius:10rpx;font-size:29rpx;color:var(--ink); }
+.cell { height:92rpx;min-height:44px;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:10rpx;position:relative;border-radius:10rpx;font-size:29rpx;color:var(--ink); }
 .cell.today { outline:1px solid var(--soft);outline-offset:-3rpx; }
 .cell.today text { font-weight:600; }
 .cell.future { opacity:.23; }
