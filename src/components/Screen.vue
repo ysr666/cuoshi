@@ -8,7 +8,7 @@ watch(classes,(theme)=>{
   // #ifdef H5
   if (typeof document!=='undefined') document.body.style.backgroundColor=modern?'#fcfcfc':'#f7f3eb'
   // #endif
-  try { uni.setTabBarStyle({backgroundColor:modern?'#fcfcfc':'#f7f3eb',color:modern?'#818a95':'#837d73',selectedColor:modern?'#19202a':'#292723',borderStyle:modern?'white':'black'}) } catch { /* Tab bar not mounted yet; current theme still applies to page. */ }
+  try { void Promise.resolve(uni.setTabBarStyle({backgroundColor:modern?'#fcfcfc':'#f7f3eb',color:modern?'#818a95':'#837d73',selectedColor:modern?'#19202a':'#292723',borderStyle:modern?'white':'black'})).catch(()=>{ /* On non-tab pages, the native tab bar may not be available. */ }) } catch { /* Synchronous platform rejection. */ }
 },{immediate:true})
 </script>
 <template>

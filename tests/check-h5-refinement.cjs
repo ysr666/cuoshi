@@ -45,6 +45,7 @@ const dateKey = date => [date.getFullYear(),String(date.getMonth()+1).padStart(2
       assert.equal(await page.locator('.daily-group').count(),7);
       await page.getByText('本月',{exact:true}).click();
       assert.ok(await page.locator('.daily-group').count()>=28);
+      await page.waitForTimeout(2400);
       await page.screenshot({path:'/tmp/cuoshi-refined-stats-'+width+'.png'});
       await page.getByText('今天',{exact:true}).last().click();
 
@@ -56,10 +57,17 @@ const dateKey = date => [date.getFullYear(),String(date.getMonth()+1).padStart(2
       const key=dateKey(yesterday);
       await page.getByText('日历',{exact:true}).last().click();
       if(yesterday.getMonth()!==new Date().getMonth())await page.locator('.month-control').first().click();
+      stage='click-yesterday';
       await page.locator('.cell[aria-label^="'+key+'"]').click();
+      stage='past-plus-1';
       await page.locator('.round.primary').click();
+      stage='past-plus-2';
       await page.locator('.round.primary').click();
+      stage='back-to-calendar';
+      const historyMeta=await page.locator('.event .meta').first().innerText();
+      assert.match(historyMeta, /\d{2}:\d{2}/, 'history must show the operation time');
       await page.getByText('返回日历').click();
+      stage='back-to-today';
       await page.getByText('今天',{exact:true}).last().click();
       const past=page.locator('.quiet');
       await past.waitFor({state:'visible'});
@@ -68,7 +76,8 @@ const dateKey = date => [date.getFullYear(),String(date.getMonth()+1).padStart(2
       assert.ok(contents.includes('1 → 2 · 增加 1 件'),contents);
       assert.ok(contents.includes('未记录 → 1'),contents);
       assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth)<=width+1);
-      await page.screenshot({path:'/tmp/cuoshi-refined-today-'+width+'.png'});
+      await page.screenshot({path:'/tmp/cuoshi-refined-today-'+width+'.png',fullPage:true});
+      stage='reload';
       await page.reload({waitUntil:'domcontentloaded'});
       await page.locator('.quiet-change').first().waitFor();
 

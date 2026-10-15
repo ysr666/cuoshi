@@ -3,7 +3,7 @@ name: Cuoshi cross-platform CI
 on:
   push:
     branches:
-      - design/editorial-ui-v04-preview
+      - main
   pull_request:
 
 permissions:
