@@ -33,7 +33,7 @@ const {startH5TestServer}=require('./h5-built-server.cjs')
    assert.equal(await p.locator('.legend-item').count(),4,'Calendar legend incomplete')
    assert.ok(await p.evaluate(()=>document.documentElement.scrollWidth)<=width+1)
    assert.deepEqual(errors,[])
-   console.log('PASS',width,'modal/no page shift/cancel/save/calendar four-state legend')
+   console.log('PASS',width,'modal/no content reflow/cancel/save/calendar four-state legend')
    await p.close()
   }
  }finally{await b.close();await server.close()}

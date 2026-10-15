@@ -31,6 +31,16 @@
 - 微信原生专项 `qa-wechat/check-refinement.cjs`：使用编译后小程序的**临时副本**注入虚构测试记录，核对原生计数器显示、今天修改过去的摘要、统计正数与零值、日期详情的操作时间，并生成原生模拟器截图；临时副本测试后清理。该测试为读取渲染结果，**不等同于真实 iPhone 触摸交互验收**。
 - 最新 GitHub Actions（提交 `0f2e99a`）通过：<https://github.com/ysr666/cuoshi/actions/runs/38766874271>。PR 新提交需继续以最新 CI 为准。
 
+## 2026-10-16 · 视觉焦点与触摸反馈精修
+
+- 首页大数字保持中央视觉焦点；`DayCounter.vue` 固定数字占位，解决「未记录 — → 1」时双圆按钮约 9px 的跳动，H5 在 320／390／430px 测得按钮、简记区域布局变化均为 0px。
+- 加减按钮使用克制的按压缩小（约 93%）与轻微颜色/透明度响应，更新成功才使数字出现 190ms 的轻确认；重复点击、下限 0、上限 9999、撤销和数值不变时不产生虚假成功反馈。
+- 数字支持明确的辅助说明；当系统偏好减少动态效果时，去掉数字动画和过渡。
+- 简记操作、日历月切换箭头增加轻触反馈，保持旧网页版的暖纸白、宋体、留白和两套主题。
+- `npm run test:h5:feedback` 在真实 Chrome 上验证触摸目标、按下动画、连续操作、数字/简记垂直稳定、极值禁用、两主题和减少动画。旧弹窗测试改成检查实际内容重排而非聚焦时的视口滚动。
+- Mac 最新微信小程序构建在隔离预览工程通过原生四入口与历史专项回归；**尚未完成真实 iPhone 手指触摸验收**。
+- 本轮设计分支提交 `cdb8b62` 对应 CI：[GitHub Actions #38776520700](https://github.com/ysr666/cuoshi/actions/runs/38776520700)，全部通过。
+
 ## 复现方法
 
 ```sh
@@ -43,6 +53,8 @@ npm run test:h5:layout
 npm run test:h5:typography
 npm run test:h5:refinement
 npm run test:h5:notes
+npm run test:h5:feedback
+npm run test:h5:polish
 ```
 
 H5 端的上述测试不需要手动开 `4177` 端口；测试脚本会启动和关闭隔离的本地静态服务器。GitHub CI 安装 Chrome 并设置 `CHROME_PATH`。

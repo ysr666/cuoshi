@@ -53,3 +53,5 @@ jobs:
           path: |
             /tmp/cuoshi-type-setting-*.png
             /tmp/cuoshi-refined-*.png
+            /tmp/cuoshi-feedback-*.png
+            /tmp/cuoshi-polish-editor-*.png
