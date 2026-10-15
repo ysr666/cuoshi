@@ -28,29 +28,32 @@ const title=computed(()=>{const [y,m]=month.value.split('-');return `${y}年 ${N
       <view class="legend-item"><view class="legend-symbol outline"/><text>记为零</text></view>
       <view class="legend-item"><view class="legend-symbol shortline"/><text>只有简记</text></view>
     </view>
+    <view class="calendar-hint">数字是你现在对那一天的判断。点开日期，可以查看、修改，也能看到从前怎么想。</view>
   </Screen>
 </template>
 <style scoped>
-.month-row { display:flex;align-items:center;justify-content:space-between;margin-top:60rpx;min-height:78rpx; }
-.month-row text { display:inline-block;padding:15rpx 21rpx;color:var(--ink);font-size:34rpx; }
+.month-row {display:flex;align-items:center;justify-content:space-between;margin-top:22px;min-height:65px;}
+.month-row text {display:inline-block;padding:12px;color:var(--ink);font-size:23px;}
+.month-row picker text {font-family:var(--display-font);font-size:19px;letter-spacing:0;}
 .month-control {min-width:44px;min-height:44px;text-align:center;}
-.month-row picker text { font-family:var(--display-font);font-size:36rpx;letter-spacing:.5rpx; }
-.month-row .dim { opacity:.27; }
-.week { display:grid;grid-template-columns:repeat(7,minmax(0,1fr));margin-top:46rpx;padding-bottom:20rpx;border-bottom:1px solid var(--line);color:var(--muted);text-align:center;font-size:23rpx; }
-.grid { display:grid;grid-template-columns:repeat(7,minmax(0,1fr));text-align:center;margin-top:21rpx;row-gap:12rpx; }
-.cell { height:92rpx;min-height:44px;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:10rpx;position:relative;border-radius:10rpx;font-size:29rpx;color:var(--ink); }
-.cell.today { outline:1px solid var(--soft);outline-offset:-3rpx; }
-.cell.today text { font-weight:600; }
-.cell.recorded:not(.today) {background:var(--panel);}
-.cell.future { opacity:.23; }
-.dot { width:7rpx;height:7rpx;border-radius:50%;background:var(--ink); }
-.dot.hollow { width:9rpx;height:9rpx;border:1px solid var(--ink);background:none; }
-.dot.only { width:14rpx;height:2rpx;border-radius:0; }
-.jump { display:block;margin-top:7rpx;text-align:center;color:var(--muted);font-size:23rpx;text-decoration:underline;padding:14rpx; }
-.legend { display:flex;align-items:center;justify-content:center;flex-wrap:wrap;gap:24rpx;margin-top:45rpx;color:var(--muted);font-size:21rpx;line-height:1.8; }
-.legend-item {display:flex;align-items:center;gap:9rpx;}
-.legend-symbol {height:8rpx;width:8rpx;border-radius:50%;}
-.legend-symbol.solid {background:var(--ink);}
-.legend-symbol.outline {border:1px solid var(--ink);background:transparent;}
-.legend-symbol.shortline {border-radius:0;background:var(--ink);width:13rpx;height:2rpx;}
+.month-row .dim {opacity:.27;}
+.week {display:grid;grid-template-columns:repeat(7,minmax(0,1fr));margin-top:17px;margin-bottom:11px;padding:0;color:var(--muted);text-align:center;font-size:12px;}
+.week text {padding:4px 0;}
+.grid {display:grid;grid-template-columns:repeat(7,minmax(0,1fr));text-align:center;row-gap:0;}
+.cell {aspect-ratio:.84;min-height:46px;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:6px;border-radius:14px;font-size:13px;font-variant-numeric:tabular-nums;color:var(--ink);}
+.cell.today {box-shadow:inset 0 0 0 1px var(--ink);}
+.cell.today text {font-weight:750;}
+.cell.future {opacity:.28;}
+.cell.recorded:not(.today) {background:var(--raised);}
+.dot {width:5px;height:5px;border-radius:50%;background:var(--accent);}
+.dot.hollow {width:6px;height:6px;border:1px solid var(--accent);background:none;}
+.dot.only {width:11px;height:2px;border-radius:2px;}
+.jump {display:block;margin-top:2px;text-align:center;color:var(--muted);font-size:12px;text-decoration:underline;padding:10px;}
+.legend {display:flex;align-items:center;justify-content:center;flex-wrap:wrap;gap:13px;margin-top:24px;color:var(--muted);font-size:12px;line-height:1.7;}
+.legend-item {display:flex;align-items:center;gap:6px;}
+.legend-symbol {height:6px;width:6px;border-radius:50%;}
+.legend-symbol.solid {background:var(--accent);}
+.legend-symbol.outline {border:1px solid var(--accent);background:transparent;}
+.legend-symbol.shortline {border-radius:0;background:var(--accent);width:10px;height:2px;}
+.calendar-hint {border-top:1px solid var(--line);margin-top:32px;padding-top:20px;font-size:13px;line-height:1.8;color:var(--muted);}
 </style>
