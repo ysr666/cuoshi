@@ -20,4 +20,7 @@ function calendar(){uni.switchTab({url:'/pages/calendar/index'})}
     <view v-if="edited" class="quiet" @click="calendar">今天还修改了过去的记录 · {{edited}} 次　›</view>
   </Screen>
 </template>
-<style scoped>.quiet{margin-top:90rpx;border-top:1px solid var(--line);padding:26rpx 0;font-size:24rpx;color:var(--muted)}.warning{background:#fff3ed;padding:15rpx;color:#8a3b24;border-radius:8rpx;margin-top:20rpx}</style>
+<style scoped>
+.warning { font-size:25rpx;line-height:1.7;color:#934f40;padding:22rpx 0; }
+.quiet { display:block;border-top:1px solid var(--line);padding:26rpx 0;margin-top:75rpx;color:var(--muted);font-size:24rpx;line-height:1.8; }
+</style>
