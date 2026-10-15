@@ -32,3 +32,11 @@ jobs:
         run: npm run build:h5
       - name: Build WeChat Mini Program
         run: npm run build:mp-weixin
+
+      - name: Set up Chrome for real H5 browser checks
+        id: chrome
+        uses: browser-actions/setup-chrome@v2
+      - name: H5 layout, typography and refinement
+        env:
+          CHROME_PATH: ${{ steps.chrome.outputs.chrome-path }}
+        run: npm run test:h5:layout && npm run test:h5:typography && npm run test:h5:refinement

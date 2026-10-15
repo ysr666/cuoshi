@@ -3,7 +3,7 @@ const {chromium}=require('playwright-core');
 const {startH5TestServer}=require('./h5-built-server.cjs');
 (async()=>{
 const server=await startH5TestServer();
-const b=await chromium.launch({headless:true,executablePath:'/Applications/Google Chrome.app/Contents/MacOS/Google Chrome'});
+const b=await chromium.launch({headless:true,executablePath:process.env.CHROME_PATH||(process.platform==='darwin'?'/Applications/Google Chrome.app/Contents/MacOS/Google Chrome':'/usr/bin/google-chrome')});
 try{
 for(const width of [320,390,430]){
 const page=await b.newPage({viewport:{width,height:780},locale:'zh-CN'});
