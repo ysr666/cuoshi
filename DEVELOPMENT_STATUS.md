@@ -81,7 +81,7 @@ CUOSHI_WECHAT_QA_PROJECT=/Users/ysradmin/Projects/cuoshi-ui-redesign-wechat-prev
 ## 当前预览
 
 - 2026-10-16 微信小程序预览二维码（可能过期）：
-  <https://raw.githubusercontent.com/ysr666/cuoshi/design/editorial-ui-v04-preview/previews/wechat-preview-20261016.jpg>
+  <https://raw.githubusercontent.com/ysr666/cuoshi/design/editorial-ui-v04-preview/previews/wechat-audit-20261016.jpg>
 - 只允许已获微信预览权限的账户扫码。当前仅为测试预览，不等于正式发布。
 
 ## 未完成／不得宣称
