@@ -15,11 +15,17 @@ const dateKey = date => [date.getFullYear(),String(date.getMonth()+1).padStart(2
       const ctx = await browser.newContext({viewport:{width,height:844},locale:'zh-CN'});
       const page = await ctx.newPage();
       const errors=[];
-      page.on('pageerror', e=>errors.push(e.message));
+      let stage='load';
+      page.on('pageerror', e=>{
+        const details={stage,message:e.message,stack:e.stack};
+        errors.push(details);
+        console.error('BROWSER_PAGEERROR',JSON.stringify(details));
+      });
       page.setDefaultTimeout(10000);
       await page.goto(server.url,{waitUntil:'domcontentloaded'});
       await page.locator('.counter').waitFor();
 
+      stage='note-only';
       // Only a note is not the same thing as an explicit zero.
       await page.locator('textarea').first().fill('只留下这段简记');
       await page.getByText('留下',{exact:true}).click();
@@ -28,6 +34,7 @@ const dateKey = date => [date.getFullYear(),String(date.getMonth()+1).padStart(2
       assert.equal(await page.locator('.daily-chart').count(),0);
       await page.getByText('今天',{exact:true}).last().click();
 
+      stage='zero';
       // Zero has a baseline marker, but no positive-length daily bar.
       await page.getByText('或者，记为 0 件').click();
       await page.getByText('统计',{exact:true}).last().click();
@@ -41,6 +48,7 @@ const dateKey = date => [date.getFullYear(),String(date.getMonth()+1).padStart(2
       await page.screenshot({path:'/tmp/cuoshi-refined-stats-'+width+'.png'});
       await page.getByText('今天',{exact:true}).last().click();
 
+      stage='past-edit';
       // A past-date edit appears with its old and new number on Today.
       const yesterday=new Date();
       yesterday.setHours(12,0,0,0);
@@ -64,6 +72,7 @@ const dateKey = date => [date.getFullYear(),String(date.getMonth()+1).padStart(2
       await page.reload({waitUntil:'domcontentloaded'});
       await page.locator('.quiet-change').first().waitFor();
 
+      stage='note-no-op';
       // Unchanged note edit does not claim that an update happened.
       await page.locator('.edit-link').first().click();
       await page.getByText('保存',{exact:true}).last().click();
