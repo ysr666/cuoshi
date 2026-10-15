@@ -2,19 +2,16 @@
 export default {}
 </script>
 <style>
-page { min-height: 100%; background: #f7f3eb; font-size: 14px; }
-view, text, button, input, textarea { box-sizing: border-box; }
-button { font-size: inherit; }
-button::after { border: none; }
-/* Shared page headers must be global: uni-app scopes component styles automatically. */
-.header { display:flex;align-items:flex-start;justify-content:space-between;gap:15rpx; }
-.brand { font-size:46rpx;font-weight:550;letter-spacing:6rpx; }
-.small-date { font-size:24rpx;color:var(--muted);padding-top:15rpx;text-align:right; }
-.heading { font-size:48rpx;margin-top:45rpx; }
-.subheading { font-size:27rpx;color:var(--muted);line-height:1.8;margin-top:15rpx; }
+page { min-height:100%; background:#f6f2eb; font-size:14px; }
+view,text,button,input,textarea { box-sizing:border-box; }
+button { font-size:inherit; } button::after { border:none; }
+.header { display:flex;align-items:flex-start;justify-content:space-between;gap:20rpx;padding:0 0 30rpx;border-bottom:1px solid var(--line);min-height:72rpx; }
+.brand { font-family:var(--display-font);font-size:44rpx;font-weight:500;letter-spacing:5rpx;color:var(--ink);line-height:1.35; }
+.small-date { font-size:23rpx;letter-spacing:1rpx;color:var(--muted);text-align:right;line-height:1.6;padding-top:10rpx; }
+.heading { display:block;font-family:var(--display-font);font-size:62rpx;font-weight:500;letter-spacing:2rpx;margin-top:62rpx;line-height:1.22; }
+.subheading { display:block;font-size:25rpx;color:var(--muted);line-height:1.75;margin-top:18rpx;letter-spacing:.3rpx; }
 /* #ifdef MP-WEIXIN */
-/* The mini-program capsule occupies the upper-right corner. Keep dates beneath it. */
-.header { position:relative; min-height:94rpx; }
-.header .small-date { position:absolute; right:0; top:66rpx; padding-top:0; text-align:right; }
+.header { position:relative;min-height:110rpx; }
+.header .small-date { position:absolute;right:0;top:66rpx;padding-top:0; }
 /* #endif */
 </style>
