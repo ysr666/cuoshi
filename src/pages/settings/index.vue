@@ -38,56 +38,43 @@ function clear(){uni.showModal({title:'清除全部记录？',content:'这将删
 </script>
 <template>
   <Screen>
-    <view class="header"><text class="brand">错事</text><text class="small-date">只为自己留下</text></view>
+    <view class="header"><text class="brand">错事</text><text class="small-date">你自己的空间</text></view>
     <view class="heading">设置</view>
-    <view class="subheading">用自己觉得舒服的方式记录。</view>
+    <view class="subheading">让它更像你喜欢的样子。</view>
     <text v-if="storageError" class="warning">{{storageError}}</text>
-
     <view class="group">
       <text class="group-title">外观</text>
-      <view class="theme-row" @click="select('paper')">
-        <view class="swatch paper-swatch"><text>记</text></view>
-        <view class="theme-info"><text class="option-title">纸张与文字</text><text class="description">温暖、安静，像一本随手翻开的手记</text></view>
-        <text class="selection">{{records.theme==='paper'?'●':'○'}}</text>
+      <view class="theme-row" role="button" @click="select('paper')">
+        <view class="theme-info"><text class="option-title">纸张与文字</text><text class="description">暖纸白、深灰文字，像一本私人手记</text></view>
+        <text class="selection">{{records.theme==='paper'?'◉':'◯'}}</text>
       </view>
-      <view class="theme-row" @click="select('modern')">
-        <view class="swatch modern-swatch"><text>记</text></view>
-        <view class="theme-info"><text class="option-title">现代极简</text><text class="description">干净、轻盈，让内容自然成为主角</text></view>
-        <text class="selection">{{records.theme==='modern'?'●':'○'}}</text>
+      <view class="theme-row" role="button" @click="select('modern')">
+        <view class="theme-info"><text class="option-title">现代极简</text><text class="description">清爽中性色，把注意力交给数字与日期</text></view>
+        <text class="selection">{{records.theme==='modern'?'◉':'◯'}}</text>
       </view>
     </view>
-
     <view class="group">
-      <text class="group-title">你的数据</text>
-      <text class="group-subtitle">目前只保存在这台设备，没有自动上传。</text>
-      <view class="option" @click="backup"><text>导出完整备份</text><text class="arrow">↗</text></view>
-      <view class="option" @click="restore"><text>导入备份</text><text class="arrow">›</text></view>
-      <view class="option danger" @click="clear"><text>删除全部记录</text><text class="arrow">›</text></view>
-      <view class="privacy-link" @click="privacyOpen=!privacyOpen"><text>关于隐私与保存方式</text><text>{{privacyOpen?'收起 −':'了解更多 +'}}</text></view>
-      <text v-if="privacyOpen" class="privacy-detail">所有数量、简记和修改历史目前都存放在本机；不需要登录，也没有云同步。导出的 JSON 备份是明文，可能包含私人文字，请自行妥善保存。删除本机记录或清除微信缓存后，未备份的内容可能无法找回。未来如增加云端功能，将另行告知并征得必要授权。</text>
+      <text class="group-title">数据</text>
+      <view class="option" role="button" @click="backup"><text>导出完整备份 ↗</text></view>
+      <view class="option" role="button" @click="restore"><text>导入备份</text></view>
+      <view class="option danger" role="button" @click="clear"><text>删除全部记录</text></view>
+      <text class="privacy-detail">记录和修改历史只存在当前设备。清理缓存或更换设备可能丢失记录；备份文件包含私人文字，请妥善保管。尚未点击「留下」的草稿不会包含在正式备份中。</text>
     </view>
-
-    <view class="footer"><text>错了就错了，先放在这里吧。</text><text class="version">错事 · 跨端设计预览 v0.4</text></view>
+    <view class="footer"><text>错了就错了，先放在这里吧。</text><text class="version">错事 · 本地记录预览版</text></view>
   </Screen>
 </template>
 <style scoped>
-.group { margin-top:69rpx; }
-.group-title { display:block;color:var(--ink);font-size:31rpx;font-weight:600;padding-bottom:19rpx;letter-spacing:1rpx;border-bottom:1px solid var(--line); }
-.group-subtitle { display:block;margin:18rpx 0 9rpx;color:var(--muted);font-size:24rpx;line-height:1.7; }
-.theme-row { display:flex;gap:24rpx;align-items:center;min-height:135rpx;padding:23rpx 0;border-bottom:1px solid var(--line); }
-.swatch { width:88rpx;height:88rpx;flex-shrink:0;display:flex;align-items:center;justify-content:center;border-radius:11rpx;border:1px solid var(--line);font-size:38rpx; }
-.paper-swatch { background:#ede6d9;color:#3a322c;font-family:"Songti SC",serif; }
-.modern-swatch { background:#e8ebef;color:#2d3440;font-family:sans-serif;font-weight:600; }
-.theme-info { display:flex;flex:1;flex-direction:column;gap:10rpx; }
-.option-title { color:var(--ink);font-size:29rpx; }
-.description { display:block;color:var(--muted);font-size:23rpx;line-height:1.65; }
-.selection { color:var(--ink);font-size:29rpx; }
-.option { display:flex;align-items:center;justify-content:space-between;gap:18rpx;min-height:105rpx;border-bottom:1px solid var(--line);font-size:29rpx; }
-.arrow { color:var(--soft);font-size:32rpx; }
-.danger { color:#985e55; }
-.privacy-link { display:flex;justify-content:space-between;gap:20rpx;padding:33rpx 0;font-size:23rpx;color:var(--muted);line-height:1.6; }
-.privacy-detail { display:block;margin:-10rpx 0 30rpx;color:var(--muted);font-size:24rpx;line-height:1.9; }
-.warning { color:#995343;padding:20rpx 0;font-size:24rpx; }
-.footer { display:flex;flex-direction:column;gap:17rpx;margin-top:65rpx;padding-top:27rpx;border-top:1px solid var(--line);color:var(--muted);font-family:var(--display-font);font-size:25rpx;line-height:1.7; }
-.version { font-family:sans-serif;color:var(--soft);font-size:21rpx;letter-spacing:1rpx; }
+.group {margin-top:38px;}
+.group-title {display:block;color:var(--muted);font-size:13px;font-weight:400;padding-bottom:15px;}
+.theme-row {display:flex;align-items:center;justify-content:space-between;gap:12px;padding:17px 0;min-height:79px;border-bottom:1px solid var(--line);}
+.theme-info {display:flex;flex:1;flex-direction:column;gap:6px;}
+.option-title {color:var(--ink);font-size:14px;font-weight:600;}
+.description {color:var(--muted);font-size:12px;line-height:1.7;}
+.selection {color:var(--ink);font-size:23px;min-width:28px;text-align:right;}
+.option {display:flex;align-items:center;min-height:57px;border-bottom:1px solid var(--line);color:var(--ink);font-size:14px;}
+.option.danger {color:#a3574b;}
+.privacy-detail {display:block;margin-top:14px;color:var(--muted);font-size:12px;line-height:1.8;}
+.warning {font-size:13px;color:#995343;padding:12px 0;}
+.footer {display:flex;flex-direction:column;gap:14px;margin-top:60px;padding:23px 0;border-top:1px solid var(--line);font-family:var(--display-font);font-size:15px;color:var(--ink);}
+.version {font-family:sans-serif;font-size:12px;color:var(--muted);line-height:1.7;}
 </style>
