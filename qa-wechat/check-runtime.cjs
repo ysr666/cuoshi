@@ -41,8 +41,10 @@ async function waitRoute(mp,path){
     await p.waitFor(300)
     assert.equal(await (await p.$('.heading')).text(),'设置')
     const options=await p.$$('.option')
-    assert.ok(options.length>=4,'Settings actions exist')
-    await options[1].tap()
+    assert.ok(options.length>=3,'Settings data controls exist')
+    const themes=await p.$$('.theme-row')
+    assert.equal(themes.length,2,'Two visible theme choices')
+    await themes[1].tap()
     await p.waitFor(400)
     const data=await mp.callWxMethod('getStorageSync','cuoshi-uni-v1')
     const record=typeof data==='string'?JSON.parse(data):data
