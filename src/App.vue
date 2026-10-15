@@ -12,4 +12,9 @@ button::after { border: none; }
 .small-date { font-size:24rpx;color:var(--muted);padding-top:15rpx;text-align:right; }
 .heading { font-size:48rpx;margin-top:45rpx; }
 .subheading { font-size:27rpx;color:var(--muted);line-height:1.8;margin-top:15rpx; }
+/* #ifdef MP-WEIXIN */
+/* The mini-program capsule occupies the upper-right corner. Keep dates beneath it. */
+.header { position:relative; min-height:94rpx; }
+.header .small-date { position:absolute; right:0; top:66rpx; padding-top:0; text-align:right; }
+/* #endif */
 </style>
