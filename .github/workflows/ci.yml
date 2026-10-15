@@ -40,3 +40,14 @@ jobs:
         env:
           CHROME_PATH: ${{ steps.chrome.outputs.chrome-path }}
         run: npm run test:h5:layout && npm run test:h5:typography && npm run test:h5:refinement
+
+      - name: Upload H5 screenshots for design review
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: h5-review-${{ github.run_id }}
+          if-no-files-found: ignore
+          retention-days: 7
+          path: |
+            /tmp/cuoshi-type-setting-*.png
+            /tmp/cuoshi-refined-*.png

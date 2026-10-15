@@ -21,7 +21,7 @@ const dateKey = date => [date.getFullYear(),String(date.getMonth()+1).padStart(2
       await page.locator('.counter').waitFor();
 
       // Only a note is not the same thing as an explicit zero.
-      await page.locator('textarea.field').fill('只留下这段简记');
+      await page.locator('textarea').first().fill('只留下这段简记');
       await page.getByText('留下',{exact:true}).click();
       await page.getByText('统计',{exact:true}).last().click();
       await page.getByText('这段时间只留下了简记，还没有数字记录。').waitFor();
