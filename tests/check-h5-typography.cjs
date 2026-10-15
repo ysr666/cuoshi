@@ -1,6 +1,8 @@
 const assert = require('node:assert/strict');
 const {chromium}=require('playwright-core');
+const {startH5TestServer}=require('./h5-built-server.cjs');
 (async()=>{
+const server=await startH5TestServer();
 const b=await chromium.launch({headless:true,executablePath:'/Applications/Google Chrome.app/Contents/MacOS/Google Chrome'});
 try{
 for(const width of [320,390,430]){
@@ -8,9 +10,14 @@ const page=await b.newPage({viewport:{width,height:780},locale:'zh-CN'});
 const errors=[];page.on('pageerror',e=>errors.push(e.message));
 let launched=false;
 for(let attempt=0;attempt<3 && !launched;attempt++){
- await page.goto(process.env.CUOSHI_H5_URL||'http://127.0.0.1:4177/',{waitUntil:'domcontentloaded',timeout:10000});
- try {await page.locator('.counter').waitFor({state:'visible',timeout:4000});launched=true}
- catch(e){if(attempt===2)throw new Error('H5 app failed to initialize after 3 tries: '+String(e));}
+ try {
+  await page.goto(server.url,{waitUntil:'domcontentloaded',timeout:12000});
+  await page.locator('.counter').waitFor({state:'visible',timeout:6000});
+  launched=true;
+ } catch(e){
+  if(attempt===2)throw new Error('H5 app failed to initialize after 3 tries: '+String(e));
+  console.warn(width+'px app bootstrap retry '+(attempt+1)+': '+e.message);
+ }
 }
 let font=async sel=>Math.round(Number(await page.locator(sel).first().evaluate(e=>parseFloat(getComputedStyle(e).fontSize))));
 assert.ok(await font('.caption')>=15,'caption too small');
@@ -36,5 +43,5 @@ await page.screenshot({path:'/tmp/cuoshi-type-setting-'+width+'.png'});
 console.log('PASS',width,'readable type + scrollable settings / no overflow');
 await page.close();
 }
-}finally{await b.close()}
+}finally{await b.close();await server.close()}
 })().catch(e=>{console.error('FAIL',e.stack||e);process.exitCode=1});

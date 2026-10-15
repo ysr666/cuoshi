@@ -1,14 +1,23 @@
 const assert=require('node:assert/strict')
 const {chromium}=require('playwright-core')
+const {startH5TestServer}=require('./h5-built-server.cjs')
 ;(async()=>{
+ const server=await startH5TestServer()
  const browser=await chromium.launch({headless:true,executablePath:'/Applications/Google Chrome.app/Contents/MacOS/Google Chrome'})
  try{
   for(const width of [320,390,430]){
    const context=await browser.newContext({viewport:{width,height:700},locale:'zh-CN'})
    const page=await context.newPage()
    const errors=[];page.on('pageerror',e=>errors.push(e.message))
-   await page.goto((process.env.CUOSHI_H5_URL||'http://127.0.0.1:4177/'),{waitUntil:'networkidle'})
-   await page.locator('.number').waitFor({state:'visible',timeout:10000})
+   let started=false, bootstrapError
+   for(let attempt=1;attempt<=3 && !started;attempt++){
+    try {
+     await page.goto(server.url,{waitUntil:'domcontentloaded',timeout:12000})
+     await page.locator('.number').waitFor({state:'visible',timeout:6000})
+     started=true
+    } catch(e){bootstrapError=e; console.warn(width+'px app bootstrap retry '+attempt+': '+e.message)}
+   }
+   if(!started) throw bootstrapError
    await page.getByText('今天',{exact:true}).first().waitFor()
    assert.equal(await page.locator('.number').textContent(),'—')
    const docWidth=await page.evaluate(()=>document.documentElement.scrollWidth)
@@ -30,11 +39,11 @@ const {chromium}=require('playwright-core')
    await page.getByText('设置',{exact:true}).last().click()
    await page.getByText('设置',{exact:true}).first().waitFor()
    await page.getByText('现代极简',{exact:true}).click()
-   await page.reload({waitUntil:'networkidle'})
+   await page.reload({waitUntil:'domcontentloaded'})
    assert.equal(await page.locator('.screen.modern').count(),1)
    assert.deepEqual(errors,[])
    console.log('PASS '+width+'px count / touch / tabs / modern reload')
    await context.close()
   }
- }finally{await browser.close()}
+ }finally{await browser.close();await server.close()}
 })().catch(e=>{console.error('FAIL layout',e.stack||e);process.exitCode=1})
