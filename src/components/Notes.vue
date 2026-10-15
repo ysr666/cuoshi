@@ -18,12 +18,12 @@ function saveEdit(){try{updateNote(props.date,editing.value,editText.value);edit
 function confirmRemove(id:string){uni.showModal({title:'删除这条简记？',content:'正文将不再显示，但修改历史仍会保留。',success:res=>{if(!res.confirm)return;try{removeNote(props.date,id);editing.value='';notify('已删除简记，历史仍保留')}catch(e){notify(String(e))}}})}
 </script>
 <template>
-  <view class="notes"><view class="head"><text>留几个字</text><text class="hint">选填 · 与数字独立</text></view>
+  <view class="notes"><view class="head"><text>简记</text><text class="hint">有些话，可以留在这里</text></view>
     <view v-for="item in notes" :key="item.id" class="note">
       <template v-if="editing===item.id"><textarea :value="editText" @input="editChange" maxlength="300" class="edit-field" auto-height/><view class="note-actions"><text @click="editing=''">取消</text><text @click="confirmRemove(item.id)">删除</text><text @click="saveEdit">保存</text></view></template>
       <template v-else><text class="note-body">{{item.text}}</text><text class="edit-link" @click="begin(item.id,item.text)">编辑</text></template>
     </view>
-    <view class="entry"><textarea :key="composerRevision" :value="input" @input="onChange" maxlength="300" auto-height class="field" placeholder="想留几个字也可以……"/><text class="save" @click="submit">留下</text></view>
+    <view class="entry"><textarea :key="composerRevision" :value="input" @input="onChange" maxlength="300" auto-height class="field" placeholder="想写什么，就写什么……"/><text class="save" @click="submit">留下</text></view>
     <text v-if="input" class="foot">{{draftOkay?'草稿暂存在本机，点「留下」才会成为正式记录。':'草稿暂存失败，关闭页面可能丢失。'}}</text>
   </view>
 </template>
