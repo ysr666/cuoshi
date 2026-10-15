@@ -1,17 +1,19 @@
 <script setup lang="ts">
-import { computed,ref } from 'vue'
+import { computed } from 'vue'
 import { onShow } from '@dcloudio/uni-app'
 import Screen from '../../components/Screen.vue'
 import DayCounter from '../../components/DayCounter.vue'
 import Notes from '../../components/Notes.vue'
-import { localDate } from '../../core/model'
-import { initialize,recentPastChanges,storageError,records } from '../../core/store'
-import { dateTitle } from '../../core/ui'
-const date=ref(localDate())
-onShow(()=>{initialize();date.value=localDate()})
-const edited=computed(()=>recentPastChanges())
+import { useLiveDay } from '../../core/liveDay'
+import { initialize,storageError,records } from '../../core/store'
+const {today:date,refresh:refreshDate}=useLiveDay()
+onShow(()=>initialize())
+const edited=computed(()=>records.value.events.filter(e=>
+  e.opDate===date.value && e.targetDate<e.opDate &&
+  (e.type==='initial'||e.type==='count'||e.type==='unrecord')
+).length)
 const pastEvents=computed(()=>records.value.events.filter(e=>
-  e.opDate===localDate() && e.targetDate<e.opDate &&
+  e.opDate===date.value && e.targetDate<e.opDate &&
   (e.type==='initial'||e.type==='count'||e.type==='unrecord')
 ).slice(-3).reverse())
 function pastChangeText(e:{targetDate:string;before:number|null;after:number|null}):string{
@@ -28,8 +30,8 @@ function calendar(){uni.switchTab({url:'/pages/calendar/index'})}
 <template>
   <Screen><view class="header"><text class="brand">错事</text><text class="small-date">{{headerDate}}</text></view>
     <view v-if="storageError" class="warning">{{storageError}}</view>
-    <DayCounter :date="date" caption="今天觉得做错了"/>
-    <Notes :date="date"/>
+    <DayCounter :date="date" caption="今天觉得做错了" today-only @refresh-date="refreshDate"/>
+    <Notes :date="date" today-only @refresh-date="refreshDate"/>
     <view v-if="edited" class="quiet">
       <view class="quiet-title" role="button" @click="calendar">今天还修改了过去的记录 · {{edited}} 次 <text aria-hidden="true">›</text></view>
       <text v-for="event in pastEvents" :key="event.id" class="quiet-change">{{pastChangeText(event)}}</text>

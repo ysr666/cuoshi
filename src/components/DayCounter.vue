@@ -1,9 +1,17 @@
 <script setup lang="ts">
 import {computed,ref,watch} from 'vue'
 import {records,changeCount,adjustCount,reverseCount,canUndo,lastUndo} from '../core/store'
-import {dayOf,MAX_COUNT} from '../core/model'
+import {dayOf,MAX_COUNT,localDate} from '../core/model'
 import {notify} from '../core/ui'
-const props=defineProps<{date:string,caption:string,compact?:boolean}>()
+const props=defineProps<{date:string,caption:string,compact?:boolean,todayOnly?:boolean}>()
+const emit=defineEmits<{(e:'refresh-date'):void}>()
+function dateIsCurrent():boolean{
+  if(!props.todayOnly || props.date===localDate())return true
+  emit('refresh-date')
+  notify('新的一天已经开始，请重新确认')
+  editing.value=false
+  return false
+}
 const value=computed(()=>dayOf(records.value,props.date).count)
 const undoVisible=computed(()=>lastUndo.value?.date===props.date && canUndo(props.date))
 const editing=ref(false),numberDraft=ref('')
@@ -11,11 +19,11 @@ const editing=ref(false),numberDraft=ref('')
 const feedbackRevision=ref(0)
 watch(()=>props.date,()=>{feedbackRevision.value=0;editing.value=false})
 function acknowledge(changed:boolean):void{if(changed)feedbackRevision.value++}
-function openEditor(){numberDraft.value=value.value===null?'':String(value.value);editing.value=true}
-function saveNumber(){const n=Number(numberDraft.value);if(!/^\d+$/.test(numberDraft.value)||!Number.isInteger(n)||n>MAX_COUNT){notify('请输入 0 至 9999');return}try{acknowledge(changeCount(props.date,n));editing.value=false}catch(e){notify(String(e))}}
-function markZero(){try{acknowledge(changeCount(props.date,0))}catch(e){notify(String(e))}}
-function bump(amount:number){try{acknowledge(adjustCount(props.date,amount))}catch(e){notify(String(e))}}
-function undo(){try{acknowledge(reverseCount(props.date));notify('已撤销；修改历史仍保留')}catch(e){notify(String(e))}}
+function openEditor(){if(!dateIsCurrent())return;numberDraft.value=value.value===null?'':String(value.value);editing.value=true}
+function saveNumber(){if(!dateIsCurrent())return;const n=Number(numberDraft.value);if(!/^\d+$/.test(numberDraft.value)||!Number.isInteger(n)||n>MAX_COUNT){notify('请输入 0 至 9999');return}try{acknowledge(changeCount(props.date,n));editing.value=false}catch(e){notify(String(e))}}
+function markZero(){if(!dateIsCurrent())return;try{acknowledge(changeCount(props.date,0))}catch(e){notify(String(e))}}
+function bump(amount:number){if(!dateIsCurrent())return;try{acknowledge(adjustCount(props.date,amount))}catch(e){notify(String(e))}}
+function undo(){if(!dateIsCurrent())return;try{acknowledge(reverseCount(props.date));notify('已撤销；修改历史仍保留')}catch(e){notify(String(e))}}
 </script>
 <template>
   <view class="counter" :class="{compact}">

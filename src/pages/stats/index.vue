@@ -3,20 +3,22 @@ import {ref,computed} from 'vue'
 import {onShow} from '@dcloudio/uni-app'
 import Screen from '../../components/Screen.vue'
 import { records,initialize } from '../../core/store'
-import {countsInRange,dateOffset,localDate,monthlySeries,dayOf} from '../../core/model'
+import {countsInRange,dateOffset,dateFrom,monthlySeries,dayOf} from '../../core/model'
+import {useLiveDay} from '../../core/liveDay'
 type Period = 'week'|'month'|'year'
 const period=ref<Period>('month')
+const {today:todayKey}=useLiveDay()
 function setPeriod(p:string){if(p==='week'||p==='month'||p==='year')period.value=p}
 onShow(()=>initialize())
 const bars=computed(()=>{
-  const year=Number(localDate().slice(0,4))
+  const year=Number(todayKey.value.slice(0,4))
   return monthlySeries(records.value,year)
 })
 const maxVal=computed(()=>Math.max(1,...bars.value.map(b=>b.value)))
 const dailyBars=computed(()=>{
-  const today=localDate()
+  const today=todayKey.value
   const first=period.value==='week'
-    ?dateOffset(today,-((new Date().getDay()+6)%7))
+    ?dateOffset(today,-((dateFrom(today).getDay()+6)%7))
     :today.slice(0,7)+'-01'
   const end=period.value==='week'?dateOffset(first,6)
     :today.slice(0,7)+'-'+String(new Date(Number(today.slice(0,4)),Number(today.slice(5,7)),0).getDate()).padStart(2,'0')
@@ -32,7 +34,7 @@ const dailyBars=computed(()=>{
   return result
 })
 const maxDaily=computed(()=>Math.max(1,...dailyBars.value.map(d=>d.count??0)))
-const totals=computed(()=>{const now=new Date(),nowKey=localDate();let first='';if(period.value==='week'){const offset=(now.getDay()+6)%7;first=dateOffset(nowKey,-offset)}else if(period.value==='month')first=nowKey.slice(0,7)+'-01';else first=nowKey.slice(0,4)+'-01-01';return countsInRange(records.value,first,nowKey)})
+const totals=computed(()=>{const nowKey=todayKey.value;let first='';if(period.value==='week'){const offset=(dateFrom(nowKey).getDay()+6)%7;first=dateOffset(nowKey,-offset)}else if(period.value==='month')first=nowKey.slice(0,7)+'-01';else first=nowKey.slice(0,4)+'-01-01';return countsInRange(records.value,first,nowKey)})
 </script>
 <template>
   <Screen>

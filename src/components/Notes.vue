@@ -2,7 +2,15 @@
 import {ref,computed,watch} from 'vue'
 import {drafts,addNote,removeDraft,saveDraft,day,updateNote,removeNote} from '../core/store'
 import {notify} from '../core/ui'
-const props=defineProps<{date:string}>()
+import {localDate} from '../core/model'
+const props=defineProps<{date:string,todayOnly?:boolean}>()
+const emit=defineEmits<{(e:'refresh-date'):void}>()
+function dateIsCurrent():boolean{
+  if(!props.todayOnly || props.date===localDate())return true
+  emit('refresh-date')
+  notify('新的一天已经开始，请重新确认')
+  return false
+}
 const input=ref(drafts.value[props.date]||'')
 const composerRevision=ref(0)
 const draftOkay=ref(true)
@@ -11,11 +19,11 @@ const notes=computed(()=>day(props.date).notes)
 const editing=ref(''), editText=ref('')
 function textValue(e:Event):string{const custom=e as Event & {detail?:{value?:string}};return typeof custom.detail?.value==='string'?custom.detail.value:(e.target as HTMLTextAreaElement|null)?.value||''}
 function onChange(e:Event){input.value=textValue(e);try{draftOkay.value=saveDraft(props.date,input.value)}catch(err){draftOkay.value=false;notify(String(err))}}
-function submit(){if(!input.value.trim())return;try{if(addNote(props.date,input.value)){removeDraft(props.date);input.value='';composerRevision.value++;notify('这几个字也留下了')}}catch(e){notify(String(e))}}
-function begin(id:string,text:string){editing.value=id;editText.value=text}
+function submit(){if(!input.value.trim()||!dateIsCurrent())return;try{if(addNote(props.date,input.value)){removeDraft(props.date);input.value='';composerRevision.value++;notify('这几个字也留下了')}}catch(e){notify(String(e))}}
+function begin(id:string,text:string){if(!dateIsCurrent())return;editing.value=id;editText.value=text}
 function editChange(e:Event){editText.value=textValue(e)}
-function saveEdit(){try{const changed=updateNote(props.date,editing.value,editText.value);editing.value='';if(changed)notify('简记已更新，旧文仍在历史里')}catch(e){notify(String(e))}}
-function confirmRemove(id:string){uni.showModal({title:'删除这条简记？',content:'正文将不再显示，但修改历史仍会保留。',success:res=>{if(!res.confirm)return;try{removeNote(props.date,id);editing.value='';notify('已删除简记，历史仍保留')}catch(e){notify(String(e))}}})}
+function saveEdit(){if(!dateIsCurrent())return;try{const changed=updateNote(props.date,editing.value,editText.value);editing.value='';if(changed)notify('简记已更新，旧文仍在历史里')}catch(e){notify(String(e))}}
+function confirmRemove(id:string){if(!dateIsCurrent())return;uni.showModal({title:'删除这条简记？',content:'正文将不再显示，但修改历史仍会保留。',success:res=>{if(!res.confirm||!dateIsCurrent())return;try{removeNote(props.date,id);editing.value='';notify('已删除简记，历史仍保留')}catch(e){notify(String(e))}}})}
 </script>
 <template>
   <view class="notes">

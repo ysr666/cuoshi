@@ -1,16 +1,22 @@
 <script setup lang="ts">
-import { computed,ref } from 'vue'
+import { computed,ref,watch } from 'vue'
 import { onShow } from '@dcloudio/uni-app'
 import Screen from '../../components/Screen.vue'
 import { records,initialize } from '../../core/store'
-import { dayOf,dateOffset,localDate } from '../../core/model'
-const month=ref(localDate().slice(0,7))
+import { dayOf } from '../../core/model'
+import {useLiveDay} from '../../core/liveDay'
+const {today}=useLiveDay()
+const month=ref(today.value.slice(0,7))
 onShow(()=>initialize())
-const thisMonth=computed(()=>localDate().slice(0,7))
+// Move with the new month only when the user was viewing the prior current month.
+watch(today,(next,prior)=>{
+  if(month.value===prior.slice(0,7) && next.slice(0,7)!==prior.slice(0,7))month.value=next.slice(0,7)
+})
+const thisMonth=computed(()=>today.value.slice(0,7))
 function pickMonth(e:{detail:{value:string}}){month.value=e.detail.value.slice(0,7)}
 function jumpToday(){month.value=thisMonth.value}
 const current=computed(()=>{const [y,m]=month.value.split('-').map(Number);const first=new Date(y,m-1,1,12);const length=new Date(y,m,0,12).getDate();const pad=(first.getDay()+6)%7;const cells: Array<{key:string,label:string,count:number|null,note:boolean,future:boolean}|null> = Array(pad).fill(null)
-  for(let i=1;i<=length;i++){const key=`${y}-${String(m).padStart(2,'0')}-${String(i).padStart(2,'0')}`;const d=dayOf(records.value,key);cells.push({key,label:String(i),count:d.count,note:d.notes.length>0,future:key>localDate()})}return cells})
+  for(let i=1;i<=length;i++){const key=`${y}-${String(m).padStart(2,'0')}-${String(i).padStart(2,'0')}`;const d=dayOf(records.value,key);cells.push({key,label:String(i),count:d.count,note:d.notes.length>0,future:key>today.value})}return cells})
 function shift(d:number){const [y,m]=month.value.split('-').map(Number);const next=new Date(y,m-1+d,1,12);month.value=`${next.getFullYear()}-${String(next.getMonth()+1).padStart(2,'0')}`}
 function dayAccessibility(d:{key:string,count:number|null,note:boolean,future:boolean}|null):string{if(!d)return "";
   const info=d.count===null?(d.note?"只有简记":"尚未记录"):d.count===0?"明确记录为零":"记录了"+d.count+"件";return d.key+"，"+(d.future?"未来日期":info)+(d.note&&d.count!==null?"，有简记":"")
@@ -20,9 +26,9 @@ const title=computed(()=>{const [y,m]=month.value.split('-');return `${y}年 ${N
 </script>
 <template>
   <Screen><view class="header"><text class="brand">错事</text><text class="small-date">看看过去</text></view><view class="heading">日历</view><view class="subheading">哪一天都可以重新看看。</view>
-    <view class="month-row"><text class="month-control" role="button" aria-label="上个月" hover-class="month-pressed" :hover-start-time="0" :hover-stay-time="80" @click="shift(-1)">‹</text><picker mode="date" fields="month" start="1900-01" :end="thisMonth" :value="month" @change="pickMonth"><text>{{title}} ⌄</text></picker><text class="month-control" role="button" aria-label="下个月" :hover-class="month>=thisMonth?'none':'month-pressed'" :hover-start-time="0" :hover-stay-time="80" :class="{dim:month>=localDate().slice(0,7)}" @click="month<localDate().slice(0,7)&&shift(1)">›</text></view>
+    <view class="month-row"><text class="month-control" role="button" aria-label="上个月" hover-class="month-pressed" :hover-start-time="0" :hover-stay-time="80" @click="shift(-1)">‹</text><picker mode="date" fields="month" start="1900-01" :end="thisMonth" :value="month" @change="pickMonth"><text>{{title}} ⌄</text></picker><text class="month-control" role="button" aria-label="下个月" :hover-class="month>=thisMonth?'none':'month-pressed'" :hover-start-time="0" :hover-stay-time="80" :class="{dim:month>=thisMonth}" @click="month<thisMonth&&shift(1)">›</text></view>
     <text v-if="month!==thisMonth" class="jump" @click="jumpToday">回到本月</text><view class="week"><text v-for="d in ['一','二','三','四','五','六','日']" :key="d">{{d}}</text></view>
-    <view class="grid"><view v-for="(d,i) in current" :key="d?d.key:'blank'+i" class="cell" :class="{today:d?.key===localDate(),future:d?.future,recorded:d?.count!==null&&d?.count!==undefined&&d.count>0}" :role="d&&!d.future?'button':undefined" :aria-label="dayAccessibility(d)" @click="d&&choose(d.key,d.future)"><text v-if="d">{{d.label}}</text><view v-if="d&&(d.count!==null||d.note)" class="dot" :class="{hollow:d.count===0,only:d.count===null}"/></view></view>
+    <view class="grid"><view v-for="(d,i) in current" :key="d?d.key:'blank'+i" class="cell" :class="{today:d?.key===today,future:d?.future,recorded:d?.count!==null&&d?.count!==undefined&&d.count>0}" :role="d&&!d.future?'button':undefined" :aria-label="dayAccessibility(d)" @click="d&&choose(d.key,d.future)"><text v-if="d">{{d.label}}</text><view v-if="d&&(d.count!==null||d.note)" class="dot" :class="{hollow:d.count===0,only:d.count===null}"/></view></view>
     <view class="legend">
       <view class="legend-item"><view class="legend-symbol solid"/><text>有数字记录</text></view>
       <view class="legend-item"><view class="legend-symbol outline"/><text>记为零</text></view>

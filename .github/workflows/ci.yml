@@ -41,7 +41,7 @@ jobs:
       - name: H5 layout, typography, touch feedback and notes
         env:
           CHROME_PATH: ${{ steps.chrome.outputs.chrome-path }}
-        run: npm run test:h5:layout && npm run test:h5:typography && npm run test:h5:refinement && npm run test:h5:notes && npm run test:h5:feedback && npm run test:h5:polish && npm run test:h5:audit && npm run test:h5:extended
+        run: npm run test:h5:layout && npm run test:h5:typography && npm run test:h5:refinement && npm run test:h5:notes && npm run test:h5:feedback && npm run test:h5:polish && npm run test:h5:audit && npm run test:h5:extended && npm run test:h5:date-boundaries
 
       - name: Upload H5 screenshots for design review
         if: always()
