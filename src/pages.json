@@ -32,14 +32,14 @@
     }
   ],
   "globalStyle": {
-    "backgroundColor": "#f6f2eb",
+    "backgroundColor": "#f7f3eb",
     "navigationBarTextStyle": "black",
     "navigationBarTitleText": "错事"
   },
   "tabBar": {
-    "color": "#898780",
-    "selectedColor": "#302c27",
-    "backgroundColor": "#f6f2eb",
+    "color": "#837d73",
+    "selectedColor": "#292723",
+    "backgroundColor": "#f7f3eb",
     "borderStyle": "white",
     "list": [
       {
