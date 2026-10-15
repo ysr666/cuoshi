@@ -27,6 +27,7 @@ const title=computed(()=>{const [y,m]=month.value.split('-');return `${y}年 ${N
       <view class="legend-item"><view class="legend-symbol solid"/><text>有数字记录</text></view>
       <view class="legend-item"><view class="legend-symbol outline"/><text>记为零</text></view>
       <view class="legend-item"><view class="legend-symbol shortline"/><text>只有简记</text></view>
+      <view class="legend-item"><view class="legend-symbol unfilled"/><text>未记录</text></view>
     </view>
     <view class="calendar-hint">数字是你现在对那一天的判断。点开日期，可以查看、修改，也能看到从前怎么想。</view>
   </Screen>
@@ -55,5 +56,6 @@ const title=computed(()=>{const [y,m]=month.value.split('-');return `${y}年 ${N
 .legend-symbol.solid {background:var(--accent);}
 .legend-symbol.outline {border:1px solid var(--accent);background:transparent;}
 .legend-symbol.shortline {border-radius:0;background:var(--accent);width:10px;height:2px;}
+.legend-symbol.unfilled {background:var(--line);}
 .calendar-hint {border-top:1px solid var(--line);margin-top:32px;padding-top:20px;font-size:13px;line-height:1.8;color:var(--muted);}
 </style>
