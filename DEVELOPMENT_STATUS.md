@@ -1,48 +1,73 @@
-# 错事 · uni-app v0.4 Alpha.3 — 实机编译记录
+# 错事 · uni-app v0.4 设计预览开发状态
 
-更新：2026-10-15。项目位于用户授权 Mac 的独立目录 `~/Projects/cuoshi-uniapp-lab/app`。
+更新：2026-10-16
 
-## 当前已验证
+## 现状与边界
 
-- Mac：macOS Apple Silicon，Node 24.5.0、npm 11.7.0。
-- 修复包版本冲突：`@dcloudio/types` 固定为 `3.4.19`，保存 `package-lock.json`。
-- `npm ci`（未来重建）、`npm run typecheck`、`npm test`、`npm run build:h5`、`npm run build:mp-weixin`。
-- 共 94 项模型/备份/平台存储模拟断言通过。
-- H5 在真实 Google Chrome 无头窗口（390×844）操作通过：数字增减、撤销、简记新增、刷新持久化、日历、统计、设置、导出 JSON、窄屏检查，且无未捕获 JS 异常。
-- 修复真实浏览器检查发现的问题：`Screen.vue` 中被自动作用域化的公共头部样式无法作用到子页面；简记提交后输入框未清空；Vue `textarea` 事件的类型检查错误。H5 输入字号调整为 16px。
-- 已生成 `dist/build/h5` 及 `dist/build/mp-weixin`。微信小程序 `project.config.json` 使用 `touristappid`（仅编译用）。
+- 仓库：[ysr666/cuoshi](https://github.com/ysr666/cuoshi)，现为 Public。
+- 正在开发的分支：`design/editorial-ui-v04-preview`；[Draft PR #4](https://github.com/ysr666/cuoshi/pull/4) 尚未合并。
+- Mac 设计工程：`/Users/ysradmin/Projects/cuoshi-ui-redesign`；**该目录不是 Git 仓库**。不要误以为直接在这里执行 `git push` 就能更新 PR。另有早期 Git 工作区 `/Users/ysradmin/Projects/cuoshi-uniapp-lab/app`，不能用其旧 `main` 覆盖设计工程。
+- 已登录的微信开发者工具运行在 Mac；独立预览工程：`/Users/ysradmin/Projects/cuoshi-ui-redesign-wechat-preview`，服务端口为 `30615`。使用经授权的测试 AppID；不提交 AppSecret 或设备本地凭证。
+- 旧网页版参考 `https://cuoshi-ysr-v02.onrender.com/` **未修改、未替换或重新部署**。
+- 产品是本地优先的主观错事记录应用：今天、日历、统计、设置四个入口，纸张与文字／现代极简两套主题。保持暖纸白、宋体、大数字、圆形加减按钮、极细简记下划线，克制且不评价用户。
 
-## 如何复现
+## 本轮已完成的实际功能与界面调整
+
+- 延续旧网页版视觉而非另起设计；适度提高辅助字号，保留居中数字与主要留白。
+- 首页在存在过去日期数字变更时显示当天操作次数及最多最近三项明细，包括被修改日期、修改前后数字及净增／净减；不会覆盖修改历史。
+- 首页历史区与简记之间的额外间距缩小为 22px；H5 和微信模拟器已检查滚动后可见。
+- 统计页本周／本月显示安静的每日柱形分布：正数、明确记录为 0、未记录和只有简记的日期区别处理；年度每月汇总保留。
+- 简记没有实际修改时，不再提示“已更新”。
+- 历史记录展示操作时间和时区；修复非 Tab 页面调用 `uni.setTabBarStyle` 的异步拒绝未处理问题。
+- 主题、离线记录、事件历史、撤销、备份／导入及原有数据模型保持原有行为。
+
+## 已跑通的测试（截至 2026-10-16）
+
+- `npm run typecheck`、`npm test`（16 + 48 + 30 = **94** 项核心／备份／存储模拟断言）以及 `npm run build:h5`、`npm run build:mp-weixin` 通过。
+- Chrome H5 在 **320、390、430px** 完成字号／无横向溢出、加减、切换页面、简记输入、主题刷新、编辑历史、备份等测试。
+- `tests/check-h5-refinement.cjs` 检查只有简记、明确 0、过去两次数字修改、首页变化明细、刷新保存、不变更简记、历史时间和底部导航上方的滚动可见性。
+- `tests/h5-built-server.cjs` 默认使用本机随机端口测试**最新构建**，避免旧固定端口的残留服务器造成偶发页面加载超时。
+- 微信开发者工具原生回归 `qa-wechat/check-runtime.cjs`：四入口、日历详情、主题切换与本地持久化通过。
+- 微信原生专项 `qa-wechat/check-refinement.cjs`：使用编译后小程序的**临时副本**注入虚构测试记录，核对原生计数器显示、今天修改过去的摘要、统计正数与零值、日期详情的操作时间，并生成原生模拟器截图；临时副本测试后清理。该测试为读取渲染结果，**不等同于真实 iPhone 触摸交互验收**。
+- 最新 GitHub Actions（提交 `0f2e99a`）通过：<https://github.com/ysr666/cuoshi/actions/runs/38766874271>。PR 新提交需继续以最新 CI 为准。
+
+## 复现方法
 
 ```sh
-npm ci
+cd /Users/ysradmin/Projects/cuoshi-ui-redesign
 npm run typecheck
 npm test
 npm run build:h5
 npm run build:mp-weixin
-# 先在一个终端运行：
-python3 -m http.server 4177 --bind 127.0.0.1 --directory dist/build/h5
-# 再在另一个终端运行：
-npm run test:h5
+npm run test:h5:layout
+npm run test:h5:typography
+npm run test:h5:refinement
+npm run test:h5:notes
 ```
 
-`tests/check-h5-flow.cjs` 要求 Mac 安装 Google Chrome，并以隔离浏览器上下文执行测试，不读取正式「错事」用户记录。
+H5 端的上述测试不需要手动开 `4177` 端口；测试脚本会启动和关闭隔离的本地静态服务器。GitHub CI 安装 Chrome 并设置 `CHROME_PATH`。
 
-## 未完成 / 不可宣称
+微信测试必须先将最新 `dist/build/mp-weixin` 同步到独立预览工程（保留独立目录内的 `project.config.json`），确保微信开发者工具已登录且开放服务端口。
 
-- 本 Mac 只有普通 WeChat.app，未发现「微信开发者工具」。**未完成小程序工具内预览、扫码真机、审核或发布**。
-- 未配置你的小程序 AppID；需要开发者账号确认后填入，**不应提供 AppSecret**。
-- 没有微信/手机号登录，也没有客服与内容安全审查后端。正式中国大陆运营前需完成适用备案、真实隐私政策、授权与访问审计流程。
-- 当前仅本地数据，没有私密记录上传。原 `https://cuoshi-ysr-v02.onrender.com` 网页版没有被修改。
-- 原生 Android/iOS 打包、文件导入导出仍待适配。小程序本地存储不具备通用的跨进程原子事务保证。
+```sh
+CUOSHI_WECHAT_QA_PROJECT=/Users/ysradmin/Projects/cuoshi-ui-redesign-wechat-preview npm test --prefix qa-wechat
+CUOSHI_WECHAT_QA_PROJECT=/Users/ysradmin/Projects/cuoshi-ui-redesign-wechat-preview npm run test:refinement --prefix qa-wechat
+```
 
-## 交付标准
+## 当前预览
 
-保留全部历史修改；未记录不同于显式 0；简记独立于数字；无道德评价、打卡、排行榜。默认本地存储，未来云同步必须用户主动选择；客服与内容审核读取云端正文须限权、告知、留痕。
+- 2026-10-16 微信小程序预览二维码（可能过期）：
+  <https://raw.githubusercontent.com/ysr666/cuoshi/design/editorial-ui-v04-preview/previews/wechat-preview-20261016.jpg>
+- 只允许已获微信预览权限的账户扫码。当前仅为测试预览，不等于正式发布。
 
-## 2026-10-15 后续回归（Alpha.3）
+## 未完成／不得宣称
 
-- uni-app H5 与微信小程序构建、vue-tsc 类型检查成功；94 项核心/备份/存储模拟断言通过。
-- 新增 `npm run test:h5:extended`：Chrome 验证草稿刷新保留、简记编辑、主题持久化、完整 JSON 导出与恢复、超过 5 条的历史默认折叠与展开，全部通过。该浏览器测试使用全新隔离上下文，不读取真实用户记录。
-- 微信开发者工具 2.02.2608080 已安装到 Mac；首次图形化初始化尚未完成，命令行打开项目会报 `.cli` 配置缺失；因此还未完成微信 IDE 模拟器与真机验收。
-- 微信/手机号登录及云服务仍未接入，本地记录没有上传；正式发布需要 AppID、用户授权、隐私文档、备案和权限审计。
+- 尚未完成真实 iPhone 微信的扫码、触摸、键盘、安全区和最终审美验收；Draft PR **不要合并**，不要发布，不能替换现有 Render 站。
+- 原生自动化使用较旧的 `miniprogram-automator@0.12.1`，无法直接查询 uni-app 自定义组件内部的元素，所以原生计数器的专项检查从组件渲染数据读取结果，而非模拟按钮触摸。
+- 未接入微信／手机号登录、云同步或后端，所有个人记录默认保存在设备本地，清缓存／换设备可能丢失，应提醒使用备份。正式运营前仍需独立完成适用的隐私与合规审查。
+- GitHub CI 的 npm 依赖安装日志曾报告多个传递依赖安全告警；**没有完成依赖漏洞逐项审计或安全发布验收**，不应仅凭测试和构建通过宣称安全达到正式上线标准。
+- 未验证独立原生 Android/iOS 安装包，也没有跨进程原子事务保证。
+
+## 设计与数据验收底线
+
+永远不要擅自删除变更历史、把“未记录”混同于“明确 0”、强制要求写简记、加入排行／道德评价／惩罚性提示，或为了“优化”而重建用户已明确偏好的旧网页视觉。正式上线与任何私密数据上传都应另行获得明确批准。
