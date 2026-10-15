@@ -18,7 +18,8 @@ const totals=computed(()=>{const now=new Date(),nowKey=localDate();let first='';
 <template>
   <Screen><view class="header"><text class="brand">错事</text><text class="small-date">不必评分</text></view><view class="heading">统计</view><view class="subheading">看看记录，不用给自己打分。</view>
     <view class="period"><text v-for="p in [{id:'week',label:'本周'},{id:'month',label:'本月'},{id:'year',label:'今年'}]" :key="p.id" :class="{active:period===p.id}" @click="setPeriod(p.id)">{{p.label}}</text></view>
-    <view class="stat-row"><view><text class="stat-label">目前记录的错事</text><text class="stat-number">{{totals.total}}</text><text>件</text></view><view><text class="stat-label">有记录的日子</text><text class="stat-number">{{totals.days}}</text><text>天</text></view></view>
+    <view v-if="totals.days>0" class="stat-row"><view><text class="stat-label">目前记录的错事</text><text class="stat-number">{{totals.total}}</text><text>件</text></view><view><text class="stat-label">有记录的日子</text><text class="stat-number">{{totals.days}}</text><text>天</text></view></view>
+    <view v-else class="empty-stats"><text class="empty-title">还没有数字记录</text><text>没有留下记录的日子，并不代表零。</text></view>
     <view v-if="period==='year'" class="chart" aria-label="今年每月记录分布">
       <view v-for="bar in bars" :key="bar.month" class="bar-group"><view class="bar" :style="{height:bar.filled===0?'0%':Math.max(2,bar.value/maxVal*100)+'%'}"/><text>{{bar.month}}</text></view>
     </view>
@@ -26,4 +27,20 @@ const totals=computed(()=>{const now=new Date(),nowKey=localDate();let first='';
     <text class="subheading">统计采用各日期现在记录的数字。没有记录数字的日子，不等于零。</text>
   </Screen>
 </template>
-<style scoped>.period{display:flex;margin-top:75rpx;border-radius:14rpx;padding:8rpx;background:rgba(127,127,127,.08)}.period text{flex:1;text-align:center;font-size:28rpx;padding:15rpx}.period .active{background:var(--bg);border-radius:12rpx}.stat-row{display:flex;justify-content:space-between;margin-top:90rpx}.stat-row view{display:flex;flex-direction:column;gap:15rpx;font-size:24rpx}.stat-label{color:var(--muted);font-size:25rpx}.stat-number{font-size:85rpx;line-height:1.3}.subheading{margin-top:35rpx}.chart{height:210rpx;border-bottom:1px solid var(--line);display:flex;align-items:flex-end;justify-content:space-between;gap:12rpx;margin-top:75rpx}.bar-group{height:100%;flex:1;display:flex;flex-direction:column;justify-content:flex-end;align-items:center;color:var(--muted);font-size:20rpx}.bar{background:var(--ink);width:65%;min-height:0;margin-top:auto;margin-bottom:12rpx;opacity:.65}.small-notice{display:block;font-size:22rpx;color:var(--muted);margin-top:20rpx}</style>
+<style scoped>
+.period { display:flex;gap:22rpx;margin-top:62rpx;border-bottom:1px solid var(--line); }
+.period text { position:relative;flex:1;text-align:center;padding:17rpx 5rpx 25rpx;color:var(--muted);font-size:27rpx; }
+.period text.active { color:var(--ink);font-weight:600; }
+.period text.active::after { content:"";position:absolute;bottom:-1px;left:25%;width:50%;height:3rpx;background:var(--ink); }
+.stat-row { display:flex;justify-content:space-between;gap:15rpx;margin-top:75rpx;padding-bottom:60rpx;border-bottom:1px solid var(--line); }
+.empty-stats {display:flex;flex-direction:column;gap:16rpx;margin-top:68rpx;padding:48rpx 0 60rpx;border-top:1px solid var(--line);border-bottom:1px solid var(--line);font-size:25rpx;line-height:1.7;color:var(--muted);}
+.empty-title {color:var(--ink);font-family:var(--display-font);font-size:38rpx;}
+.stat-row > view { display:flex;flex:1;flex-direction:column;align-items:flex-start;gap:12rpx;font-size:24rpx; }
+.stat-row > view + view { border-left:1px solid var(--line);padding-left:30rpx; }
+.stat-label { color:var(--muted);font-size:23rpx;line-height:1.6; }
+.stat-number { color:var(--ink);font-family:var(--display-font);font-size:94rpx;line-height:1.2;font-weight:300;font-variant-numeric:tabular-nums; }
+.chart { height:255rpx;border-bottom:1px solid var(--line);display:flex;align-items:flex-end;justify-content:space-between;gap:13rpx;margin-top:68rpx; }
+.bar-group { height:100%;flex:1;display:flex;flex-direction:column;justify-content:flex-end;align-items:center;gap:12rpx;color:var(--muted);font-size:20rpx; }
+.bar { width:50%;background:var(--ink);min-height:0;opacity:.68; }
+.small-notice { display:block;font-size:23rpx;color:var(--muted);margin-top:23rpx;line-height:1.8; }
+</style>
