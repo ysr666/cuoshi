@@ -38,16 +38,16 @@ function eventText(e:{type:string;before:number|null;after:number|null;oldText?:
   </Screen>
 </template>
 <style scoped>
-.back {display:flex;align-items:center;min-height:44px;color:var(--muted);font-size:13px;margin:-12px 0 0;padding:8px 4px 8px 0;}
-.unrecord {display:block;text-align:right;color:var(--muted);font-size:12px;padding:12px 0;text-decoration:underline;}
+.back {display:flex;align-items:center;min-height:44px;color:var(--muted);font-size:15px;margin:-12px 0 0;padding:8px 4px 8px 0;}
+.unrecord {display:block;text-align:right;color:var(--muted);font-size:14px;padding:12px 0;text-decoration:underline;}
 .detail-date {display:flex;align-items:center;justify-content:space-between;gap:6px;margin-top:17px;text-align:center;}
 .detail-center {display:flex;flex-direction:column;align-items:center;gap:4px;font-family:var(--display-font);font-size:25px;color:var(--ink);}
-.weekday {font-family:sans-serif;font-size:12px;line-height:1.5;color:var(--muted);}
+.weekday {font-family:sans-serif;font-size:14px;line-height:1.5;color:var(--muted);}
 .date-arrow {display:flex;align-items:center;justify-content:center;width:44px;min-height:44px;color:var(--muted);font-size:27px;}
 .date-arrow.inactive {opacity:.25;}
 .history {display:flex;flex-direction:column;border-top:1px solid var(--line);margin-top:46px;padding-top:22px;gap:0;}
-.history-title {display:block;font-size:15px;font-weight:500;margin-bottom:19px;}
-.event {display:flex;flex-direction:column;gap:7px;padding:14px 0 18px;border-top:1px solid var(--line);font-size:13px;line-height:1.75;word-break:break-word;}
-.meta {color:var(--muted);font-size:12px;line-height:1.6;}
-.history-toggle {display:block;min-height:44px;padding:14px 0;text-align:center;font-size:12px;color:var(--muted);}
+.history-title {display:block;font-size:16px;font-weight:500;margin-bottom:19px;}
+.event {display:flex;flex-direction:column;gap:7px;padding:14px 0 18px;border-top:1px solid var(--line);font-size:15px;line-height:1.75;word-break:break-word;}
+.meta {color:var(--muted);font-size:13px;line-height:1.6;}
+.history-toggle {display:block;min-height:44px;padding:14px 0;text-align:center;font-size:14px;color:var(--muted);}
 </style>
