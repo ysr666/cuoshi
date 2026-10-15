@@ -6,8 +6,12 @@ try{
 for(const width of [320,390,430]){
 const page=await b.newPage({viewport:{width,height:780},locale:'zh-CN'});
 const errors=[];page.on('pageerror',e=>errors.push(e.message));
-await page.goto(process.env.CUOSHI_H5_URL||'http://127.0.0.1:4177/',{waitUntil:'networkidle'});
-await page.locator('.counter').waitFor();
+let launched=false;
+for(let attempt=0;attempt<3 && !launched;attempt++){
+ await page.goto(process.env.CUOSHI_H5_URL||'http://127.0.0.1:4177/',{waitUntil:'domcontentloaded',timeout:10000});
+ try {await page.locator('.counter').waitFor({state:'visible',timeout:4000});launched=true}
+ catch(e){if(attempt===2)throw new Error('H5 app failed to initialize after 3 tries: '+String(e));}
+}
 let font=async sel=>Math.round(Number(await page.locator(sel).first().evaluate(e=>parseFloat(getComputedStyle(e).fontSize))));
 assert.ok(await font('.caption')>=15,'caption too small');
 assert.ok(await font('.small-date')>=14,'date too small');
