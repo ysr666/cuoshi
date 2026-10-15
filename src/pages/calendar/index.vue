@@ -23,4 +23,20 @@ const title=computed(()=>{const [y,m]=month.value.split('-');return `${y}年 ${N
     <view class="legend">● 有记录　○ 记为零　－ 只有简记</view>
   </Screen>
 </template>
-<style scoped>.month-row{display:flex;align-items:center;justify-content:space-between;margin-top:90rpx;font-size:35rpx}.month-row text{padding:12rpx 25rpx}.month-row .dim{opacity:.25}.week,.grid{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));text-align:center}.week{margin-top:50rpx;color:var(--muted);font-size:26rpx}.grid{margin-top:18rpx;row-gap:8rpx}.cell{height:97rpx;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:11rpx;font-size:29rpx}.cell.today text{font-weight:bold}.cell.future{opacity:.3}.dot{height:8rpx;width:8rpx;border-radius:50%;background:var(--ink)}.dot.hollow{border:1px solid var(--ink);background:none}.dot.only{width:16rpx;height:3rpx;border-radius:0}.jump{display:block;text-align:center;font-size:24rpx;text-decoration:underline;color:var(--muted);margin-top:20rpx}.legend{text-align:center;font-size:23rpx;color:var(--muted);margin-top:55rpx}</style>
+<style scoped>
+.month-row { display:flex;align-items:center;justify-content:space-between;margin-top:60rpx;min-height:78rpx; }
+.month-row text { display:inline-block;padding:15rpx 21rpx;color:var(--ink);font-size:34rpx; }
+.month-row picker text { font-family:var(--display-font);font-size:36rpx;letter-spacing:.5rpx; }
+.month-row .dim { opacity:.27; }
+.week { display:grid;grid-template-columns:repeat(7,minmax(0,1fr));margin-top:46rpx;padding-bottom:20rpx;border-bottom:1px solid var(--line);color:var(--muted);text-align:center;font-size:23rpx; }
+.grid { display:grid;grid-template-columns:repeat(7,minmax(0,1fr));text-align:center;margin-top:21rpx;row-gap:12rpx; }
+.cell { height:92rpx;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:10rpx;position:relative;border-radius:10rpx;font-size:29rpx;color:var(--ink); }
+.cell.today { outline:1px solid var(--soft);outline-offset:-3rpx; }
+.cell.today text { font-weight:600; }
+.cell.future { opacity:.23; }
+.dot { width:7rpx;height:7rpx;border-radius:50%;background:var(--ink); }
+.dot.hollow { width:9rpx;height:9rpx;border:1px solid var(--ink);background:none; }
+.dot.only { width:14rpx;height:2rpx;border-radius:0; }
+.jump { display:block;margin-top:7rpx;text-align:center;color:var(--muted);font-size:23rpx;text-decoration:underline;padding:14rpx; }
+.legend { display:block;margin-top:45rpx;color:var(--muted);text-align:center;font-size:23rpx;line-height:1.8; }
+</style>
