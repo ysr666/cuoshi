@@ -20,7 +20,7 @@ const title=computed(()=>{const [y,m]=month.value.split('-');return `${y}年 ${N
 </script>
 <template>
   <Screen><view class="header"><text class="brand">错事</text><text class="small-date">看看过去</text></view><view class="heading">日历</view><view class="subheading">哪一天都可以重新看看。</view>
-    <view class="month-row"><text class="month-control" role="button" aria-label="上个月" @click="shift(-1)">‹</text><picker mode="date" fields="month" start="1900-01" :end="thisMonth" :value="month" @change="pickMonth"><text>{{title}} ⌄</text></picker><text class="month-control" role="button" aria-label="下个月" :class="{dim:month>=localDate().slice(0,7)}" @click="month<localDate().slice(0,7)&&shift(1)">›</text></view>
+    <view class="month-row"><text class="month-control" role="button" aria-label="上个月" hover-class="month-pressed" :hover-start-time="0" :hover-stay-time="80" @click="shift(-1)">‹</text><picker mode="date" fields="month" start="1900-01" :end="thisMonth" :value="month" @change="pickMonth"><text>{{title}} ⌄</text></picker><text class="month-control" role="button" aria-label="下个月" :hover-class="month>=thisMonth?'none':'month-pressed'" :hover-start-time="0" :hover-stay-time="80" :class="{dim:month>=localDate().slice(0,7)}" @click="month<localDate().slice(0,7)&&shift(1)">›</text></view>
     <text v-if="month!==thisMonth" class="jump" @click="jumpToday">回到本月</text><view class="week"><text v-for="d in ['一','二','三','四','五','六','日']" :key="d">{{d}}</text></view>
     <view class="grid"><view v-for="(d,i) in current" :key="d?d.key:'blank'+i" class="cell" :class="{today:d?.key===localDate(),future:d?.future,recorded:d?.count!==null&&d?.count!==undefined&&d.count>0}" :role="d&&!d.future?'button':undefined" :aria-label="dayAccessibility(d)" @click="d&&choose(d.key,d.future)"><text v-if="d">{{d.label}}</text><view v-if="d&&(d.count!==null||d.note)" class="dot" :class="{hollow:d.count===0,only:d.count===null}"/></view></view>
     <view class="legend">
@@ -37,6 +37,7 @@ const title=computed(()=>{const [y,m]=month.value.split('-');return `${y}年 ${N
 .month-row text {display:inline-block;padding:12px;color:var(--ink);font-size:23px;}
 .month-row picker text {font-family:var(--display-font);font-size:20px;letter-spacing:0;}
 .month-control {min-width:44px;min-height:44px;text-align:center;}
+.month-control.month-pressed {opacity:.64;}
 .month-row .dim {opacity:.27;}
 .week {display:grid;grid-template-columns:repeat(7,minmax(0,1fr));margin-top:17px;margin-bottom:11px;padding:0;color:var(--muted);text-align:center;font-size:14px;}
 .week text {padding:4px 0;}

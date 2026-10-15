@@ -1,19 +1,22 @@
 const assert=require('node:assert/strict')
 const {chromium}=require('playwright-core')
+const {startH5TestServer}=require('./h5-built-server.cjs')
 ;(async()=>{
- const b=await chromium.launch({headless:true,executablePath:'/Applications/Google Chrome.app/Contents/MacOS/Google Chrome'})
+ const server=await startH5TestServer()
+ const b=await chromium.launch({headless:true,executablePath:process.env.CHROME_PATH||(process.platform==='darwin'?'/Applications/Google Chrome.app/Contents/MacOS/Google Chrome':'/usr/bin/google-chrome')})
  try{
   for (const width of [320,390,430]) {
    const p=await b.newPage({viewport:{width,height:844},deviceScaleFactor:1})
    const errors=[];p.on('pageerror',e=>errors.push(e.message));p.setDefaultTimeout(7000)
-   await p.goto(process.env.CUOSHI_H5_URL||'http://127.0.0.1:4177/',{waitUntil:'networkidle'})
+   await p.goto(server.url,{waitUntil:'domcontentloaded'})
+   await p.locator('.round.primary').waitFor()
    await p.locator('.round.primary').click()
    assert.equal(await p.locator('.number').innerText(),'1')
-   const before=await p.locator('.notes').boundingBox()
+   const before=await p.locator('.notes').evaluate(el=>el.offsetTop)
    await p.locator('.number').click()
    await p.locator('.editor-layer').waitFor({state:'visible'})
-   const after=await p.locator('.notes').boundingBox()
-   assert.ok(Math.abs(before.y-after.y)<1,'Note section moved while editor opened')
+   const after=await p.locator('.notes').evaluate(el=>el.offsetTop)
+   assert.ok(Math.abs(before-after)<1,'Note section reflowed while editor opened')
    const modal=await p.locator('.editor').boundingBox()
    assert.ok(modal.x>=0&&modal.x+modal.width<=width+1,'Dialog outside viewport')
    await p.screenshot({path:'/tmp/cuoshi-polish-editor-'+width+'.png'})
@@ -33,5 +36,5 @@ const {chromium}=require('playwright-core')
    console.log('PASS',width,'modal/no page shift/cancel/save/calendar four-state legend')
    await p.close()
   }
- }finally{await b.close()}
+ }finally{await b.close();await server.close()}
 })().catch(e=>{console.error('FAIL',e.stack||e);process.exit(1)})

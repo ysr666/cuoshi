@@ -38,10 +38,10 @@ jobs:
       - name: Set up Chrome for real H5 browser checks
         id: chrome
         uses: browser-actions/setup-chrome@v2
-      - name: H5 layout, typography, refinement and notes
+      - name: H5 layout, typography, touch feedback and notes
         env:
           CHROME_PATH: ${{ steps.chrome.outputs.chrome-path }}
-        run: npm run test:h5:layout && npm run test:h5:typography && npm run test:h5:refinement && npm run test:h5:notes
+        run: npm run test:h5:layout && npm run test:h5:typography && npm run test:h5:refinement && npm run test:h5:notes && npm run test:h5:feedback && npm run test:h5:polish
 
       - name: Upload H5 screenshots for design review
         if: always()
