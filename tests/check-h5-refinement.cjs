@@ -80,6 +80,11 @@ const dateKey = date => [date.getFullYear(),String(date.getMonth()+1).padStart(2
       stage='reload';
       await page.reload({waitUntil:'domcontentloaded'});
       await page.locator('.quiet-change').first().waitFor();
+      const finalChange=page.locator('.quiet-change').last();
+      await finalChange.evaluate(e=>e.scrollIntoView({block:'center',behavior:'instant'}));
+      const bounds=await finalChange.boundingBox();
+      assert.ok(bounds&&bounds.y>=0&&bounds.y+bounds.height<844-56,
+        'Past-change detail should remain readable above fixed navigation: '+JSON.stringify(bounds));
 
       stage='note-no-op';
       // Unchanged note edit does not claim that an update happened.

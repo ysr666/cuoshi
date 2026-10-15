@@ -39,7 +39,7 @@ function calendar(){uni.switchTab({url:'/pages/calendar/index'})}
 </template>
 <style scoped>
 .warning {font-size:13px;line-height:1.8;color:#934f40;padding:15px 0;}
-.quiet {display:block;border-top:1px solid var(--line);padding:10px 0;margin-top:43px;color:var(--muted);font-size:14px;line-height:1.75;}
+.quiet {display:block;border-top:1px solid var(--line);padding:10px 0;margin-top:22px;color:var(--muted);font-size:14px;line-height:1.75;}
 .quiet-title {display:flex;align-items:center;justify-content:space-between;min-height:44px;gap:12px;color:var(--ink);font-size:14px;}
 .quiet-title text {color:var(--muted);font-size:18px;}
 .quiet-change {display:block;padding:3px 0;font-size:13px;line-height:1.8;overflow-wrap:anywhere;}

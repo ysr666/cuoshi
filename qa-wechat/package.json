@@ -4,7 +4,8 @@
   "version": "0.1.0",
   "description": "Isolated WeChat DevTools runtime smoke tests; never bundle with app",
   "scripts": {
-    "test": "node check-runtime.cjs"
+    "test": "node check-runtime.cjs",
+    "test:refinement": "node check-refinement.cjs"
   },
   "devDependencies": {
     "miniprogram-automator": "0.12.1"
