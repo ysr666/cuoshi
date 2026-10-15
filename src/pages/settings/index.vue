@@ -65,16 +65,16 @@ function clear(){uni.showModal({title:'清除全部记录？',content:'这将删
 </template>
 <style scoped>
 .group {margin-top:38px;}
-.group-title {display:block;color:var(--muted);font-size:13px;font-weight:400;padding-bottom:15px;}
+.group-title {display:block;color:var(--muted);font-size:14px;font-weight:400;padding-bottom:15px;}
 .theme-row {display:flex;align-items:center;justify-content:space-between;gap:12px;padding:17px 0;min-height:79px;border-bottom:1px solid var(--line);}
 .theme-info {display:flex;flex:1;flex-direction:column;gap:6px;}
-.option-title {color:var(--ink);font-size:14px;font-weight:600;}
-.description {color:var(--muted);font-size:12px;line-height:1.7;}
+.option-title {color:var(--ink);font-size:16px;font-weight:600;}
+.description {color:var(--muted);font-size:14px;line-height:1.7;}
 .selection {color:var(--ink);font-size:23px;min-width:28px;text-align:right;}
-.option {display:flex;align-items:center;min-height:57px;border-bottom:1px solid var(--line);color:var(--ink);font-size:14px;}
+.option {display:flex;align-items:center;min-height:57px;border-bottom:1px solid var(--line);color:var(--ink);font-size:16px;}
 .option.danger {color:#a3574b;}
-.privacy-detail {display:block;margin-top:14px;color:var(--muted);font-size:12px;line-height:1.8;}
+.privacy-detail {display:block;margin-top:14px;color:var(--muted);font-size:14px;line-height:1.8;}
 .warning {font-size:13px;color:#995343;padding:12px 0;}
 .footer {display:flex;flex-direction:column;gap:14px;margin-top:60px;padding:23px 0;border-top:1px solid var(--line);font-family:var(--display-font);font-size:15px;color:var(--ink);}
-.version {font-family:sans-serif;font-size:12px;color:var(--muted);line-height:1.7;}
+.version {font-family:sans-serif;font-size:13px;color:var(--muted);line-height:1.7;}
 </style>
