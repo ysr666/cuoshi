@@ -35,13 +35,13 @@ const title=computed(()=>{const [y,m]=month.value.split('-');return `${y}年 ${N
 <style scoped>
 .month-row {display:flex;align-items:center;justify-content:space-between;margin-top:22px;min-height:65px;}
 .month-row text {display:inline-block;padding:12px;color:var(--ink);font-size:23px;}
-.month-row picker text {font-family:var(--display-font);font-size:19px;letter-spacing:0;}
+.month-row picker text {font-family:var(--display-font);font-size:20px;letter-spacing:0;}
 .month-control {min-width:44px;min-height:44px;text-align:center;}
 .month-row .dim {opacity:.27;}
-.week {display:grid;grid-template-columns:repeat(7,minmax(0,1fr));margin-top:17px;margin-bottom:11px;padding:0;color:var(--muted);text-align:center;font-size:12px;}
+.week {display:grid;grid-template-columns:repeat(7,minmax(0,1fr));margin-top:17px;margin-bottom:11px;padding:0;color:var(--muted);text-align:center;font-size:14px;}
 .week text {padding:4px 0;}
 .grid {display:grid;grid-template-columns:repeat(7,minmax(0,1fr));text-align:center;row-gap:0;}
-.cell {aspect-ratio:.84;min-height:46px;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:6px;border-radius:14px;font-size:13px;font-variant-numeric:tabular-nums;color:var(--ink);}
+.cell {aspect-ratio:.84;min-height:46px;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:6px;border-radius:14px;font-size:15px;font-variant-numeric:tabular-nums;color:var(--ink);}
 .cell.today {box-shadow:inset 0 0 0 1px var(--ink);}
 .cell.today text {font-weight:750;}
 .cell.future {opacity:.28;}
@@ -49,13 +49,13 @@ const title=computed(()=>{const [y,m]=month.value.split('-');return `${y}年 ${N
 .dot {width:5px;height:5px;border-radius:50%;background:var(--accent);}
 .dot.hollow {width:6px;height:6px;border:1px solid var(--accent);background:none;}
 .dot.only {width:11px;height:2px;border-radius:2px;}
-.jump {display:block;margin-top:2px;text-align:center;color:var(--muted);font-size:12px;text-decoration:underline;padding:10px;}
-.legend {display:flex;align-items:center;justify-content:center;flex-wrap:wrap;gap:13px;margin-top:24px;color:var(--muted);font-size:12px;line-height:1.7;}
+.jump {display:block;margin-top:2px;text-align:center;color:var(--muted);font-size:14px;text-decoration:underline;padding:10px;}
+.legend {display:flex;align-items:center;justify-content:center;flex-wrap:wrap;gap:13px;margin-top:24px;color:var(--muted);font-size:13px;line-height:1.7;}
 .legend-item {display:flex;align-items:center;gap:6px;}
 .legend-symbol {height:6px;width:6px;border-radius:50%;}
 .legend-symbol.solid {background:var(--accent);}
 .legend-symbol.outline {border:1px solid var(--accent);background:transparent;}
 .legend-symbol.shortline {border-radius:0;background:var(--accent);width:10px;height:2px;}
 .legend-symbol.unfilled {background:var(--line);}
-.calendar-hint {border-top:1px solid var(--line);margin-top:32px;padding-top:20px;font-size:13px;line-height:1.8;color:var(--muted);}
+.calendar-hint {border-top:1px solid var(--line);margin-top:32px;padding-top:20px;font-size:14px;line-height:1.8;color:var(--muted);}
 </style>
