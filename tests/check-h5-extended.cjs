@@ -1,11 +1,14 @@
 const {chromium}=require('playwright-core');
 const assert=require('node:assert/strict');
+const {startH5TestServer}=require('./h5-built-server.cjs');
 (async()=>{
-  const browser=await chromium.launch({headless:true,executablePath:'/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',args:['--no-first-run']});
+  const server=await startH5TestServer();
+  const browser=await chromium.launch({headless:true,executablePath:process.env.CHROME_PATH||(process.platform==='darwin'?'/Applications/Google Chrome.app/Contents/MacOS/Google Chrome':'/usr/bin/google-chrome'),args:['--no-first-run']});
   const context=await browser.newContext({viewport:{width:390,height:844},locale:'zh-CN',acceptDownloads:true});
+  try {
   const page=await context.newPage();
   const errors=[];page.on('pageerror',e=>errors.push(e.message));
-  await page.goto('http://127.0.0.1:4177/',{waitUntil:'networkidle'});
+  await page.goto(server.url,{waitUntil:'domcontentloaded'});
   const input=page.locator('textarea').first();
   await input.fill('一份没有提交的草稿 📝');
   await page.reload({waitUntil:'networkidle'});
@@ -30,9 +33,10 @@ const assert=require('node:assert/strict');
   assert.ok(backup.events.some(e=>e.type==='note_edit'),'export preserves old note edit event');
   assert.ok(backup.checksumSha256,'export has checksum');
   await page.locator('.uni-modal__btn').last().click();
+  const chooserEvent=page.waitForEvent('filechooser',{timeout:5000});
   await page.getByText('导入备份',{exact:true}).click();
-  await page.locator('input[type=file]').waitFor({state:'attached',timeout:5000});
-  await page.locator('input[type=file]').setInputFiles({name:'错事备份_测试.json',mimeType:'application/json',buffer:Buffer.from(payload)});
+  const chooser=await chooserEvent;
+  await chooser.setFiles({name:'错事备份_测试.json',mimeType:'application/json',buffer:Buffer.from(payload)});
   await page.getByText('替换导入',{exact:true}).waitFor({timeout:5000});
   await page.getByText('替换导入',{exact:true}).click();
   await page.waitForTimeout(400);
@@ -48,5 +52,5 @@ const assert=require('node:assert/strict');
   assert.ok(await page.locator('.history .event').count()>5,'full history expands');
   assert.deepEqual(errors,[],'no uncaught browser exceptions');
   console.log('PASS H5 extended: draft, edited notes, theme, JSON export/import and history expand');
-  await browser.close();
+  } finally {await context.close();await browser.close();await server.close();}
 })().catch(e=>{console.error(e);process.exit(1)});

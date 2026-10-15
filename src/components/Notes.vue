@@ -37,7 +37,7 @@ function confirmRemove(id:string){uni.showModal({title:'删除这条简记？',c
 <style scoped>
 .notes {border-top:1px solid var(--line);padding:23px 0 0;margin-top:8px;}
 .head {display:flex;justify-content:space-between;align-items:baseline;gap:12px;font-size:16px;font-weight:500;line-height:1.5;}
-.hint {color:var(--soft);font-size:14px;font-weight:400;line-height:1.6;text-align:right;}
+.hint {color:var(--muted);font-size:14px;font-weight:400;line-height:1.6;text-align:right;}
 .note {display:flex;align-items:flex-start;gap:11px;flex-wrap:wrap;padding:13px 0;border-bottom:1px solid var(--line);}
 .note-mark {flex:0 0 4px;width:4px;height:4px;background:var(--soft);border-radius:50%;margin-top:9px;}
 .note-body {flex:1;color:var(--ink);font-size:16px;line-height:1.7;white-space:pre-wrap;word-break:break-word;}

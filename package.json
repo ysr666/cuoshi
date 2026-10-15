@@ -21,7 +21,8 @@
     "test:h5:polish": "node tests/check-h5-polish.cjs",
     "test:h5:typography": "node tests/check-h5-typography.cjs",
     "test:h5:refinement": "node tests/check-h5-refinement.cjs",
-    "test:h5:feedback": "node tests/check-h5-feedback.cjs"
+    "test:h5:feedback": "node tests/check-h5-feedback.cjs",
+    "test:h5:audit": "node tests/check-h5-audit.cjs"
   },
   "dependencies": {
     "@dcloudio/uni-app": "3.0.0-4080720251210001",

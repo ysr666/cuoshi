@@ -2,7 +2,7 @@
 import {ref} from 'vue'
 import {onShow} from '@dcloudio/uni-app'
 import Screen from '../../components/Screen.vue'
-import {records,initialize,setTheme,replaceRecords,clearRecords,storageError} from '../../core/store'
+import {records,initialize,syncFromStorage,setTheme,replaceRecords,clearRecords,storageError} from '../../core/store'
 import {exportBackup,parseBackup} from '../../core/backup'
 import {saveBackupFile,selectBackupFile} from '../../platform/backupIO'
 import {localDate} from '../../core/model'
@@ -13,7 +13,13 @@ function select(s:'paper'|'modern'){try{setTheme(s)}catch(e){notify(String(e))}}
 async function backup(){
   if(busy.value)return
   busy.value=true
-  try{const json=exportBackup(records.value);const message=await saveBackupFile(json,`错事备份_${localDate()}.json`);uni.showModal({title:'请确认备份已保存',content:message+'。备份包含私人文字，请妥善保管。',showCancel:false})}
+  try{
+    syncFromStorage()
+    if(storageError.value)throw Error('当前数据无法读取，已暂停导出，避免生成错误备份；请保留设备里的原始数据')
+    const json=exportBackup(records.value)
+    const message=await saveBackupFile(json,`错事备份_${localDate()}.json`)
+    uni.showModal({title:'请确认备份已保存',content:message+'。备份包含私人文字，请妥善保管。',showCancel:false})
+  }
   catch(e){notify(String(e))}
   finally{busy.value=false}
 }

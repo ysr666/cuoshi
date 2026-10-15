@@ -50,7 +50,7 @@ const totals=computed(()=>{const now=new Date(),nowKey=localDate();let first='';
       <view class="graph-title"><text>记录分布</text><text class="graph-caption">{{period==='week'?'本周':period==='month'?'本月':'今年'}}{{period==='year'?'每月':'每日'}}</text></view>
       <view v-if="period==='year' && totals.withNumber>0" class="chart" aria-label="今年每月记录分布">
         <view v-for="bar in bars" :key="bar.month" class="bar-group">
-          <view class="bar" :style="{height:bar.filled===0?'0%':Math.max(2,bar.value/maxVal*100)+'%'}"/>
+          <view class="bar" :class="{zero:bar.filled>0 && bar.value===0}" :style="{height:bar.filled===0?'0px':bar.value===0?'2px':Math.max(2,bar.value/maxVal*100)+'%'}"/>
           <text>{{bar.month}}</text>
         </view>
       </view>
@@ -89,4 +89,5 @@ const totals=computed(()=>{const now=new Date(),nowKey=localDate();let first='';
 .chart {height:162px;border-bottom:1px solid var(--line);display:flex;align-items:flex-end;justify-content:space-between;gap:4px;margin-top:19px;}
 .bar-group {height:100%;flex:1;display:flex;flex-direction:column;justify-content:flex-end;align-items:center;gap:8px;color:var(--muted);font-size:12px;}
 .bar {width:65%;max-width:19px;min-height:0;background:var(--accent);opacity:.5;border-radius:3px 3px 0 0;}
+.bar.zero {width:55%;max-width:16px;opacity:.72;border-radius:0;}
 </style>

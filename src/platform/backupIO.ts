@@ -24,12 +24,36 @@ export async function saveBackupFile(text:string,filename:string):Promise<string
 }
 export async function selectBackupFile():Promise<string>{
   // #ifdef H5
-  if(typeof document!=='undefined')return new Promise((resolve,reject)=>{
+  if(typeof document!=='undefined')return new Promise<string>((resolve,reject)=>{
     const el=document.createElement('input');el.type='file';el.accept='.json,application/json'
     el.style.display='none';document.body.appendChild(el)
+    let finished=false
+    let focusTimer:ReturnType<typeof setTimeout>|undefined
+    function finish():boolean{
+      if(finished)return false
+      finished=true
+      if(focusTimer)clearTimeout(focusTimer)
+      window.removeEventListener('focus',onFocus)
+      el.remove()
+      return true
+    }
+    function cancel(){if(finish())reject(Error('已取消选择'))}
+    function onFocus(){
+      // Fallback for older webviews that don't dispatch the file input's cancel event.
+      focusTimer=setTimeout(()=>{if(!el.files?.length)cancel()},600)
+    }
+    if(!('oncancel' in el))window.addEventListener('focus',onFocus)
+    el.addEventListener('cancel',cancel,{once:true})
     el.addEventListener('change',async ()=>{
-      try{const file=el.files?.[0];if(!file){reject(Error('已取消选择'));return}if(file.size>15*1024*1024)throw Error('备份文件超过 15 MB');resolve(await file.text())}catch(e){reject(e)}finally{el.remove()}
-    });el.click()
+      try{
+        const file=el.files?.[0]
+        if(!file){cancel();return}
+        if(file.size>15*1024*1024)throw Error('备份文件超过 15 MB')
+        const content=await file.text()
+        if(finish())resolve(content)
+      }catch(e){if(finish())reject(e)}
+    },{once:true})
+    try{el.click()}catch(e){if(finish())reject(e)}
   })
   // #endif
   // #ifdef MP-WEIXIN
