@@ -37,18 +37,18 @@ function confirmRemove(id:string){uni.showModal({title:'删除这条简记？',c
 </template>
 <style scoped>
 .notes {border-top:1px solid var(--line);padding:23px 0 0;margin-top:8px;}
-.head {display:flex;justify-content:space-between;align-items:baseline;gap:12px;font-size:15px;font-weight:500;line-height:1.5;}
-.hint {color:var(--soft);font-size:12px;font-weight:400;line-height:1.6;text-align:right;}
+.head {display:flex;justify-content:space-between;align-items:baseline;gap:12px;font-size:16px;font-weight:500;line-height:1.5;}
+.hint {color:var(--soft);font-size:14px;font-weight:400;line-height:1.6;text-align:right;}
 .note {display:flex;align-items:flex-start;gap:11px;flex-wrap:wrap;padding:13px 0;border-bottom:1px solid var(--line);}
 .note-mark {flex:0 0 4px;width:4px;height:4px;background:var(--soft);border-radius:50%;margin-top:9px;}
-.note-body {flex:1;color:var(--ink);font-size:14px;line-height:1.7;white-space:pre-wrap;word-break:break-word;}
-.edit-link {display:flex;align-items:center;min-height:44px;padding:0 3px 0 8px;color:var(--muted);font-size:13px;}
+.note-body {flex:1;color:var(--ink);font-size:16px;line-height:1.7;white-space:pre-wrap;word-break:break-word;}
+.edit-link {display:flex;align-items:center;min-height:44px;padding:0 3px 0 8px;color:var(--muted);font-size:14px;}
 .entry {display:flex;align-items:center;gap:8px;margin-top:18px;}
-.field {flex:1;width:100%;min-width:0;min-height:47px;padding:12px 0 8px;line-height:1.6;border:0;border-bottom:1px solid var(--line);border-radius:0;background:transparent;color:var(--ink);font-size:16px;}
-.save {display:flex;align-items:center;justify-content:center;min-width:44px;min-height:44px;padding:8px 0 8px 5px;color:var(--accent);font-size:13px;font-weight:600;white-space:nowrap;}
+.field {flex:1;width:100%;min-width:0;min-height:47px;padding:12px 0 8px;line-height:1.6;border:0;border-bottom:1px solid var(--line);border-radius:0;background:transparent;color:var(--ink);font-size:17px;}
+.save {display:flex;align-items:center;justify-content:center;min-width:44px;min-height:44px;padding:8px 0 8px 5px;color:var(--accent);font-size:15px;font-weight:600;white-space:nowrap;}
 .save.inactive {color:var(--soft);}
 .edit-field {width:100%;min-height:56px;font-size:16px;line-height:1.7;color:var(--ink);}
-.note-actions {width:100%;display:flex;justify-content:flex-end;gap:20px;color:var(--muted);font-size:13px;}
+.note-actions {width:100%;display:flex;justify-content:flex-end;gap:20px;color:var(--muted);font-size:14px;}
 .note-actions text {display:flex;align-items:center;min-height:44px;padding:0 5px;}
-.foot {display:block;margin-top:7px;color:var(--muted);font-size:12px;line-height:1.5;}
+.foot {display:block;margin-top:7px;color:var(--muted);font-size:13px;line-height:1.5;}
 </style>
