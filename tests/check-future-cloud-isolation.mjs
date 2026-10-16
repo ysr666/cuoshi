@@ -4,7 +4,7 @@ import {existsSync,readdirSync,readFileSync,statSync} from 'node:fs'
 import {resolve,join} from 'node:path'
 
 const roots=['dist/build/h5','dist/build/mp-weixin']
-const forbidden=['CloudContractSimulator','checkBodyRead','cloudBackupEnabled','necessary_safety_review','AuthenticatedCloudService','issueServerSession','cloud_read_day']
+const forbidden=['CloudContractSimulator','checkBodyRead','cloudBackupEnabled','necessary_safety_review','AuthenticatedCloudService','issueServerSession','cloud_read_day','loginWithWechatCode','makeWechatCodeExchanger','cloud_wechat_identities','revokeVerifiedSession','cloud_revoked_backup_tokens']
 let checked=0
 function walk(dir){
   for(const name of readdirSync(dir)){

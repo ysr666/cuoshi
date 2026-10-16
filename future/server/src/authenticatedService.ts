@@ -5,6 +5,7 @@
  */
 import {timingSafeEqual} from 'node:crypto'
 import {verifyServerSession,type SessionClaims} from './sessionTokens'
+import {ensureSessionNotRevoked,revokeVerifiedSession} from './sessionRevocation'
 import type {DbPool} from './repository'
 import {
   provisionVerifiedUser,setCloudConsent,getCloudSnapshot,getCloudBackupStatus,uploadCloudSnapshot,deleteCloudBackup
@@ -15,9 +16,14 @@ import type {UploadRequest} from '../../cloud/snapshotContract'
 export class AuthenticatedCloudService{
   private readonly backupKey:Uint8Array
   private readonly staffKey:Uint8Array
+  private readonly previousBackupKey?:Uint8Array
+  private readonly previousStaffKey?:Uint8Array
   constructor(
     private readonly backupDb:DbPool,private readonly staffDb:DbPool,
-    keys:{backupKey:Uint8Array;staffKey:Uint8Array},
+    keys:{
+      backupKey:Uint8Array;staffKey:Uint8Array
+      previousBackupKey?:Uint8Array;previousStaffKey?:Uint8Array
+    },
     private readonly nowSeconds:()=>number=()=>Math.floor(Date.now()/1000)
   ){
     if(!(keys?.backupKey instanceof Uint8Array)||keys.backupKey.byteLength<32||
@@ -26,30 +32,61 @@ export class AuthenticatedCloudService{
     if(keys.backupKey.byteLength===keys.staffKey.byteLength&&
        timingSafeEqual(keys.backupKey,keys.staffKey))
       throw Error('session_audiences_must_use_distinct_keys')
+    const all=[
+      keys.backupKey,keys.staffKey,keys.previousBackupKey,keys.previousStaffKey
+    ].filter((key):key is Uint8Array=>key!==undefined)
+    if(all.some(key=>!(key instanceof Uint8Array)||key.byteLength<32))
+      throw Error('session_keys_not_configured')
+    for(let i=0;i<all.length;i++)for(let j=i+1;j<all.length;j++)
+      if(all[i].byteLength===all[j].byteLength&&timingSafeEqual(all[i],all[j]))
+        throw Error('session_audiences_must_use_distinct_keys')
     this.backupKey=Uint8Array.from(keys.backupKey)
     this.staffKey=Uint8Array.from(keys.staffKey)
+    if(keys.previousBackupKey)this.previousBackupKey=Uint8Array.from(keys.previousBackupKey)
+    if(keys.previousStaffKey)this.previousStaffKey=Uint8Array.from(keys.previousStaffKey)
   }
-  private asUser(token:unknown){
-    const claims=verifyServerSession(token,this.backupKey,'cuoshi-cloud-backup',this.nowSeconds())
+  private readClaims(token:unknown,aud:'cuoshi-cloud-backup'|'cuoshi-staff-admin'){
+    const current=aud==='cuoshi-cloud-backup'?this.backupKey:this.staffKey
+    const previous=aud==='cuoshi-cloud-backup'?this.previousBackupKey:this.previousStaffKey
+    const now=this.nowSeconds()
+    // Issue only with current keys. During a controlled rotation, accept the
+    // previous key for at most the token's 15/5-minute original lifetime.
+    return verifyServerSession(token,current,aud,now) ??
+      (previous?verifyServerSession(token,previous,aud,now):null)
+  }
+  private async asUser(token:unknown){
+    const claims=this.readClaims(token,'cuoshi-cloud-backup')
     if(!claims?.deviceId)throw Error('unauthorized')
+    await ensureSessionNotRevoked(this.backupDb,claims)
     return {userId:claims.sub,deviceId:claims.deviceId}
   }
-  private asStaff(token:unknown){
-    const claims=verifyServerSession(token,this.staffKey,'cuoshi-staff-admin',this.nowSeconds())
+  private async asStaff(token:unknown){
+    const claims=this.readClaims(token,'cuoshi-staff-admin')
     if(typeof claims?.mfaAt!=='number')throw Error('unauthorized')
+    await ensureSessionNotRevoked(this.staffDb,claims)
     return {staffId:claims.sub,mfaVerified:true}
   }
-  async provision(token:unknown){return provisionVerifiedUser(this.backupDb,this.asUser(token))}
+  async logoutUser(token:unknown){
+    const claims=this.readClaims(token,'cuoshi-cloud-backup')
+    if(!claims?.deviceId)throw Error('unauthorized')
+    return revokeVerifiedSession(this.backupDb,claims)
+  }
+  async logoutStaff(token:unknown){
+    const claims=this.readClaims(token,'cuoshi-staff-admin')
+    if(typeof claims?.mfaAt!=='number')throw Error('unauthorized')
+    return revokeVerifiedSession(this.staffDb,claims)
+  }
+  async provision(token:unknown){return provisionVerifiedUser(this.backupDb,await this.asUser(token))}
   async setConsent(token:unknown,enabled:boolean,noticeVersion:string){
-    return setCloudConsent(this.backupDb,this.asUser(token),enabled,noticeVersion)
+    return setCloudConsent(this.backupDb,await this.asUser(token),enabled,noticeVersion)
   }
-  async readBackup(token:unknown){return getCloudSnapshot(this.backupDb,this.asUser(token))}
-  async status(token:unknown){return getCloudBackupStatus(this.backupDb,this.asUser(token))}
+  async readBackup(token:unknown){return getCloudSnapshot(this.backupDb,await this.asUser(token))}
+  async status(token:unknown){return getCloudBackupStatus(this.backupDb,await this.asUser(token))}
   async upload(token:unknown,request:UploadRequest){
-    return uploadCloudSnapshot(this.backupDb,this.asUser(token),request)
+    return uploadCloudSnapshot(this.backupDb,await this.asUser(token),request)
   }
-  async deleteBackup(token:unknown){return deleteCloudBackup(this.backupDb,this.asUser(token))}
+  async deleteBackup(token:unknown){return deleteCloudBackup(this.backupDb,await this.asUser(token))}
   async readPrivateDay(token:unknown,ownerId:string,dayKey:string,caseId:string){
-    return readPrivateDayWithAudit(this.staffDb,this.asStaff(token),ownerId,dayKey,caseId)
+    return readPrivateDayWithAudit(this.staffDb,await this.asStaff(token),ownerId,dayKey,caseId)
   }
 }

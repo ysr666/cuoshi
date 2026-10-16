@@ -85,6 +85,12 @@
 - 本地真实 PostgreSQL 低权限账号与可控工单并发测试目前覆盖 **79 项**；独立会话验证覆盖 **36 项**。云端 CI 用 PostgreSQL 16 再次验收，相关用户文件与密钥均为合成测试数据。
 - 生产上线所缺的供应商、密钥轮换与会话注销、法律授权、独立防篡改审计、数据库加密等仍是阻断项。详细列表见 `CN_CLOUD_BACKEND_SECURITY_HANDOFF.md`。
 
+## 6.2 微信身份映射与撤销（独立工程）
+
+`future/server/sql/003_wechat_identity.sql` 和 `src/wechatIdentity.ts` 实现了服务端微信临时代码验证接口的预留、HMAC 身份映射、并发初始化和重复 code 拒绝；`004_session_revocation.sql`、`src/sessionRevocation.ts` 支持单令牌服务端撤销，签名验证可在原 TTL 内兼容前任密钥以便轮换。管理员与普通会话仍使用不同密钥，身份运行时数据库账号无读取备份或删除用户权限。
+
+这不是实际微信登录已通过验收，也没有手机号短信认证、设备级全局撤销、生产密钥托管或公开 API。离线模拟的真实 PostgreSQL 集成检查已扩展到 **131 项**。详细技术/安全边界见 [微信登录与会话交接](CN_CLOUD_WECHAT_AUTH_HANDOFF.md)。
+
 ## 7. 早期合同原型（仍保留）
 
 - `future/cloud/snapshotContract.ts`：纯内存服务器协议模拟，主动开启标记、owner 隔离、幂等、冲突、历史保全；**没有 HTTP、账号、数据库或自动上传代码**。

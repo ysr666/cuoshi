@@ -94,6 +94,14 @@
 - 真实 PostgreSQL 两个非所有者登录账户运行 **79 项**并发/历史/权限/管理员审计检查（含授权撤销与访问的并发测试）；签名会话另有 **36 项**，两者继续通过 CI 验证。
 - 生产密钥托管/会话撤销、境内部署/备案、独立审计副本、加密存储与真实用户权利 UI 等尚未完成；交接见 `docs/CN_CLOUD_BACKEND_SECURITY_HANDOFF.md`。主应用首发验收阻断项不变。
 
+## 2026-10-16 · 微信账号身份桥接、持久单会话撤销与轮换
+
+- 新增 `future/server/src/wechatIdentity.ts` 和 `sql/003_wechat_identity.sql`：通过可注入的正式微信 `code2Session` 交换接口，将微信身份映射成随机内部用户 ID，只存服务端 HMAC 摘要，阻止一次性 code 重用；同账号并发登录通过事务级锁保证唯一映射。
+- 身份数据库角色**没有 DELETE 用户权限**，杜绝为处理竞态而意外级联清空用户备份的风险，登录异常必须回滚事务。
+- `sql/004_session_revocation.sql`、`sessionRevocation.ts`：用户与员工令牌各自持久拒绝名单，新请求会检查签名、有效期与已撤销状态。支持按剩余会话 TTL 在短暂过渡期验证旧签名密钥；不具备设备级一键全退出或生产 KMS。
+- 真实 PostgreSQL 测试扩充至 **131 项**（离线模拟微信回包、没有 AppID 或真实账号数据），原有 36 项 token 边界测试保留。见 `docs/CN_CLOUD_WECHAT_AUTH_HANDOFF.md`。
+- 无公开服务器或 HTTP 登录 API，主微信/H5 应用仍然不包含未来云端代码，v0.4 真机备份与依赖审计阻断项仍然有效。
+
 ## 复现方法
 
 ```sh

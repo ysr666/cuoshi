@@ -20,9 +20,10 @@ const temp=mkdtempSync(join(tmpdir(),'cuoshi-real-pg-'))
 let checks=0
 const check=(x,why)=>{assert.ok(x,why);checks++}
 const basePool=new Pool({connectionString:source,max:4})
-let pool,backupPool,adminPool
+let pool,backupPool,adminPool,identityPool
 const suffix=schema.slice(-10)
 const backupRole='cuoshi_b_'+suffix,adminRole='cuoshi_a_'+suffix
+const identityRole='cuoshi_i_'+suffix
 let rolesInstalled=false
 try{
   const out=join(temp,'build');mkdirSync(out)
@@ -31,13 +32,15 @@ try{
     '--skipLibCheck','--strict','--rootDir',root,'--outDir',out,
     resolve(root,'future/server/src/repository.ts'),
     resolve(root,'future/server/src/adminRepository.ts'),
-    resolve(root,'future/server/src/authenticatedService.ts')
+    resolve(root,'future/server/src/authenticatedService.ts'),
+    resolve(root,'future/server/src/wechatIdentity.ts')
   ],{cwd:root,stdio:'pipe'})
   const m=require(join(out,'src/core/model.js'))
   const repository=require(join(out,'future/server/src/repository.js'))
   const admin=require(join(out,'future/server/src/adminRepository.js'))
   const {AuthenticatedCloudService}=require(join(out,'future/server/src/authenticatedService.js'))
-  const {issueServerSession}=require(join(out,'future/server/src/sessionTokens.js'))
+  const {issueServerSession,verifyServerSession}=require(join(out,'future/server/src/sessionTokens.js'))
+  const {loginWithWechatCode,makeWechatCodeExchanger}=require(join(out,'future/server/src/wechatIdentity.js'))
   await basePool.query('CREATE SCHEMA "'+schema+'"')
   pool=new Pool({connectionString:source,options:'-c search_path='+schema,max:14})
   const ddl=readFileSync(new URL('../sql/001_initial.sql',import.meta.url),'utf8')
@@ -49,7 +52,8 @@ try{
   // program-generated hexadecimal test secrets and identifiers only.
   const backupSecret=crypto.randomBytes(24).toString('hex')
   const adminSecret=crypto.randomBytes(24).toString('hex')
-  for(const [role,secret] of [[backupRole,backupSecret],[adminRole,adminSecret]]){
+  const identitySecret=crypto.randomBytes(24).toString('hex')
+  for(const [role,secret] of [[backupRole,backupSecret],[adminRole,adminSecret],[identityRole,identitySecret]]){
     await basePool.query('CREATE ROLE "'+role+'" LOGIN PASSWORD \''+secret+'\'')
   }
   rolesInstalled=true
@@ -58,6 +62,15 @@ try{
     .replaceAll('__BACKUP_ROLE__','"'+backupRole+'"')
     .replaceAll('__ADMIN_ROLE__','"'+adminRole+'"')
   try{await pool.query(grants)}catch(error){console.error('MIGRATION_SQL_ERROR',error.message,error.position,error.where,error.detail);throw error}
+  const identityMigration=readFileSync(new URL('../sql/003_wechat_identity.sql',import.meta.url),'utf8')
+    .replaceAll('__SCHEMA__','"'+schema+'"')
+    .replaceAll('__AUTH_ROLE__','"'+identityRole+'"')
+  await pool.query(identityMigration)
+  const revocationMigration=readFileSync(new URL('../sql/004_session_revocation.sql',import.meta.url),'utf8')
+    .replaceAll('__SCHEMA__','"'+schema+'"')
+    .replaceAll('__BACKUP_ROLE__','"'+backupRole+'"')
+    .replaceAll('__ADMIN_ROLE__','"'+adminRole+'"')
+  await pool.query(revocationMigration)
   function roleUrl(role,secret){
     const url=new URL(source)
     url.username=role
@@ -68,6 +81,8 @@ try{
     options:'-c search_path='+schema,max:14})
   adminPool=new Pool({connectionString:roleUrl(adminRole,adminSecret),
     options:'-c search_path='+schema,max:6})
+  identityPool=new Pool({connectionString:roleUrl(identityRole,identitySecret),
+    options:'-c search_path='+schema,max:10})
   const attempt=async(rolePool,sql,params=[])=>{
     const c=await rolePool.connect()
     try{await assert.rejects(c.query(sql,params),/permission denied|must be owner|not owner/i);checks++}
@@ -82,6 +97,17 @@ try{
   await attempt(adminPool,'SELECT * FROM cloud_upload_receipts')
   await attempt(adminPool,'INSERT INTO cloud_admin_audit(staff_id,owner_id,day_key,decision,reason) VALUES(\'x\',\'y\',\'2026-10-16\',\'allow\',\'fake\')')
   await attempt(backupPool,"SELECT * FROM cloud_read_day('support0001',TRUE,'account0001','2026-10-16','ticket0001')")
+  await attempt(identityPool,'SELECT * FROM cloud_snapshots')
+  await attempt(identityPool,'SELECT * FROM cloud_staff')
+  await attempt(identityPool,'SELECT * FROM cloud_admin_audit')
+  await attempt(identityPool,"DELETE FROM cloud_users WHERE user_id='account0001'")
+  await attempt(identityPool,'SELECT * FROM cloud_revoked_backup_tokens')
+  await attempt(backupPool,'SELECT * FROM cloud_revoked_staff_tokens')
+  await attempt(adminPool,'SELECT * FROM cloud_revoked_backup_tokens')
+  await attempt(backupPool,'DELETE FROM cloud_revoked_backup_tokens')
+  await attempt(adminPool,'DELETE FROM cloud_revoked_staff_tokens')
+  await attempt(backupPool,'SELECT * FROM cloud_wechat_identities')
+  await attempt(adminPool,'SELECT * FROM cloud_wechat_identities')
 
   check((await pool.query('SELECT count(*) AS n FROM cloud_admin_audit')).rows[0].n==='0',
     'No privilege probing modified audit history')
@@ -108,6 +134,94 @@ try{
   check((await service.status(tokenA)).enabled===false,'Cloud off by default on authenticated status')
   check((await service.status(tokenA)).hasStoredBackup===false,'No backup before first upload')
   check((await service.status(tokenB)).hasStoredBackup===false,'Other account starts independently')
+  // Mock the official exchange boundary, without real credentials or network.
+  // The adapter must ignore session_key and never expose the user's raw openid.
+  const wxAppId='wxabcdef1234567890'
+  const wxSubjectPepper=crypto.randomBytes(32),wxCodePepper=crypto.randomBytes(32)
+  const wxConfig={appId:wxAppId,codePepper:wxCodePepper,
+    subjectPepper:wxSubjectPepper,backupSigningKey,nowSeconds}
+  const mockExchange=async code=>{
+    if(code==='rejectme0001')throw Error('wechat_code_invalid')
+    return {openid:code.startsWith('other')?'trusted_other_wechat_02':'trusted_wechat_user_01'}
+  }
+  await assert.rejects(loginWithWechatCode(identityPool,'rejectme0001','device0001',
+    wxConfig,mockExchange),/wechat_code_invalid/);checks++
+  await assert.rejects(loginWithWechatCode(identityPool,'bad','device0001',
+    wxConfig,mockExchange),/invalid_wechat_login/);checks++
+  const wxLogin=await loginWithWechatCode(identityPool,'wecode0001','device0001',
+    wxConfig,mockExchange)
+  check(wxLogin.isNewAccount&&wxLogin.userId.length===32,'Exchange creates a random internal user')
+  const wxClaims=verifyServerSession(wxLogin.accessToken,backupSigningKey,
+    'cuoshi-cloud-backup',nowSeconds())
+  check(wxClaims?.sub===wxLogin.userId,'Verified provider result enables signed session')
+  check(!JSON.stringify(wxLogin).includes('trusted_wechat_user_01'),
+    'Never leak raw openid or provider session_key')
+  const loginAgain=await loginWithWechatCode(identityPool,'wecode0002','device0002',
+    wxConfig,mockExchange)
+  check(!loginAgain.isNewAccount&&loginAgain.userId===wxLogin.userId,
+    'Same WeChat identity maps to existing account')
+  await assert.rejects(loginWithWechatCode(identityPool,'wecode0001','device0001',
+    wxConfig,mockExchange),/wechat_code_already_used/);checks++
+  const secondUser=await loginWithWechatCode(identityPool,'othercode0001','device0003',
+    wxConfig,mockExchange)
+  check(secondUser.userId!==wxLogin.userId,'Different WeChat identity isolated')
+  const sameNewIdentity=await Promise.all([
+    loginWithWechatCode(identityPool,'wecodeparallel01','device0010',wxConfig,mockExchange),
+    loginWithWechatCode(identityPool,'wecodeparallel02','device0011',wxConfig,mockExchange)
+  ])
+  check(sameNewIdentity.every(x=>x.userId===wxLogin.userId),
+    'Parallel code exchanges never create duplicate accounts')
+  const parallelCode=await Promise.allSettled([
+    loginWithWechatCode(identityPool,'samecodeparallel0001','device0012',wxConfig,mockExchange),
+    loginWithWechatCode(identityPool,'samecodeparallel0001','device0013',wxConfig,mockExchange)
+  ])
+  check(parallelCode.filter(x=>x.status==='fulfilled').length===1,
+    'Concurrent replay of same temporary login code issues only one valid session')
+  check(parallelCode.filter(x=>x.status==='rejected'&&
+    String(x.reason?.message).includes('wechat_code_already_used')).length===1,
+    'Other simultaneous code exchange fails closed')
+  const dbSubjects=await pool.query('SELECT * FROM cloud_wechat_identities ORDER BY user_id')
+  check(dbSubjects.rows.length===2,'Only two mapped WeChat identities')
+  check(!JSON.stringify(dbSubjects.rows).includes('trusted_wechat_user_01'),
+    'Database stores keyed identity hash, not raw openid')
+  const bodySecrets=await pool.query('SELECT * FROM cloud_consumed_wechat_codes')
+  check(!JSON.stringify(bodySecrets.rows).includes('wecode0001'),
+    'Database stores only keyed code digests')
+  const usersBefore=await pool.query('SELECT count(*) AS total FROM cloud_users')
+  check(Number(usersBefore.rows[0].total)===4,'Identity sign-in adds only two accounts alongside two earlier test users')
+  // Exercise official exchange URL handling with a fake fetch, no network calls.
+  const fakeFetch=async (url,options)=>{
+    const u=new URL(url)
+    check(u.hostname==='api.weixin.qq.com'&&u.pathname==='/sns/jscode2session',
+      'Provider exchange strictly targets official HTTPS domain')
+    check(u.searchParams.get('grant_type')==='authorization_code'&&
+      u.searchParams.get('appid')===wxAppId,
+      'Official exchange uses authorization_code for configured AppID')
+    return new Response(JSON.stringify({
+      openid:'trusted_wechat_user_01',session_key:'secret_should_not_escape'
+    }),{status:200})
+  }
+  const officialAdapter=makeWechatCodeExchanger({
+    appId:wxAppId,appSecret:'fake_app_secret_not_real',fetchImpl:fakeFetch
+  })
+  check((await officialAdapter('freshcode123')).openid==='trusted_wechat_user_01',
+    'Successful official response returns only openid')
+  const failingAdapter=makeWechatCodeExchanger({appId:wxAppId,
+    appSecret:'fake_app_secret_not_real',fetchImpl:async()=>new Response(
+      JSON.stringify({errcode:40029,errmsg:'invalid code'}),{status:200})})
+  await assert.rejects(failingAdapter('freshcode123'),/wechat_exchange_failed/);checks++
+  const invalidOpenid=makeWechatCodeExchanger({
+    appId:wxAppId,appSecret:'fake_app_secret_not_real',
+    fetchImpl:async()=>new Response(JSON.stringify({openid:'abc'}),{status:200})
+  })
+  await assert.rejects(invalidOpenid('freshcode123'),/invalid_response/);checks++
+  const hugeProvider=makeWechatCodeExchanger({
+    appId:wxAppId,appSecret:'fake_app_secret_not_real',
+    fetchImpl:async()=>new Response('z'.repeat(5000),{status:200})
+  })
+  await assert.rejects(hugeProvider('freshcode123'),/invalid_response/);checks++
+  await assert.rejects(loginWithWechatCode(identityPool,'freshcode123','device0001',wxConfig,
+    async()=>({openid:'bad'})),/wechat_identity_not_verified/);checks++
   const a={userId:'account0001',deviceId:'device0001'}
   const b={userId:'account0002',deviceId:'device0002'}
   const c={...a,deviceId:'device0003'}
@@ -205,7 +319,7 @@ try{
   m.appendNote(injection,today,"'; DROP TABLE cloud_users; --")
   const injected=await repository.uploadCloudSnapshot(backupPool,a,up(injection,3,third.receipt.digest,'request0013'))
   check(injected.kind==='accepted','SQL-injection-looking note treated as text')
-  check((await pool.query('SELECT count(*) AS total FROM cloud_users')).rows[0].total==='3',
+  check((await pool.query('SELECT count(*) AS total FROM cloud_users')).rows[0].total==='5',
     'Schema intact after SQL injection probe')
   // Seed test-only verified staff and an explicit scoped support ticket.
   for(const [id,role] of [['support0001','support'],['reviewer001','safety_reviewer'],
@@ -276,6 +390,68 @@ try{
   await pool.query("UPDATE cloud_access_grants SET revoked_at=clock_timestamp() WHERE grant_id='grant0001'")
   check(!(await read(staff,yesterday)).allowed,'Revoked grant cannot read body')
 
+  // Key rotation supports a bounded previous-key grace period without
+  // minting permanent sessions or sharing keys between staff and users.
+  const nextBackupKey=crypto.randomBytes(32),nextStaffKey=crypto.randomBytes(32)
+  const rotatedService=new AuthenticatedCloudService(backupPool,adminPool,{
+    backupKey:nextBackupKey,staffKey:nextStaffKey,
+    previousBackupKey:backupSigningKey,previousStaffKey:staffSigningKey
+  },nowSeconds)
+  check((await rotatedService.status(tokenA)).enabled,
+    'Old user token works briefly during configured key rotation')
+  const nextUserToken=issueServerSession({
+    aud:'cuoshi-cloud-backup',sub:a.userId,deviceId:a.deviceId
+  },nextBackupKey,nowSeconds())
+  check((await rotatedService.status(nextUserToken)).enabled,
+    'Newly issued user token validates under current signing key')
+  check((await rotatedService.readPrivateDay(
+    staffToken('support0001'),a.userId,yesterday,'ticket0001')).reason==='revoked',
+    'Previous staff key is accepted through DB policy during rotation')
+  const nextStaffToken=issueServerSession({
+    aud:'cuoshi-staff-admin',sub:'support0001',mfaAt:nowSeconds()-5
+  },nextStaffKey,nowSeconds())
+  check((await rotatedService.readPrivateDay(
+    nextStaffToken,a.userId,yesterday,'ticket0001')).reason==='revoked',
+    'New staff signing key uses the same restricted audit DB path')
+  const currentOnly=new AuthenticatedCloudService(backupPool,adminPool,{
+    backupKey:nextBackupKey,staffKey:nextStaffKey
+  },nowSeconds)
+  await assert.rejects(currentOnly.status(tokenA),/unauthorized/);checks++
+  await assert.rejects(currentOnly.readPrivateDay(
+    staffToken('support0001'),a.userId,yesterday,'ticket0001'),/unauthorized/);checks++
+  check((await currentOnly.status(nextUserToken)).enabled,
+    'Removing the previous key retires old user tokens')
+  assert.throws(()=>new AuthenticatedCloudService(backupPool,adminPool,{
+    backupKey:nextBackupKey,staffKey:nextStaffKey,previousStaffKey:nextBackupKey
+  },nowSeconds),/distinct_keys/);checks++
+  // Logout is durable across new AuthenticatedCloudService instances.
+  const tokenToRevoke=userToken('account0002','device0002')
+  check((await service.status(tokenToRevoke)).enabled,
+    'Valid second-account token can access own backup status')
+  await service.logoutUser(tokenToRevoke)
+  await assert.rejects(service.status(tokenToRevoke),/session_revoked/);checks++
+  await assert.rejects(service.upload(tokenToRevoke,up(state,0,null,'request9990')),
+    /session_revoked/);checks++
+  const afterRestart=new AuthenticatedCloudService(backupPool,adminPool,
+    {backupKey:backupSigningKey,staffKey:staffSigningKey},nowSeconds)
+  await assert.rejects(afterRestart.status(tokenToRevoke),/session_revoked/);checks++
+  await assert.rejects(rotatedService.status(tokenToRevoke),/session_revoked/);checks++
+  check((await rotatedService.status(nextUserToken)).enabled,
+    'Key rotation cannot resurrect revoked bearer credentials')
+  check((await afterRestart.status(userToken('account0002','device0002'))).enabled,
+    'A fresh session can still work after only one token was revoked')
+  const staffToRevoke=staffToken('support0001')
+  await service.logoutStaff(staffToRevoke)
+  await assert.rejects(service.readPrivateDay(staffToRevoke,a.userId,yesterday,'ticket0001'),
+    /session_revoked/);checks++
+  const afterAuditCount=Number((await pool.query('SELECT count(*) AS n FROM cloud_admin_audit')).rows[0].n)
+  await assert.rejects(afterRestart.readPrivateDay(staffToRevoke,a.userId,yesterday,'ticket0001'),
+    /session_revoked/);checks++
+  check(Number((await pool.query('SELECT count(*) AS n FROM cloud_admin_audit')).rows[0].n)===afterAuditCount,
+    'Revoked staff tokens cannot reach private-record SQL function')
+  const revokedRows=await pool.query('SELECT * FROM cloud_revoked_backup_tokens')
+  check(revokedRows.rows.length===1&&!JSON.stringify(revokedRows.rows).includes(tokenToRevoke),
+    'Only a SHA-256 token nonce digest is stored, never a bearer token')
   await service.deleteBackup(tokenA)
   check(!(await service.status(tokenA)).enabled,'Deleting cloud backup turns opt-in off')
   check((await service.status(tokenA)).hasStoredBackup===false,'Deleting removes backup metadata')
@@ -289,11 +465,13 @@ try{
 }finally{
   if(backupPool)await backupPool.end()
   if(adminPool)await adminPool.end()
+  if(identityPool)await identityPool.end()
   if(pool)await pool.end()
   await basePool.query('DROP SCHEMA IF EXISTS "'+schema+'" CASCADE')
   if(rolesInstalled){
     await basePool.query('DROP ROLE "'+backupRole+'"')
     await basePool.query('DROP ROLE "'+adminRole+'"')
+    await basePool.query('DROP ROLE "'+identityRole+'"')
   }
   await basePool.end()
   rmSync(temp,{recursive:true,force:true})
