@@ -521,6 +521,58 @@ try{
   check((await repository.uploadCloudSnapshot(backupPool,a,up(state,0,null,'request0011'))).reason==='consent_required',
     'Erasure disables further sync')
   check((await repository.getCloudSnapshot(backupPool,b)).revision===1,'Erasure never deletes another account')
+  // Controlled contention against an actual PostgreSQL FOR UPDATE lock.
+  // Regardless of whether a waiting upload or account cancellation wins the
+  // lock first, cancellation must erase every committed private snapshot.
+  for(const order of ['upload_first','cancel_first']){
+    const id=order==='upload_first'?'raceuser0001':'raceuser0002'
+    const device='racedevice0001'
+    const t=userToken(id,device)
+    await service.provision(t)
+    await service.setConsent(t,true,'privacy-v1')
+    const initial=await service.upload(t,up(state,0,null,'raceinit0001'))
+    check(initial.kind==='accepted','Race fixture initialized real private snapshot')
+    const next=m.cloneState(state)
+    m.setCount(next,today,order==='upload_first'?4:5)
+    const request=up(next,1,initial.receipt.digest,'racewrite0002')
+    const locker=await backupPool.connect()
+    let lockActive=false
+    let outcomes
+    try{
+      await locker.query('BEGIN')
+      lockActive=true
+      await locker.query('SELECT user_id FROM cloud_users WHERE user_id=$1 FOR UPDATE',[id])
+      let uploadPromise,cancelPromise
+      if(order==='upload_first'){
+        uploadPromise=service.upload(t,request)
+        await new Promise(resolve=>setTimeout(resolve,25))
+        cancelPromise=service.cancelAccount(t,ACCOUNT_DELETE_CONFIRMATION)
+      }else{
+        cancelPromise=service.cancelAccount(t,ACCOUNT_DELETE_CONFIRMATION)
+        await new Promise(resolve=>setTimeout(resolve,25))
+        uploadPromise=service.upload(t,request)
+      }
+      await new Promise(resolve=>setTimeout(resolve,35))
+      await locker.query('COMMIT')
+      lockActive=false
+      outcomes=await Promise.allSettled([uploadPromise,cancelPromise])
+    }finally{
+      if(lockActive){try{await locker.query('ROLLBACK')}catch{}}
+      locker.release()
+    }
+    check(outcomes[1].status==='fulfilled'&&outcomes[1].value.deleted,
+      'Concurrent cancellation commits despite outstanding upload')
+    check(outcomes[0].status==='rejected'||outcomes[0].value.kind==='accepted'||
+      (outcomes[0].value.kind==='rejected'&&
+       outcomes[0].value.reason==='authentication'),
+      'Queued upload is either committed before cancellation or refused')
+    check((await pool.query('SELECT * FROM cloud_snapshots WHERE user_id=$1',[id])).rows.length===0,
+      'No private snapshot survives an upload/delete race')
+    check((await pool.query('SELECT * FROM cloud_upload_receipts WHERE user_id=$1',[id])).rows.length===0,
+      'No upload receipt survives an upload/delete race')
+    await assert.rejects(service.status(t),/account_closed/);checks++
+    await assert.rejects(service.upload(t,request),/account_closed/);checks++
+  }
   // User-requested account cancellation: preserve only non-identifying
   // backend operational totals and redacted security audit metadata.
   // Build a real WeChat-mapped account with private journal content.
@@ -614,6 +666,20 @@ try{
   // Newly signed tokens for an already cancelled subject are also denied.
   await assert.rejects(service.status(userToken(wxLogin.userId)),/account_closed/);checks++
   check((await service.status(tokenB)).enabled,'Other account remains active')
+  // The same real WeChat identity after cancellation must bootstrap a fresh
+  // internal account; never re-associate deleted notes from its old user id.
+  const recreated=await loginWithWechatCode(identityPool,'wechataftercancel0001',
+    'device0020',wxConfig,mockExchange)
+  check(recreated.isNewAccount&&recreated.userId!==wxLogin.userId,
+    'Former WeChat identity creates a distinct new account after cancellation')
+  check((await service.status(recreated.accessToken)).hasStoredBackup===false,
+    'Re-registered account has no previous private cloud snapshot')
+  check((await service.status(recreated.accessToken)).enabled===false,
+    'Re-registered account has no automatic cloud consent')
+  check((await pool.query(
+    'SELECT count(*) AS n FROM cloud_wechat_identities WHERE user_id=$1',
+    [wxLogin.userId])).rows[0].n==='0','Old user identity mapping stays deleted')
+
   // No early cleanup: only an authorized maintenance account may erase
   // account-id tombstones after they are safely older than bearer-token TTL.
   const justDeletedPurge=await maintenancePool.query('SELECT cloud_purge_old_tombstones() AS n')

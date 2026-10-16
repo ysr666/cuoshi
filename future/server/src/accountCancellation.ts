@@ -12,7 +12,7 @@ export type AccountCancellationResult={
   deleted:true
   privateBackupErased:boolean
   redactedAuditRows:number
-  retainedBackendData:'anonymous_daily_totals_and_redacted_security_audits'
+  retainedBackendData:'anonymous_monthly_totals_and_redacted_security_audits'
 }
 
 /** Immediate DB erasure. Backups held by infrastructure require separate lifecycle controls. */
@@ -36,7 +36,7 @@ export async function cancelVerifiedAccount(
     return {
       deleted:true,privateBackupErased:row.had_snapshot===true,
       redactedAuditRows:Number(row.redacted_audits)||0,
-      retainedBackendData:'anonymous_daily_totals_and_redacted_security_audits'
+      retainedBackendData:'anonymous_monthly_totals_and_redacted_security_audits'
     }
   }finally{db.release()}
 }

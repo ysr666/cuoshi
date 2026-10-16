@@ -160,3 +160,12 @@ CUOSHI_WECHAT_QA_PROJECT=/Users/ysradmin/Projects/cuoshi-ui-redesign-wechat-prev
 - 已提交 `7cd49b6`：签名会话代际号、所有设备强制退出、微信重新登录同步代际号，并在云写入事务内复核；账号注销时清理与旧账号相关的会话撤销摘要。
 - GitHub Actions 新增官方 npm 漏洞审计与基线对比，保存原始审计及汇总 Artifact；新增 Critical 会阻断，已有 High/Moderate 风险仍需逐项分级处理，**不意味着主应用漏洞已清零**。
 - 由于开发 Mac 当时离线，本轮操作只更新 GitHub Draft PR；Mac 本地路径尚未同步。现有 v0.4 仍无云登录和运营者后端。
+
+
+## 2026-10-17 · 独立 PR 验证工作区、云恢复故障保护与注销竞态
+
+- Mac 原开发目录未直接覆盖：独立拉取 `/Users/ysradmin/Projects/cuoshi-pr4-security-validation-1017` 验证 PR #4 最新源码，基线类型检查、真实数据库集成及云恢复测试均通过。
+- `future/cloud/recoveryStorage.ts` 是隔离的未来云恢复同步存储适配器：先将旧记录、草稿保存在本机临时恢复日志并验证，再替换主记录；出现存储失败尝试回滚，双重失败保留原数据并阻断后续覆盖，草稿/日志清理失败可恢复接续。**67 项**纯逻辑及存储故障注入断言，通过并不等于微信真机断电验收。
+- `future/server/tests/check-postgres.mjs` 增加上传/注销事务的两种锁竞争顺序，以及注销后相同微信身份注册时必须生成新用户、不恢复历史。PostgreSQL 17 隔离环境 **225 项**集成检查通过。
+- 双端编译与 H5 浏览器回归复查，新增恢复代码未进入 v0.4 运行包；独立 Mac 工程与 GitHub PR 的状态以提交和后续 Actions 为准。
+- **生产阻断保持**：iPhone W01–W12 真机文件分享恢复、44 项依赖漏洞分级处置、正式 AppID/备案/隐私处理、真实云身份/KMS/备份副本删除。保留现有 Draft，不发布或部署。
