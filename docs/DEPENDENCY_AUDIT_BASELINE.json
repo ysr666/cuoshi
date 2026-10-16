@@ -1,0 +1,12 @@
+{
+  "source": "npm audit --omit=dev --registry=https://registry.npmjs.org --json",
+  "date": "2026-10-16",
+  "status": "unresolved",
+  "vulnerabilities": {
+    "critical": 0,
+    "high": 27,
+    "moderate": 11,
+    "low": 6,
+    "total": 44
+  }
+}

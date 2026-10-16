@@ -1,0 +1,17 @@
+{
+  "name": "@cuoshi/future-cloud-server",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "description": "Isolated future mainland backend - not an active server",
+  "engines": {
+    "node": ">=22"
+  },
+  "dependencies": {
+    "pg": "^8.13.0"
+  },
+  "scripts": {
+    "test": "node ./tests/check-postgres.mjs",
+    "check:types": "tsc --noEmit --strict --target ES2022 --module CommonJS --moduleResolution node --skipLibCheck ./src/repository.ts ./src/adminRepository.ts ./src/authenticatedService.ts ./src/sessionTokens.ts ./src/wechatIdentity.ts ./src/sessionRevocation.ts ./src/accountCancellation.ts ./src/deletionReporting.ts"
+  }
+}

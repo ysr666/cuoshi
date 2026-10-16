@@ -15,7 +15,21 @@
     "test": "npm run test:core && npm run test:v04 && npm run test:store",
     "typecheck": "vue-tsc --noEmit",
     "test:h5": "node tests/check-h5-flow.cjs",
-    "test:h5:extended": "node tests/check-h5-extended.cjs"
+    "test:h5:extended": "node tests/check-h5-extended.cjs",
+    "test:h5:layout": "node tests/check-h5-layout.cjs",
+    "test:h5:notes": "node tests/check-h5-notes-ux.cjs",
+    "test:h5:polish": "node tests/check-h5-polish.cjs",
+    "test:h5:typography": "node tests/check-h5-typography.cjs",
+    "test:h5:refinement": "node tests/check-h5-refinement.cjs",
+    "test:h5:feedback": "node tests/check-h5-feedback.cjs",
+    "test:h5:audit": "node tests/check-h5-audit.cjs",
+    "test:h5:date-boundaries": "node tests/check-h5-date-boundaries.cjs",
+    "test:wechat:backup-bridge": "node tests/check-wechat-backup-bridge.cjs",
+    "test:h5:release": "node tests/check-h5-release-readiness.cjs",
+    "test:future:cloud": "node tests/check-future-cloud-contracts.mjs",
+    "test:future:isolation": "node tests/check-future-cloud-isolation.mjs",
+    "test:future:auth": "node tests/check-future-auth.mjs",
+    "test:future:recovery": "node tests/check-future-cloud-recovery.mjs"
   },
   "dependencies": {
     "@dcloudio/uni-app": "3.0.0-4080720251210001",
