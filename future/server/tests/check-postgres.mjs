@@ -20,10 +20,12 @@ const temp=mkdtempSync(join(tmpdir(),'cuoshi-real-pg-'))
 let checks=0
 const check=(x,why)=>{assert.ok(x,why);checks++}
 const basePool=new Pool({connectionString:source,max:4})
-let pool,backupPool,adminPool,identityPool
+let pool,backupPool,adminPool,identityPool,deletionPool,maintenancePool,reportingPool
 const suffix=schema.slice(-10)
 const backupRole='cuoshi_b_'+suffix,adminRole='cuoshi_a_'+suffix
 const identityRole='cuoshi_i_'+suffix
+const deletionRole='cuoshi_d_'+suffix,maintenanceRole='cuoshi_m_'+suffix
+const reportingRole='cuoshi_r_'+suffix
 let rolesInstalled=false
 try{
   const out=join(temp,'build');mkdirSync(out)
@@ -33,7 +35,9 @@ try{
     resolve(root,'future/server/src/repository.ts'),
     resolve(root,'future/server/src/adminRepository.ts'),
     resolve(root,'future/server/src/authenticatedService.ts'),
-    resolve(root,'future/server/src/wechatIdentity.ts')
+    resolve(root,'future/server/src/wechatIdentity.ts'),
+    resolve(root,'future/server/src/accountCancellation.ts'),
+    resolve(root,'future/server/src/deletionReporting.ts')
   ],{cwd:root,stdio:'pipe'})
   const m=require(join(out,'src/core/model.js'))
   const repository=require(join(out,'future/server/src/repository.js'))
@@ -41,6 +45,8 @@ try{
   const {AuthenticatedCloudService}=require(join(out,'future/server/src/authenticatedService.js'))
   const {issueServerSession,verifyServerSession}=require(join(out,'future/server/src/sessionTokens.js'))
   const {loginWithWechatCode,makeWechatCodeExchanger}=require(join(out,'future/server/src/wechatIdentity.js'))
+  const {ACCOUNT_DELETE_CONFIRMATION}=require(join(out,'future/server/src/accountCancellation.js'))
+  const {readAnonymousDeletionSummary}=require(join(out,'future/server/src/deletionReporting.js'))
   await basePool.query('CREATE SCHEMA "'+schema+'"')
   pool=new Pool({connectionString:source,options:'-c search_path='+schema,max:14})
   const ddl=readFileSync(new URL('../sql/001_initial.sql',import.meta.url),'utf8')
@@ -53,7 +59,10 @@ try{
   const backupSecret=crypto.randomBytes(24).toString('hex')
   const adminSecret=crypto.randomBytes(24).toString('hex')
   const identitySecret=crypto.randomBytes(24).toString('hex')
-  for(const [role,secret] of [[backupRole,backupSecret],[adminRole,adminSecret],[identityRole,identitySecret]]){
+  const deletionSecret=crypto.randomBytes(24).toString('hex')
+  const maintenanceSecret=crypto.randomBytes(24).toString('hex')
+  const reportingSecret=crypto.randomBytes(24).toString('hex')
+  for(const [role,secret] of [[backupRole,backupSecret],[adminRole,adminSecret],[identityRole,identitySecret],[deletionRole,deletionSecret],[maintenanceRole,maintenanceSecret],[reportingRole,reportingSecret]]){
     await basePool.query('CREATE ROLE "'+role+'" LOGIN PASSWORD \''+secret+'\'')
   }
   rolesInstalled=true
@@ -71,6 +80,12 @@ try{
     .replaceAll('__BACKUP_ROLE__','"'+backupRole+'"')
     .replaceAll('__ADMIN_ROLE__','"'+adminRole+'"')
   await pool.query(revocationMigration)
+  const cancellationMigration=readFileSync(new URL('../sql/005_account_cancellation.sql',import.meta.url),'utf8')
+    .replaceAll('__SCHEMA__','"'+schema+'"')
+    .replaceAll('__DELETION_ROLE__','"'+deletionRole+'"')
+    .replaceAll('__MAINTENANCE_ROLE__','"'+maintenanceRole+'"')
+    .replaceAll('__REPORTING_ROLE__','"'+reportingRole+'"')
+  await pool.query(cancellationMigration)
   function roleUrl(role,secret){
     const url=new URL(source)
     url.username=role
@@ -83,6 +98,12 @@ try{
     options:'-c search_path='+schema,max:6})
   identityPool=new Pool({connectionString:roleUrl(identityRole,identitySecret),
     options:'-c search_path='+schema,max:10})
+  deletionPool=new Pool({connectionString:roleUrl(deletionRole,deletionSecret),
+    options:'-c search_path='+schema,max:5})
+  maintenancePool=new Pool({connectionString:roleUrl(maintenanceRole,maintenanceSecret),
+    options:'-c search_path='+schema,max:3})
+  reportingPool=new Pool({connectionString:roleUrl(reportingRole,reportingSecret),
+    options:'-c search_path='+schema,max:3})
   const attempt=async(rolePool,sql,params=[])=>{
     const c=await rolePool.connect()
     try{await assert.rejects(c.query(sql,params),/permission denied|must be owner|not owner/i);checks++}
@@ -108,6 +129,25 @@ try{
   await attempt(adminPool,'DELETE FROM cloud_revoked_staff_tokens')
   await attempt(backupPool,'SELECT * FROM cloud_wechat_identities')
   await attempt(adminPool,'SELECT * FROM cloud_wechat_identities')
+  await attempt(backupPool,"SELECT * FROM cloud_cancel_account('account0001')")
+  await attempt(adminPool,"SELECT * FROM cloud_cancel_account('account0001')")
+  await attempt(identityPool,"SELECT * FROM cloud_cancel_account('account0001')")
+  await attempt(deletionPool,'SELECT records FROM cloud_snapshots')
+  await attempt(deletionPool,'SELECT * FROM cloud_admin_audit')
+  await attempt(deletionPool,'SELECT * FROM cloud_account_deletion_totals')
+  await attempt(deletionPool,'UPDATE cloud_admin_audit SET owner_id=\'redacted\'')
+  await attempt(maintenancePool,'SELECT * FROM cloud_snapshots')
+  await attempt(backupPool,'SELECT * FROM cloud_account_deletion_totals')
+  await attempt(reportingPool,'SELECT * FROM cloud_snapshots')
+  await attempt(reportingPool,'SELECT * FROM cloud_admin_audit')
+  await attempt(reportingPool,'SELECT * FROM cloud_wechat_identities')
+  await attempt(reportingPool,'SELECT * FROM cloud_users')
+  await attempt(reportingPool,'SELECT * FROM cloud_revoked_backup_tokens')
+  await attempt(deletionPool,'SELECT * FROM cloud_users')
+  await attempt(reportingPool,"SELECT * FROM cloud_cancel_account('account0001')")
+  await attempt(reportingPool,'DELETE FROM cloud_account_deletion_totals')
+  check((await readAnonymousDeletionSummary(reportingPool)).length===0,
+    'Reporting role sees no entries before any deletion')
 
   check((await pool.query('SELECT count(*) AS n FROM cloud_admin_audit')).rows[0].n==='0',
     'No privilege probing modified audit history')
@@ -118,7 +158,7 @@ try{
   const staffSigningKey=crypto.randomBytes(32)
   const nowSeconds=()=>Math.floor(Date.now()/1000)
   const service=new AuthenticatedCloudService(backupPool,adminPool,
-    {backupKey:backupSigningKey,staffKey:staffSigningKey},nowSeconds)
+    {backupKey:backupSigningKey,staffKey:staffSigningKey},nowSeconds,deletionPool)
   const userToken=(userId,deviceId='device0001',issued=nowSeconds())=>
     issueServerSession({aud:'cuoshi-cloud-backup',sub:userId,deviceId},backupSigningKey,issued)
   const staffToken=(staffId,mfaAt=nowSeconds()-10,issued=nowSeconds())=>
@@ -461,17 +501,139 @@ try{
   check((await repository.uploadCloudSnapshot(backupPool,a,up(state,0,null,'request0011'))).reason==='consent_required',
     'Erasure disables further sync')
   check((await repository.getCloudSnapshot(backupPool,b)).revision===1,'Erasure never deletes another account')
-  console.log('PASS',checks,'real PostgreSQL transactional backup/admin integration checks')
+  // User-requested account cancellation: preserve only non-identifying
+  // backend operational totals and redacted security audit metadata.
+  // Build a real WeChat-mapped account with private journal content.
+  const wxToken=wxLogin.accessToken
+  await service.setConsent(wxToken,true,'privacy-v1')
+  const wxBackup=await service.upload(wxToken,up(state,0,null,'wxupload0001'))
+  check(wxBackup.kind==='accepted','WeChat-mapped account has encrypted-transport-ready test backup')
+  await pool.query(`INSERT INTO cloud_access_cases(case_id,owner_id,purpose,status)
+    VALUES('ticketwx0001',$1,'support_ticket','open')`,[wxLogin.userId])
+  const grantTime=(await pool.query(`SELECT clock_timestamp()-interval '1 minute' AS starts,
+    clock_timestamp()+interval '20 minutes' AS expires`)).rows[0]
+  await pool.query(`INSERT INTO cloud_access_grants
+    (grant_id,staff_id,case_id,owner_id,purpose,day_keys,starts_at,expires_at,approved_by)
+    VALUES('grantwx0001','support0001','ticketwx0001',$1,'support_ticket',$2,$3,$4,'superadmin1')`,
+    [wxLogin.userId,[yesterday],grantTime.starts,grantTime.expires])
+  check((await service.readPrivateDay(staffToken('support0001'),wxLogin.userId,
+    yesterday,'ticketwx0001')).allowed,'Pre-cancellation scoped audit readable')
+  const privateAudits=await pool.query(
+    'SELECT count(*) AS total FROM cloud_admin_audit WHERE owner_id=$1',[wxLogin.userId])
+  check(Number(privateAudits.rows[0].total)===1,'Sensitive audit linkage exists before deletion')
+  await assert.rejects(service.cancelAccount(wxToken,'注销'),/confirmation_required/);checks++
+  check((await service.status(wxToken)).enabled,'Incorrect confirmation leaves account active')
+  await assert.rejects(service.cancelAccount(staffToken('support0001'),ACCOUNT_DELETE_CONFIRMATION),
+    /unauthorized/);checks++
+  const beforeStat=await pool.query('SELECT COALESCE(sum(accounts_deleted),0) AS n FROM cloud_account_deletion_totals')
+  const result=await service.cancelAccount(wxToken,ACCOUNT_DELETE_CONFIRMATION)
+  check(result.deleted&&result.privateBackupErased&&result.redactedAuditRows===1,
+    'Account deletion completes atomically and gives a non-personal receipt')
+  check(!JSON.stringify(result).includes(wxLogin.userId)&&!JSON.stringify(result).includes('私人文字'),
+    'Cancellation receipt contains no private body or identifying subject')
+  const snapshotGone=await pool.query('SELECT * FROM cloud_snapshots WHERE user_id=$1',[wxLogin.userId])
+  check(snapshotGone.rows.length===0,'User private cloud snapshot physically deleted')
+  check((await pool.query('SELECT * FROM cloud_upload_receipts WHERE user_id=$1',
+    [wxLogin.userId])).rows.length===0,'Backup idempotency history removed')
+  check((await pool.query('SELECT * FROM cloud_wechat_identities WHERE user_id=$1',
+    [wxLogin.userId])).rows.length===0,'WeChat identity linkage deleted')
+  check((await pool.query('SELECT * FROM cloud_access_grants WHERE owner_id=$1',
+    [wxLogin.userId])).rows.length===0,'Stale administrator grants removed')
+  check((await pool.query('SELECT * FROM cloud_access_cases WHERE owner_id=$1',
+    [wxLogin.userId])).rows.length===0,'Old support case no longer links user')
+  const scrubbed=await pool.query(
+    "SELECT * FROM cloud_admin_audit WHERE owner_id='redacted' AND day_key='redacted'")
+  check(scrubbed.rows.length>=1&&scrubbed.rows.every(x=>x.case_id===null&&x.grant_id===null),
+    'Security audit retains staff action but irreversibly redacts user/date/case/grant')
+  check(!JSON.stringify(scrubbed.rows).includes(wxLogin.userId)&&
+    !JSON.stringify(scrubbed.rows).includes('私人文字'),'Retained logs contain no deleted identity/notes')
+  const totals=await pool.query(
+    'SELECT COALESCE(sum(accounts_deleted),0) AS n,COALESCE(sum(snapshots_erased),0) AS m FROM cloud_account_deletion_totals')
+  check(Number(totals.rows[0].n)===Number(beforeStat.rows[0].n)+1&&
+    Number(totals.rows[0].m)>=1,'Backend retains aggregate deletion/snapshot operational counts')
+  const report=await readAnonymousDeletionSummary(reportingPool)
+  check(report.length>=1&&report[0].accountsDeleted>=1&&report[0].snapshotsErased>=1,
+    'Restricted operations account can read anonymous deletion totals')
+  check(!JSON.stringify(report).includes(wxLogin.userId)&&
+    !JSON.stringify(report).includes('私人文字')&&
+    !JSON.stringify(report).includes('trusted_wechat_user_01'),
+    'Backend reporting response includes no user ID, private content or WeChat identity')
+  await assert.rejects(readAnonymousDeletionSummary(reportingPool,999),/invalid_reporting_range/);checks++
+  const recordTombstone=await pool.query('SELECT deleted_at,backup_enabled,consent_at FROM cloud_users WHERE user_id=$1',
+    [wxLogin.userId])
+  check(recordTombstone.rows[0]?.deleted_at&&!recordTombstone.rows[0].backup_enabled&&
+    recordTombstone.rows[0].consent_at===null,'Session-safety tombstone blocks old account')
+  await assert.rejects(service.status(wxToken),/account_closed/);checks++
+  await assert.rejects(service.readBackup(wxToken),/account_closed/);checks++
+  await assert.rejects(service.upload(wxToken,up(state,0,null,'wxupload0002')),/account_closed/);checks++
+  await assert.rejects(service.provision(wxToken),/account_closed/);checks++
+  await assert.rejects(service.cancelAccount(wxToken,ACCOUNT_DELETE_CONFIRMATION),
+    /account_closed/);checks++
+  await assert.rejects(repository.provisionVerifiedUser(backupPool,{
+    userId:wxLogin.userId,deviceId:'device0001'
+  }),/account_closed/);checks++
+  check((await service.readPrivateDay(staffToken('support0001'),wxLogin.userId,
+    yesterday,'ticketwx0001')).allowed===false,'Deleted account body inaccessible to staff')
+  // Newly signed tokens for an already cancelled subject are also denied.
+  await assert.rejects(service.status(userToken(wxLogin.userId)),/account_closed/);checks++
+  check((await service.status(tokenB)).enabled,'Other account remains active')
+  // No early cleanup: only an authorized maintenance account may erase
+  // account-id tombstones after they are safely older than bearer-token TTL.
+  const justDeletedPurge=await maintenancePool.query('SELECT cloud_purge_old_tombstones() AS n')
+  check(Number(justDeletedPurge.rows[0].n)===0,'Newly deleted user ID retained temporarily to invalidate old tokens')
+  check((await pool.query('SELECT deleted_at FROM cloud_users WHERE user_id=$1',[wxLogin.userId])).rows.length===1,
+    'Account tombstone survives early purge attempt')
+  await pool.query("UPDATE cloud_users SET deleted_at=clock_timestamp()-interval '25 hours' WHERE user_id=$1",
+    [wxLogin.userId])
+  check(Number((await maintenancePool.query('SELECT cloud_purge_old_tombstones() AS n')).rows[0].n)===1,
+    'Authorized maintenance removes old account tombstone after safety delay')
+  check((await pool.query('SELECT * FROM cloud_users WHERE user_id=$1',[wxLogin.userId])).rows.length===0,
+    'Former internal user ID purged after session expiry window')
+  check((await readAnonymousDeletionSummary(reportingPool)).length>=1,
+    'Anonymous backend totals survive expired tombstone purge')
+  const periodic=await readAnonymousDeletionSummary(reportingPool)
+  check(/^\d{4}-\d{2}$/.test(periodic[0].month),
+    'Backend account statistics are coarse monthly buckets, not identifiable timestamps')
+  const activeCodeCount=Number((await pool.query(
+    'SELECT count(*) AS n FROM cloud_consumed_wechat_codes')).rows[0].n)
+  check(activeCodeCount>0,'Temporary login-code digests exist before lifecycle cleanup')
+  check(Number((await maintenancePool.query('SELECT cloud_purge_expired_auth_artifacts() AS n')).rows[0].n)===0,
+    'Recent session hashes and one-use login code digests cannot be erased prematurely')
+  await pool.query("UPDATE cloud_consumed_wechat_codes SET used_at=clock_timestamp()-interval '25 hours'")
+  await pool.query("UPDATE cloud_revoked_backup_tokens SET expires_at=clock_timestamp()-interval '2 hours'")
+  await pool.query("UPDATE cloud_revoked_staff_tokens SET expires_at=clock_timestamp()-interval '2 hours'")
+  check(Number((await maintenancePool.query(
+    'SELECT cloud_purge_expired_auth_artifacts() AS n')).rows[0].n)>=activeCodeCount,
+    'Maintenance role expires old login codes and revoked-token digests')
+  check((await pool.query('SELECT count(*) AS n FROM cloud_consumed_wechat_codes')).rows[0].n==='0',
+    'Expired provider login code hashes physically cleared')
+  check((await pool.query('SELECT count(*) AS n FROM cloud_revoked_backup_tokens')).rows[0].n==='0',
+    'Expired backup-token revocations cleared without storing raw bearer values')
+  check((await pool.query('SELECT count(*) AS n FROM cloud_revoked_staff_tokens')).rows[0].n==='0',
+    'Expired staff-token revocations cleared')
+
+  await assert.rejects(pool.query("UPDATE cloud_admin_audit SET decision='allow' WHERE owner_id='redacted'"),
+    /append-only/);checks++
+  await assert.rejects(pool.query("DELETE FROM cloud_admin_audit WHERE owner_id='redacted'"),
+    /append-only/);checks++
+
+  console.log('PASS',checks,'real PostgreSQL transactional backup/admin/account deletion integration checks')
 }finally{
   if(backupPool)await backupPool.end()
   if(adminPool)await adminPool.end()
   if(identityPool)await identityPool.end()
+  if(deletionPool)await deletionPool.end()
+  if(maintenancePool)await maintenancePool.end()
+  if(reportingPool)await reportingPool.end()
   if(pool)await pool.end()
   await basePool.query('DROP SCHEMA IF EXISTS "'+schema+'" CASCADE')
   if(rolesInstalled){
     await basePool.query('DROP ROLE "'+backupRole+'"')
     await basePool.query('DROP ROLE "'+adminRole+'"')
     await basePool.query('DROP ROLE "'+identityRole+'"')
+    await basePool.query('DROP ROLE "'+deletionRole+'"')
+    await basePool.query('DROP ROLE "'+maintenanceRole+'"')
+    await basePool.query('DROP ROLE "'+reportingRole+'"')
   }
   await basePool.end()
   rmSync(temp,{recursive:true,force:true})

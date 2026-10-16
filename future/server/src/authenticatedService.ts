@@ -11,6 +11,7 @@ import {
   provisionVerifiedUser,setCloudConsent,getCloudSnapshot,getCloudBackupStatus,uploadCloudSnapshot,deleteCloudBackup
 } from './repository'
 import {readPrivateDayWithAudit} from './adminRepository'
+import {cancelVerifiedAccount,ACCOUNT_DELETE_CONFIRMATION} from './accountCancellation'
 import type {UploadRequest} from '../../cloud/snapshotContract'
 
 export class AuthenticatedCloudService{
@@ -24,7 +25,8 @@ export class AuthenticatedCloudService{
       backupKey:Uint8Array;staffKey:Uint8Array
       previousBackupKey?:Uint8Array;previousStaffKey?:Uint8Array
     },
-    private readonly nowSeconds:()=>number=()=>Math.floor(Date.now()/1000)
+    private readonly nowSeconds:()=>number=()=>Math.floor(Date.now()/1000),
+    private readonly cancellationDb?:DbPool
   ){
     if(!(keys?.backupKey instanceof Uint8Array)||keys.backupKey.byteLength<32||
        !(keys?.staffKey instanceof Uint8Array)||keys.staffKey.byteLength<32)
@@ -58,6 +60,13 @@ export class AuthenticatedCloudService{
     const claims=this.readClaims(token,'cuoshi-cloud-backup')
     if(!claims?.deviceId)throw Error('unauthorized')
     await ensureSessionNotRevoked(this.backupDb,claims)
+    const db=await this.backupDb.connect()
+    try{
+      const row=await db.query('SELECT deleted_at FROM cloud_users WHERE user_id=$1',[claims.sub])
+      // Initial trusted bootstrap may not yet have a row. But tombstoned
+      // accounts must NEVER be resumed with still-valid signed JWTs.
+      if(row.rows[0]?.deleted_at)throw Error('account_closed')
+    }finally{db.release()}
     return {userId:claims.sub,deviceId:claims.deviceId}
   }
   private async asStaff(token:unknown){
@@ -86,6 +95,12 @@ export class AuthenticatedCloudService{
     return uploadCloudSnapshot(this.backupDb,await this.asUser(token),request)
   }
   async deleteBackup(token:unknown){return deleteCloudBackup(this.backupDb,await this.asUser(token))}
+  /** No default deletion privileges: separate restricted account-cancellation role required. */
+  async cancelAccount(token:unknown,confirmation:string){
+    if(!this.cancellationDb)throw Error('account_cancellation_unavailable')
+    // Never allow a client-supplied userId; verified session determines owner.
+    return cancelVerifiedAccount(this.cancellationDb,await this.asUser(token),confirmation)
+  }
   async readPrivateDay(token:unknown,ownerId:string,dayKey:string,caseId:string){
     return readPrivateDayWithAudit(this.staffDb,await this.asStaff(token),ownerId,dayKey,caseId)
   }

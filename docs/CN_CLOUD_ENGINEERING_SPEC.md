@@ -91,6 +91,12 @@
 
 这不是实际微信登录已通过验收，也没有手机号短信认证、设备级全局撤销、生产密钥托管或公开 API。离线模拟的真实 PostgreSQL 集成检查已扩展到 **131 项**。详细技术/安全边界见 [微信登录与会话交接](CN_CLOUD_WECHAT_AUTH_HANDOFF.md)。
 
+## 6.3 账号注销与限定后台留存（隔离 PostgreSQL）
+
+新增 `sql/005_account_cancellation.sql`、`src/accountCancellation.ts`、`src/deletionReporting.ts`，以及真实数据库测试：服务端按已验证用户会话和明确二次确认，使用隔离 deletion 数据库角色原子化注销。云端正文、修改历史、微信身份和授权案件被删除；原访问审计仅留工作人员行为，抹去用户、具体日期与案件标识。只读 reporting 角色可看不关联个人的**月度注销账号数与擦除备份数**，不能读取私人内容。
+
+短期墓碑用于阻断签名尚未到期的旧会话；已实现维护入口清理超过 24 小时的墓碑、旧微信登录 code 摘要及过期撤销记录。真实 PostgreSQL **192 项**集成检查通过。当前数据库中删除不等于物理备份/WAL/缓存均已及时删除，正式供应商数据生命周期与明确法定例外尚待评估。详见 [注销与留存规则](CN_ACCOUNT_CANCELLATION_POLICY.md)。
+
 ## 7. 早期合同原型（仍保留）
 
 - `future/cloud/snapshotContract.ts`：纯内存服务器协议模拟，主动开启标记、owner 隔离、幂等、冲突、历史保全；**没有 HTTP、账号、数据库或自动上传代码**。
