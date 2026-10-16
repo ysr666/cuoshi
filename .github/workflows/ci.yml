@@ -28,6 +28,8 @@ jobs:
         run: npm run typecheck
       - name: Core tests
         run: npm test
+      - name: WeChat backup bridge contracts
+        run: npm run test:wechat:backup-bridge
       - name: Build H5
         run: npm run build:h5
       - name: Build WeChat Mini Program
@@ -41,7 +43,7 @@ jobs:
       - name: H5 layout, typography, touch feedback and notes
         env:
           CHROME_PATH: ${{ steps.chrome.outputs.chrome-path }}
-        run: npm run test:h5:layout && npm run test:h5:typography && npm run test:h5:refinement && npm run test:h5:notes && npm run test:h5:feedback && npm run test:h5:polish && npm run test:h5:audit && npm run test:h5:extended && npm run test:h5:date-boundaries
+        run: npm run test:h5:layout && npm run test:h5:typography && npm run test:h5:refinement && npm run test:h5:notes && npm run test:h5:feedback && npm run test:h5:polish && npm run test:h5:audit && npm run test:h5:extended && npm run test:h5:date-boundaries && npm run test:h5:release
 
       - name: Upload H5 screenshots for design review
         if: always()
@@ -56,3 +58,4 @@ jobs:
             /tmp/cuoshi-feedback-*.png
             /tmp/cuoshi-polish-editor-*.png
             /tmp/cuoshi-audit-year-zero-*.png
+            /tmp/cuoshi-release-privacy-*.png

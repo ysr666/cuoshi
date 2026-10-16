@@ -29,11 +29,20 @@ async function restore(){
     const data=await selectBackupFile()
     const restored=parseBackup(data)
     const dates=Object.keys(restored.days).length,events=restored.events.length
-    uni.showModal({title:'确认导入这份备份？',content:`已通过完整性检查：${dates} 个日期、${events} 条历史。此操作会替换当前设备的全部记录并清除未提交草稿，建议先导出当前记录。`,confirmText:'替换导入',success:r=>{
-      if(!r.confirm)return
-      try{replaceRecords(restored);notify('备份导入完成')}
-      catch(e){notify(String(e))}
-    }})
+    // Keep the import lock until the user has answered the destructive
+    // confirmation; file selection and a second import cannot overlap it.
+    await new Promise<void>((resolve,reject)=>uni.showModal({
+      title:'确认导入这份备份？',
+      content:`已通过完整性检查：${dates} 个日期、${events} 条历史。此操作会替换当前设备的全部记录并清除未提交草稿，建议先导出当前记录。`,
+      confirmText:'替换导入',
+      success:r=>{
+        if(!r.confirm)return
+        try{replaceRecords(restored);notify('备份导入完成')}
+        catch(e){notify(String(e))}
+      },
+      fail:()=>reject(Error('无法显示导入确认，请稍后重试')),
+      complete:()=>resolve()
+    }))
   }catch(e){const msg=String(e);if(!msg.includes('已取消'))notify(msg)}
   finally{busy.value=false}
 }
@@ -64,7 +73,16 @@ function clear(){uni.showModal({title:'清除全部记录？',content:'这将删
       <view class="option" role="button" @click="backup"><text>导出完整备份 ↗</text></view>
       <view class="option" role="button" @click="restore"><text>导入备份</text></view>
       <view class="option danger" role="button" @click="clear"><text>删除全部记录</text></view>
-      <text class="privacy-detail">记录和修改历史只存在当前设备。清理缓存或更换设备可能丢失记录；备份文件包含私人文字，请妥善保管。尚未点击「留下」的草稿不会包含在正式备份中。</text>
+      <text class="privacy-detail">数字、简记和修改历史默认只保存在当前设备。清理缓存或更换设备可能丢失记录；导出的 JSON 含有私人文字，分享到微信聊天后请自行保管。未提交的草稿不在备份中。</text>
+      <view class="option privacy-toggle" role="button" :aria-expanded="privacyOpen" @click="privacyOpen=!privacyOpen">
+        <text>隐私与数据说明</text><text class="privacy-arrow">{{privacyOpen?'−':'＋'}}</text>
+      </view>
+      <view v-if="privacyOpen" class="privacy-expanded">
+        <text>记录内容：你输入的数字、可选简记、未提交草稿、历史修改时间、操作时区以及外观偏好。</text>
+        <text>本预览版没有账号、云同步或开发者自建的数据上传接口；不主动读取通讯录、定位、相册或微信聊天。</text>
+        <text>仅当你主动导出或导入时，才会调用微信文件分享或聊天文件选择功能。普通 JSON 备份未加密，发送给聊天对象后，对方可能读取其中的文字和历史。</text>
+        <text>你可以在日历中查看和修改记录，在设置中导出备份或删除本机全部记录。删除本机记录不会删除你以前分享或另行保存的备份。</text>
+      </view>
     </view>
     <view class="footer"><text>错了就错了，先放在这里吧。</text><text class="version">错事 · 本地记录预览版</text></view>
   </Screen>
@@ -80,6 +98,10 @@ function clear(){uni.showModal({title:'清除全部记录？',content:'这将删
 .option {display:flex;align-items:center;min-height:57px;border-bottom:1px solid var(--line);color:var(--ink);font-size:16px;}
 .option.danger {color:#a3574b;}
 .privacy-detail {display:block;margin-top:14px;color:var(--muted);font-size:14px;line-height:1.8;}
+.privacy-toggle {justify-content:space-between;margin-top:12px;}
+.privacy-arrow {color:var(--muted);font-size:20px;}
+.privacy-expanded {display:flex;flex-direction:column;gap:11px;padding:14px 0 5px;}
+.privacy-expanded text {display:block;color:var(--muted);font-size:14px;line-height:1.9;}
 .warning {font-size:13px;color:#995343;padding:12px 0;}
 .footer {display:flex;flex-direction:column;gap:14px;margin-top:60px;padding:23px 0;border-top:1px solid var(--line);font-family:var(--display-font);font-size:15px;color:var(--ink);}
 .version {font-family:sans-serif;font-size:13px;color:var(--muted);line-height:1.7;}

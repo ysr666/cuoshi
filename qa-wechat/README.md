@@ -36,3 +36,10 @@ CUOSHI_WECHAT_QA_PROJECT=/path/to/isolated-wechat-build npm run test:refinement 
 - 官方微信预览二维码已生成，但**尚未完成真实手机上的手动验收**；二维码会过期。
 - 测试依赖 miniprogram-automator 0.12.1 较旧，因此单独隔离。覆盖已知的 mkdirp/minimist/jpeg-js 高危依赖版本后，本测试目录 npm audit 为 0 高危、0 严重、5 中危；这些依赖不能进入应用运行时。升级 SDK 时要重新安全检查。
 - 当前版本仅本地存储；没有微信/手机号登录、云同步、客服审核后台或正式上线授权。
+
+
+## 上线前：文件分享专项与真机证据
+
+微信开发者工具的自动化 SDK 可能无法真实打开或完成 `wx.shareFileMessage` 的 iPhone 聊天选择流程。因此，根工程另有 `npm run test:wechat:backup-bridge`，使用模拟原生 API 测试导出/选择/读取/清理的控制流，**这不属于真机 PASS**。
+
+真正的上线阻断测试见 [WECHAT_IPHONE_BACKUP_QA.md](../docs/WECHAT_IPHONE_BACKUP_QA.md)，由持有测试预览权限的 iPhone 用户逐条进行，并把非敏感结果记录在该文档中。不要公开真实 JSON 文件或个人简记。

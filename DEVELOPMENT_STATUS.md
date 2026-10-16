@@ -60,6 +60,16 @@
 - `npm run test:h5:date-boundaries` 使用真实 Chrome、可控系统时钟验证 12 项跨日场景，包括保持打开跨午夜、系统时间突变保护、跨周/月/年、过去月份浏览、历史文案和太平洋夏令时边界。无伪造历史或修改真实用户数据。
 - 继续以 Draft PR 为边界。没有真实 iPhone 前台跨午夜、后台恢复及微信文件导入的完整手工验收，不能宣称已具备正式发布级稳定性。
 
+## 2026-10-16 · 上线流程第一阶段（微信备份与审核准备）
+
+- `src/platform/backupIO.ts` 的微信导出使用每次唯一的临时文件名，并在分享回调完成或失败后尝试清理明文 JSON 临时副本；取消和权限失败显示不同提示。**并未把模拟接口测试当成真实 iPhone 发送成功。**
+- `tests/check-wechat-backup-bridge.cjs` 模拟微信原生 API 对写文件、分享、失败/取消、从聊天选择、15 MB 限额、临时文件清理和还原字节一致性完成 **20 项断言**。纳入 CI。
+- 「设置」新增可折叠「隐私与数据说明」，准确披露本机记录与主动微信分享的差别。导入替换确认期间保持忙碌锁，避免重复启动第二次导入。
+- `tests/check-h5-release-readiness.cjs` 在 320/390/430px 验证隐私说明、明文提示、导出、取消替换、再次导入恢复及防重入，加入 CI。
+- 完成首发审核资料、隐私草案、[真机测试清单](docs/WECHAT_IPHONE_BACKUP_QA.md) 和 [冻结门槛](docs/RELEASE_V0_4_FREEZE_GATE.md)。**当前仅冻结 v0.4 功能范围，不批准发布代码。**
+- 生产依赖安全检查：使用 npm 官方漏洞数据库得出 27 高、11 中、6 低、0 Critical；具体区别构建/运行依赖的处置仍未完毕，**属于独立发布阻断项**。详见 `docs/DEPENDENCY_AUDIT_2026-10-16.md`。
+- `src/manifest.json` 版本标记与 `package.json` 均为 `0.4.0-alpha.3`，微信正式 AppID 仍空白，不能声称已上线。
+
 ## 复现方法
 
 ```sh
@@ -90,8 +100,8 @@ CUOSHI_WECHAT_QA_PROJECT=/Users/ysradmin/Projects/cuoshi-ui-redesign-wechat-prev
 
 ## 当前预览
 
-- 2026-10-16 微信小程序预览二维码（可能过期）：
-  <https://raw.githubusercontent.com/ysr666/cuoshi/design/editorial-ui-v04-preview/previews/wechat-midnight-20261016.jpg>
+- 2026-10-16 首发准备候选包微信预览二维码（可能过期；正式冻结未批准）：
+  <https://raw.githubusercontent.com/ysr666/cuoshi/design/editorial-ui-v04-preview/previews/wechat-rc-prep-20261016.jpg>
 - 只允许已获微信预览权限的账户扫码。当前仅为测试预览，不等于正式发布。
 
 ## 未完成／不得宣称

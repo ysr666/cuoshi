@@ -11,13 +11,28 @@ export async function saveBackupFile(text:string,filename:string):Promise<string
   // #endif
   // #ifdef MP-WEIXIN
   if(typeof wx!=='undefined'&&wx.getFileSystemManager){
-    const path=wx.env.USER_DATA_PATH+'/'+filename
-    wx.getFileSystemManager().writeFileSync(path,text,'utf8')
-    if(typeof wx.shareFileMessage==='function'){
-      await new Promise<void>((resolve,reject)=>wx.shareFileMessage({filePath:path,fileName:filename,success:()=>resolve(),fail:(error:unknown)=>reject(error)}))
-      return '文件已交给微信分享界面，请自行保存到安全位置'
+    if(typeof wx.shareFileMessage!=='function')throw Error('当前微信不支持文件分享，请升级微信后重试')
+    const fs=wx.getFileSystemManager()
+    // A fresh path avoids overwriting another unfinished export from the same day.
+    const tempName='cuoshi-export-'+Date.now()+'-'+Math.random().toString(36).slice(2,9)+'.json'
+    const path=wx.env.USER_DATA_PATH+'/'+tempName
+    let writeAttempted=false
+    try{
+      writeAttempted=true
+      fs.writeFileSync(path,text,'utf8')
+      await new Promise<void>((resolve,reject)=>wx.shareFileMessage({
+        filePath:path,fileName:filename,
+        success:()=>resolve(),
+        fail:(error:any)=>reject(Error(/cancel|取消/i.test(String(error?.errMsg||''))?'已取消文件分享':'微信文件分享失败，请检查权限并重试'))
+      }))
+      return '文件已交给微信分享流程，请在所选聊天中确认文件存在并另行保管'
+    }finally{
+      // Export files contain plaintext notes and change history. They are not
+      // intended to become permanent untracked copies in mini-program storage.
+      if(writeAttempted){
+        try{fs.unlinkSync(path)}catch(error){console.warn('临时备份清理失败',error)}
+      }
     }
-    throw Error('备份已暂存在小程序内，但当前微信不支持直接分享文件；请升级微信后重试')
   }
   // #endif
   throw Error('当前运行平台暂不支持文件导出，请在支持的 H5 或微信小程序端操作')
@@ -60,7 +75,10 @@ export async function selectBackupFile():Promise<string>{
   if(typeof wx!=='undefined'&&wx.chooseMessageFile)return new Promise((resolve,reject)=>{
     wx.chooseMessageFile({count:1,type:'file',extension:['json'],success:(r:any)=>{
       try{const f=r.tempFiles?.[0];if(!f)throw Error('没有选择文件');if(f.size>15*1024*1024)throw Error('备份文件超过 15 MB');resolve(wx.getFileSystemManager().readFileSync(f.path,'utf8'))}catch(e){reject(e)}
-    },fail:()=>reject(Error('已取消选择，或微信无法读取此文件'))})
+    },fail:(error:any)=>{
+      const msg=String(error?.errMsg||error?.message||'')
+      reject(Error(/cancel|取消/i.test(msg)?'已取消选择':'选择备份文件失败，请检查微信聊天文件与访问权限'))
+    }})
   })
   // #endif
   throw Error('当前平台暂不支持读取 JSON 文件')
