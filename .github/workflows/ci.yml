@@ -32,6 +32,8 @@ jobs:
         run: npm run test:future:cloud
       - name: Signed future session boundary (no real credentials)
         run: npm run test:future:auth
+      - name: Future cloud recovery preview and user-confirmed replacement
+        run: npm run test:future:recovery
       - name: WeChat backup bridge contracts
         run: npm run test:wechat:backup-bridge
       - name: Build H5
