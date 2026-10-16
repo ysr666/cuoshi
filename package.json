@@ -2,7 +2,7 @@
   "name": "cuoshi-uniapp",
   "version": "0.4.0-alpha.3",
   "private": true,
-  "description": "Cuoshi cross-platform offline-first app alpha.2",
+  "description": "Offline-first Cuoshi v0.4 WeChat/H5 release candidate (cloud features excluded)",
   "scripts": {
     "dev:h5": "uni -p h5",
     "build:h5": "uni build -p h5",
@@ -15,7 +15,18 @@
     "test": "npm run test:core && npm run test:v04 && npm run test:store",
     "typecheck": "vue-tsc --noEmit",
     "test:h5": "node tests/check-h5-flow.cjs",
-    "test:h5:extended": "node tests/check-h5-extended.cjs"
+    "test:h5:extended": "node tests/check-h5-extended.cjs",
+    "test:h5:layout": "node tests/check-h5-layout.cjs",
+    "test:h5:notes": "node tests/check-h5-notes-ux.cjs",
+    "test:h5:polish": "node tests/check-h5-polish.cjs",
+    "test:h5:typography": "node tests/check-h5-typography.cjs",
+    "test:h5:refinement": "node tests/check-h5-refinement.cjs",
+    "test:h5:feedback": "node tests/check-h5-feedback.cjs",
+    "test:h5:audit": "node tests/check-h5-audit.cjs",
+    "test:h5:date-boundaries": "node tests/check-h5-date-boundaries.cjs",
+    "test:wechat:backup-bridge": "node tests/check-wechat-backup-bridge.cjs",
+    "test:h5:release": "node tests/check-h5-release-readiness.cjs",
+    "test:release:scope": "node tests/check-release-scope.cjs"
   },
   "dependencies": {
     "@dcloudio/uni-app": "3.0.0-4080720251210001",
