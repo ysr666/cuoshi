@@ -20,23 +20,94 @@ const temp=mkdtempSync(join(tmpdir(),'cuoshi-real-pg-'))
 let checks=0
 const check=(x,why)=>{assert.ok(x,why);checks++}
 const basePool=new Pool({connectionString:source,max:4})
-let pool
+let pool,backupPool,adminPool
+const suffix=schema.slice(-10)
+const backupRole='cuoshi_b_'+suffix,adminRole='cuoshi_a_'+suffix
+let rolesInstalled=false
 try{
   const out=join(temp,'build');mkdirSync(out)
   execFileSync(resolve(root,'node_modules/.bin/tsc'),[
     '--target','ES2022','--module','CommonJS','--moduleResolution','node',
     '--skipLibCheck','--strict','--rootDir',root,'--outDir',out,
     resolve(root,'future/server/src/repository.ts'),
-    resolve(root,'future/server/src/adminRepository.ts')
+    resolve(root,'future/server/src/adminRepository.ts'),
+    resolve(root,'future/server/src/authenticatedService.ts')
   ],{cwd:root,stdio:'pipe'})
   const m=require(join(out,'src/core/model.js'))
   const repository=require(join(out,'future/server/src/repository.js'))
   const admin=require(join(out,'future/server/src/adminRepository.js'))
+  const {AuthenticatedCloudService}=require(join(out,'future/server/src/authenticatedService.js'))
+  const {issueServerSession}=require(join(out,'future/server/src/sessionTokens.js'))
   await basePool.query('CREATE SCHEMA "'+schema+'"')
   pool=new Pool({connectionString:source,options:'-c search_path='+schema,max:14})
   const ddl=readFileSync(new URL('../sql/001_initial.sql',import.meta.url),'utf8')
   await pool.query(ddl)
 
+  // Every service operation below uses a separate non-owner, non-superuser DB
+  // login. Role creation, migrations and seed fixtures remain with test owner.
+  // PostgreSQL role password is an SQL utility field: use safely quoted,
+  // program-generated hexadecimal test secrets and identifiers only.
+  const backupSecret=crypto.randomBytes(24).toString('hex')
+  const adminSecret=crypto.randomBytes(24).toString('hex')
+  for(const [role,secret] of [[backupRole,backupSecret],[adminRole,adminSecret]]){
+    await basePool.query('CREATE ROLE "'+role+'" LOGIN PASSWORD \''+secret+'\'')
+  }
+  rolesInstalled=true
+  const grants=readFileSync(new URL('../sql/002_runtime_permissions.sql',import.meta.url),'utf8')
+    .replaceAll('__SCHEMA__','"'+schema+'"')
+    .replaceAll('__BACKUP_ROLE__','"'+backupRole+'"')
+    .replaceAll('__ADMIN_ROLE__','"'+adminRole+'"')
+  try{await pool.query(grants)}catch(error){console.error('MIGRATION_SQL_ERROR',error.message,error.position,error.where,error.detail);throw error}
+  function roleUrl(role,secret){
+    const url=new URL(source)
+    url.username=role
+    url.password=secret
+    return url.toString()
+  }
+  backupPool=new Pool({connectionString:roleUrl(backupRole,backupSecret),
+    options:'-c search_path='+schema,max:14})
+  adminPool=new Pool({connectionString:roleUrl(adminRole,adminSecret),
+    options:'-c search_path='+schema,max:6})
+  const attempt=async(rolePool,sql,params=[])=>{
+    const c=await rolePool.connect()
+    try{await assert.rejects(c.query(sql,params),/permission denied|must be owner|not owner/i);checks++}
+    finally{c.release()}
+  }
+  await attempt(backupPool,'SELECT * FROM cloud_admin_audit')
+  await attempt(backupPool,'SELECT * FROM cloud_staff')
+  await attempt(adminPool,'SELECT records FROM cloud_snapshots')
+  await attempt(adminPool,'DELETE FROM cloud_admin_audit')
+  await attempt(adminPool,'TRUNCATE cloud_admin_audit')
+  await attempt(adminPool,'UPDATE cloud_access_grants SET revoked_at=clock_timestamp()')
+  await attempt(adminPool,'SELECT * FROM cloud_upload_receipts')
+  await attempt(adminPool,'INSERT INTO cloud_admin_audit(staff_id,owner_id,day_key,decision,reason) VALUES(\'x\',\'y\',\'2026-10-16\',\'allow\',\'fake\')')
+  await attempt(backupPool,"SELECT * FROM cloud_read_day('support0001',TRUE,'account0001','2026-10-16','ticket0001')")
+
+  check((await pool.query('SELECT count(*) AS n FROM cloud_admin_audit')).rows[0].n==='0',
+    'No privilege probing modified audit history')
+
+  // Test-only keys and mocked verified issuer. No real WeChat or phone identity
+  // is simulated as a production identity provider or logged to the console.
+  const backupSigningKey=crypto.randomBytes(32)
+  const staffSigningKey=crypto.randomBytes(32)
+  const nowSeconds=()=>Math.floor(Date.now()/1000)
+  const service=new AuthenticatedCloudService(backupPool,adminPool,
+    {backupKey:backupSigningKey,staffKey:staffSigningKey},nowSeconds)
+  const userToken=(userId,deviceId='device0001',issued=nowSeconds())=>
+    issueServerSession({aud:'cuoshi-cloud-backup',sub:userId,deviceId},backupSigningKey,issued)
+  const staffToken=(staffId,mfaAt=nowSeconds()-10,issued=nowSeconds())=>
+    issueServerSession({aud:'cuoshi-staff-admin',sub:staffId,mfaAt},staffSigningKey,issued)
+  const tokenA=userToken('account0001')
+  const tokenB=userToken('account0002','device0002')
+  check((await service.provision(tokenA))===undefined,'Verified session can provision identity')
+  check((await service.provision(tokenB))===undefined,'Independent owner provisioned')
+  await assert.rejects(service.provision(null),/unauthorized/);checks++
+  await assert.rejects(service.provision('untrusted'),/unauthorized/);checks++
+  await assert.rejects(service.provision(staffToken('support0001')),/unauthorized/);checks++
+  await assert.rejects(service.provision(userToken('account0001','device0001',nowSeconds()-901)),/unauthorized/);checks++
+  check((await service.status(tokenA)).enabled===false,'Cloud off by default on authenticated status')
+  check((await service.status(tokenA)).hasStoredBackup===false,'No backup before first upload')
+  check((await service.status(tokenB)).hasStoredBackup===false,'Other account starts independently')
   const a={userId:'account0001',deviceId:'device0001'}
   const b={userId:'account0002',deviceId:'device0002'}
   const c={...a,deviceId:'device0003'}
@@ -45,32 +116,40 @@ try{
   m.setCount(state,yesterday,0)
   m.appendNote(state,yesterday,'专用测试私密文字📝')
   const up=(records,baseRevision,baseDigest,idempotencyKey)=>({records,baseRevision,baseDigest,idempotencyKey})
-  await repository.provisionVerifiedUser(pool,a)
-  await repository.provisionVerifiedUser(pool,b)
-  check((await repository.uploadCloudSnapshot(pool,a,up(state,0,null,'request0001'))).reason==='consent_required','Cloud is opt-in')
-  check(await repository.getCloudSnapshot(pool,a)===null,'Opted-out user cannot read remote data')
-  await repository.setCloudConsent(pool,a,true,'privacy-v1')
-  await repository.setCloudConsent(pool,b,true,'privacy-v1')
-  const first=await repository.uploadCloudSnapshot(pool,a,up(state,0,null,'request0001'))
+  await repository.provisionVerifiedUser(backupPool,a)
+  await repository.provisionVerifiedUser(backupPool,b)
+  check((await repository.uploadCloudSnapshot(backupPool,a,up(state,0,null,'request0001'))).reason==='consent_required','Cloud is opt-in')
+  check(await repository.getCloudSnapshot(backupPool,a)===null,'Opted-out user cannot read remote data')
+  await repository.setCloudConsent(backupPool,a,true,'privacy-v1')
+  await repository.setCloudConsent(backupPool,b,true,'privacy-v1')
+  check((await service.status(tokenA)).enabled,'User can view active backup state')
+  const first=await service.upload(tokenA,up(state,0,null,'request0001'))
   check(first.kind==='accepted'&&first.receipt.revision===1,'First write revision 1')
-  check((await repository.uploadCloudSnapshot(pool,a,up(state,0,null,'request0001'))).kind==='replayed','Idempotent replay')
-  check((await repository.uploadCloudSnapshot(pool,c,up(state,0,null,'request0001'))).reason==='idempotency_mismatch','Cannot replay across device')
-  check((await repository.uploadCloudSnapshot(pool,a,up(state,0,null,'request0002'))).reason==='stale_revision','Stale base rejected')
-  check((await repository.uploadCloudSnapshot(pool,a,up(state,1,'f'.repeat(64),'request0003'))).reason==='divergent_base','Wrong digest rejected')
-  check((await repository.getCloudSnapshot(pool,b))===null,'Cross-owner reads isolated')
-  const restored=await repository.getCloudSnapshot(pool,a)
+  const statusAfter=await service.status(tokenA)
+  check(statusAfter.hasStoredBackup&&statusAfter.revision===1,'Upload status reports stored revision')
+  check(typeof statusAfter.lastSuccessAt==='string'&&statusAfter.lastSuccessAt.endsWith('Z'),
+    'Upload status reports last confirmed server write time')
+  check((await service.status(tokenB)).revision===null,'No cross-tenant backup metadata')
+  // Same payload under B's identity cannot update A; no owner id is accepted from client.
+  check((await service.readBackup(tokenB))===null,'Other signed user cannot read account A')
+  check((await repository.uploadCloudSnapshot(backupPool,a,up(state,0,null,'request0001'))).kind==='replayed','Idempotent replay')
+  check((await repository.uploadCloudSnapshot(backupPool,c,up(state,0,null,'request0001'))).reason==='idempotency_mismatch','Cannot replay across device')
+  check((await repository.uploadCloudSnapshot(backupPool,a,up(state,0,null,'request0002'))).reason==='stale_revision','Stale base rejected')
+  check((await repository.uploadCloudSnapshot(backupPool,a,up(state,1,'f'.repeat(64),'request0003'))).reason==='divergent_base','Wrong digest rejected')
+  check((await repository.getCloudSnapshot(backupPool,b))===null,'Cross-owner reads isolated')
+  const restored=await repository.getCloudSnapshot(backupPool,a)
   check(restored.records.days[yesterday].count===0,'Stored explicit zero')
   check(restored.records.days[yesterday].notes[0].text==='专用测试私密文字📝','Private unicode survives JSONB')
   const changed=m.cloneState(restored.records),competing=m.cloneState(restored.records)
   m.setCount(changed,today,3)
   m.setCount(competing,today,7)
   const race=await Promise.all([
-    repository.uploadCloudSnapshot(pool,a,up(changed,1,first.receipt.digest,'request0004')),
-    repository.uploadCloudSnapshot(pool,c,up(competing,1,first.receipt.digest,'request0005'))
+    repository.uploadCloudSnapshot(backupPool,a,up(changed,1,first.receipt.digest,'request0004')),
+    repository.uploadCloudSnapshot(backupPool,c,up(competing,1,first.receipt.digest,'request0005'))
   ])
   check(race.filter(x=>x.kind==='accepted').length===1,'Only one competing upload commits')
   check(race.filter(x=>x.kind==='conflict').length===1,'Losing writer receives conflict')
-  const latest=await repository.getCloudSnapshot(pool,a)
+  const latest=await repository.getCloudSnapshot(backupPool,a)
   check(latest.revision===2,'No lost update, revision advanced once')
   check(latest.records.events.length===3,'Count and note history preserved')
   // Simulate JSONB key reordering without semantic mutation.
@@ -79,52 +158,52 @@ try{
       ?Object.fromEntries(Object.entries(value).reverse()):value)
   const next=m.cloneState(reordered)
   m.appendNote(next,today,'新一天的简记')
-  const third=await repository.uploadCloudSnapshot(pool,a,
+  const third=await repository.uploadCloudSnapshot(backupPool,a,
     up(next,2,latest.digest,'request0006'))
   check(third.kind==='accepted'&&third.receipt.revision===3,
     'Equivalent JSON with reordered keys must not be mistaken for history rewrite')
   const tampered=m.cloneState(next)
   tampered.events[1].newText='被篡改的旧正文'
-  check((await repository.uploadCloudSnapshot(pool,a,
+  check((await repository.uploadCloudSnapshot(backupPool,a,
     up(tampered,3,third.receipt.digest,'request0007'))).kind==='rejected',
     'Tampered old note event blocked')
   const removed=m.cloneState(next)
   removed.events.length=0;removed.days={}
-  check((await repository.uploadCloudSnapshot(pool,a,
+  check((await repository.uploadCloudSnapshot(backupPool,a,
     up(removed,3,third.receipt.digest,'request0008'))).reason==='history_rewrite',
     'Cannot truncate old history')
   // Separate owner has isolated revision 1.
   // Concurrent first writes also serialize correctly when no snapshot row exists.
   const freshUser={userId:'account0003',deviceId:'device0004'}
-  await repository.provisionVerifiedUser(pool,freshUser)
-  await repository.setCloudConsent(pool,freshUser,true,'privacy-v1')
+  await repository.provisionVerifiedUser(backupPool,freshUser)
+  await repository.setCloudConsent(backupPool,freshUser,true,'privacy-v1')
   const firstRace=await Promise.all([
-    repository.uploadCloudSnapshot(pool,freshUser,up(state,0,null,'request0110')),
-    repository.uploadCloudSnapshot(pool,{...freshUser,deviceId:'device0005'},
+    repository.uploadCloudSnapshot(backupPool,freshUser,up(state,0,null,'request0110')),
+    repository.uploadCloudSnapshot(backupPool,{...freshUser,deviceId:'device0005'},
       up(state,0,null,'request0111'))
   ])
   check(firstRace.filter(x=>x.kind==='accepted').length===1,
     'Concurrent first snapshots must serialize')
   check(firstRace.filter(x=>x.kind==='conflict').length===1,
     'Initial competing client must not silently overwrite another upload')
-  const other=await repository.uploadCloudSnapshot(pool,b,up(state,0,null,'request0009'))
+  const other=await repository.uploadCloudSnapshot(backupPool,b,up(state,0,null,'request0009'))
   check(other.kind==='accepted'&&other.receipt.revision===1,'Second owner independent')
-  await repository.setCloudConsent(pool,a,false,'privacy-v1')
-  check(await repository.getCloudSnapshot(pool,a)===null,'Opt-out prevents cloud reads')
-  check((await repository.uploadCloudSnapshot(pool,a,
+  await repository.setCloudConsent(backupPool,a,false,'privacy-v1')
+  check(await repository.getCloudSnapshot(backupPool,a)===null,'Opt-out prevents cloud reads')
+  check((await repository.uploadCloudSnapshot(backupPool,a,
     up(next,3,third.receipt.digest,'request0010'))).reason==='consent_required','Opt-out prevents cloud writes')
-  await repository.setCloudConsent(pool,a,true,'privacy-v1')
+  await repository.setCloudConsent(backupPool,a,true,'privacy-v1')
 
   // Metadata tampering without a new edit event is a history rewrite.
-  const existingState=(await repository.getCloudSnapshot(pool,a)).records
+  const existingState=(await repository.getCloudSnapshot(backupPool,a)).records
   const manipulated=m.cloneState(existingState)
   manipulated.days[yesterday].notes[0].updatedAt=new Date().toISOString()
-  check((await repository.uploadCloudSnapshot(pool,a,up(manipulated,3,third.receipt.digest,'request0012'))).reason==='history_rewrite',
+  check((await repository.uploadCloudSnapshot(backupPool,a,up(manipulated,3,third.receipt.digest,'request0012'))).reason==='history_rewrite',
     'Hidden metadata change cannot bypass the history ledger')
   // A malicious string is still data, not a SQL identifier or statement.
   const injection=m.cloneState(existingState)
   m.appendNote(injection,today,"'; DROP TABLE cloud_users; --")
-  const injected=await repository.uploadCloudSnapshot(pool,a,up(injection,3,third.receipt.digest,'request0013'))
+  const injected=await repository.uploadCloudSnapshot(backupPool,a,up(injection,3,third.receipt.digest,'request0013'))
   check(injected.kind==='accepted','SQL-injection-looking note treated as text')
   check((await pool.query('SELECT count(*) AS total FROM cloud_users')).rows[0].total==='3',
     'Schema intact after SQL injection probe')
@@ -136,7 +215,7 @@ try{
     VALUES('ticket0001',$1,'support_ticket','open')`,[a.userId])
   const staff={staffId:'support0001',mfaVerified:true}
   const read=(identity,day,owner=a.userId,caseId='ticket0001')=>
-    admin.readPrivateDayWithAudit(pool,identity,owner,day,caseId)
+    admin.readPrivateDayWithAudit(adminPool,identity,owner,day,caseId)
   check(!(await read(staff,yesterday)).allowed,'Case without grant denied')
   const interval=await pool.query(`SELECT clock_timestamp()-interval '1 minute' AS starts,
       clock_timestamp()+interval '29 minutes' AS expires`)
@@ -145,6 +224,11 @@ try{
     (grant_id,staff_id,case_id,owner_id,purpose,day_keys,starts_at,expires_at,approved_by)
     VALUES('grant0001','support0001','ticket0001',$1,'support_ticket',$2,$3,$4,'superadmin1')`,
     [a.userId,[yesterday],starts,expires])
+  await assert.rejects(service.readPrivateDay(tokenA,a.userId,yesterday,'ticket0001'),/unauthorized/);checks++
+  await assert.rejects(service.readPrivateDay(staffToken('support0001',nowSeconds()-311,nowSeconds()-301),a.userId,yesterday,'ticket0001'),/unauthorized/);checks++
+  await assert.rejects(service.readPrivateDay('made-up-staff-token',a.userId,yesterday,'ticket0001'),/unauthorized/);checks++
+  const approvedViaSignedStaff=await service.readPrivateDay(staffToken('support0001'),a.userId,yesterday,'ticket0001')
+  check(approvedViaSignedStaff.allowed,'Verified short-lived staff token reaches scoped database function')
   const approved=await read(staff,yesterday)
   check(approved.allowed,'Active, independently approved support grant allows one day')
   check(approved.day?.notes[0]?.text==='专用测试私密文字📝','Scoped body returned after audit')
@@ -155,6 +239,26 @@ try{
   check(!(await read({staffId:'superadmin1',mfaVerified:true},yesterday)).allowed,'Super admin cannot browse body')
   check(!(await read({staffId:'auditor0001',mfaVerified:true},yesterday)).allowed,'Auditor cannot browse body')
   check(!(await read({staffId:'reviewer001',mfaVerified:true},yesterday)).allowed,'Reviewer cannot reuse support grant')
+  await pool.query("UPDATE cloud_access_cases SET status='closed' WHERE case_id='ticket0001'")
+  check(!(await read(staff,yesterday)).allowed,'Closed ticket denies access in database')
+  await pool.query("UPDATE cloud_access_cases SET status='open' WHERE case_id='ticket0001'")
+  await pool.query("UPDATE cloud_staff SET active=FALSE WHERE staff_id='support0001'")
+  check(!(await read(staff,yesterday)).allowed,'Disabled employee denied')
+  await pool.query("UPDATE cloud_staff SET active=TRUE WHERE staff_id='support0001'")
+  await pool.query("UPDATE cloud_staff SET active=FALSE WHERE staff_id='superadmin1'")
+  check(!(await read(staff,yesterday)).allowed,'Disabled approver invalidates grant')
+  await pool.query("UPDATE cloud_staff SET active=TRUE WHERE staff_id='superadmin1'")
+  const grantLock=await pool.connect()
+  await grantLock.query('BEGIN')
+  try{
+    await grantLock.query("UPDATE cloud_access_grants SET revoked_at=clock_timestamp() WHERE grant_id='grant0001'")
+    const contested=read(staff,yesterday)
+    await new Promise(resolve=>setTimeout(resolve,100))
+    await grantLock.query('COMMIT')
+    check(!(await contested).allowed,'Concurrent grant revocation blocks private read')
+  }finally{try{await grantLock.query('ROLLBACK')}catch{}grantLock.release()}
+  await pool.query("UPDATE cloud_access_grants SET revoked_at=NULL WHERE grant_id='grant0001'")
+
   const audit=await pool.query('SELECT * FROM cloud_admin_audit ORDER BY id')
   check(audit.rows.some(x=>x.decision==='allow')&&audit.rows.some(x=>x.decision==='deny'),'All decisions audited')
   check(!JSON.stringify(audit.rows).includes('专用测试私密文字'),'Audit never stores private notes')
@@ -172,17 +276,25 @@ try{
   await pool.query("UPDATE cloud_access_grants SET revoked_at=clock_timestamp() WHERE grant_id='grant0001'")
   check(!(await read(staff,yesterday)).allowed,'Revoked grant cannot read body')
 
-  await repository.deleteCloudBackup(pool,a)
-  check(await repository.getCloudSnapshot(pool,a)===null,'Explicit erasure removes snapshot')
+  await service.deleteBackup(tokenA)
+  check(!(await service.status(tokenA)).enabled,'Deleting cloud backup turns opt-in off')
+  check((await service.status(tokenA)).hasStoredBackup===false,'Deleting removes backup metadata')
+  check(await repository.getCloudSnapshot(backupPool,a)===null,'Explicit erasure removes snapshot')
   const removedRows=await pool.query('SELECT * FROM cloud_upload_receipts WHERE user_id=$1',[a.userId])
   check(removedRows.rows.length===0,'Erasure removes idempotency receipts')
-  check((await repository.uploadCloudSnapshot(pool,a,up(state,0,null,'request0011'))).reason==='consent_required',
+  check((await repository.uploadCloudSnapshot(backupPool,a,up(state,0,null,'request0011'))).reason==='consent_required',
     'Erasure disables further sync')
-  check((await repository.getCloudSnapshot(pool,b)).revision===1,'Erasure never deletes another account')
+  check((await repository.getCloudSnapshot(backupPool,b)).revision===1,'Erasure never deletes another account')
   console.log('PASS',checks,'real PostgreSQL transactional backup/admin integration checks')
 }finally{
+  if(backupPool)await backupPool.end()
+  if(adminPool)await adminPool.end()
   if(pool)await pool.end()
   await basePool.query('DROP SCHEMA IF EXISTS "'+schema+'" CASCADE')
+  if(rolesInstalled){
+    await basePool.query('DROP ROLE "'+backupRole+'"')
+    await basePool.query('DROP ROLE "'+adminRole+'"')
+  }
   await basePool.end()
   rmSync(temp,{recursive:true,force:true})
 }

@@ -77,6 +77,29 @@ export async function getCloudSnapshot(pool:DbPool,s:VerifiedUserSession):Promis
     return result.rows[0]?snapshot(result.rows[0],s.userId):null
   }finally{db.release()}
 }
+export type CloudBackupStatus={
+  enabled:boolean
+  hasStoredBackup:boolean
+  revision:number|null
+  lastSuccessAt:string|null
+}
+/** Non-private status for the user-visible backup page; opt-out keeps old snapshot until deletion. */
+export async function getCloudBackupStatus(pool:DbPool,s:VerifiedUserSession):Promise<CloudBackupStatus>{
+  requireUser(s)
+  const db=await pool.connect()
+  try{
+    const row=(await db.query(`SELECT u.backup_enabled,s.revision,s.updated_at
+      FROM cloud_users u LEFT JOIN cloud_snapshots s ON s.user_id=u.user_id
+      WHERE u.user_id=$1`,[s.userId])).rows[0]
+    if(!row)throw Error('unverified_identity')
+    return {
+      enabled:row.backup_enabled===true,
+      hasStoredBackup:row.revision!==null,
+      revision:row.revision===null?null:revisionNumber(row.revision),
+      lastSuccessAt:row.updated_at?new Date(row.updated_at).toISOString():null
+    }
+  }finally{db.release()}
+}
 export async function uploadCloudSnapshot(pool:DbPool,s:VerifiedUserSession,request:UploadRequest):Promise<UploadDecision>{
   requireUser(s)
   if(!request||!Number.isSafeInteger(request.baseRevision)||request.baseRevision<0||

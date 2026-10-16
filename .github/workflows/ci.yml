@@ -30,6 +30,8 @@ jobs:
         run: npm test
       - name: Isolated future cloud authorization and snapshot contracts
         run: npm run test:future:cloud
+      - name: Signed future session boundary (no real credentials)
+        run: npm run test:future:auth
       - name: WeChat backup bridge contracts
         run: npm run test:wechat:backup-bridge
       - name: Build H5
@@ -95,6 +97,8 @@ jobs:
         run: npm ci
       - name: Install isolated PostgreSQL client
         run: npm ci --prefix future/server --ignore-scripts --no-audit
+      - name: Typecheck isolated backend
+        run: npm run check:types --prefix future/server
       - name: Migrate and test disposable PostgreSQL schema
         env:
           CUOSHI_TEST_POSTGRES_URL: postgresql://postgres:ci_only_disposable@127.0.0.1:5432/postgres

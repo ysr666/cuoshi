@@ -40,6 +40,8 @@
 
 权威依据：[个人信息保护法](https://www.cac.gov.cn/2021-08/20/c_1631050028355286.htm)、[工信部 APP 备案通知（包括小程序）](https://www.gov.cn/zhengce/zhengceku/202308/content_6897341.htm)、[个人信息保护合规审计管理办法](https://www.cac.gov.cn/2025-02/14/c_1741233507681519.htm)、[数据跨境流动规定](https://www.cac.gov.cn/2024-03/22/c_1712776611775634.htm)。
 
+数据库角色、认证会话与管理员受限 SQL 读取的落地要求另见 [云服务安全交接](CN_CLOUD_BACKEND_SECURITY_HANDOFF.md)。
+
 详细的服务端协议、同步冲突规则、合规检查项与可运行合同测试见 [云后端技术设计 v0.1](CN_CLOUD_ENGINEERING_SPEC.md)。 后续版本已新增独立 PostgreSQL 数据库迁移、事务仓储及受限审计读取的集成测试（位于 `future/server/`）；该代码没有与小程序连接，也没有上线。
 
 ## 工程与发布边界

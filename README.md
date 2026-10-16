@@ -69,6 +69,7 @@ npm run test:store   # 30 项模拟 uni 本地存储、冲突和失败回归
 - [首发范围冻结候选及发布门槛](docs/RELEASE_V0_4_FREEZE_GATE.md)
 - [中国大陆云备份、账号与管理后台：工程设计](docs/CN_CLOUD_ENGINEERING_SPEC.md)
 - [隔离的未来 PostgreSQL 后端（尚无真实身份认证或对外接口）](future/server/README.md)
+- [云后端权限、身份验证与中国大陆上线阻断项](docs/CN_CLOUD_BACKEND_SECURITY_HANDOFF.md)
 - [依赖漏洞审计及发布风险](docs/DEPENDENCY_AUDIT_2026-10-16.md)
 
 未来云能力有 `future/cloud/` 的纯合同测试和 `future/server/` 的**独立 PostgreSQL 事务实现及真实数据库集成测试**；但**没有上线服务器、微信/手机号身份认证、可供用户使用的云账号、云数据接口或任何真实上传**。CI 会检查未来代码未打包进 v0.4 H5/微信。
