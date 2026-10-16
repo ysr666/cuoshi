@@ -67,6 +67,41 @@ jobs:
             /tmp/cuoshi-audit-year-zero-*.png
             /tmp/cuoshi-release-privacy-*.png
 
+  dependency_audit:
+    name: Official npm SCA inventory (unresolved baseline)
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout pinned lockfile
+        uses: actions/checkout@v4
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Audit parser self-tests
+        run: node tests/summarize-dependency-audit.cjs --self-test
+      - name: Query official npm advisory database
+        shell: bash
+        run: |
+          set +e
+          npm audit --omit=dev --registry=https://registry.npmjs.org --json > "$RUNNER_TEMP/cuoshi-audit-raw.json"
+          audit_exit=$?
+          set -e
+          echo "npm audit exit code: $audit_exit (nonzero is expected for known vulnerabilities)"
+          node tests/summarize-dependency-audit.cjs "$RUNNER_TEMP/cuoshi-audit-raw.json" "$RUNNER_TEMP/cuoshi-audit-summary.json"
+      - name: Save machine-readable risk inventory
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: npm-sca-${{ github.run_id }}
+          retention-days: 14
+          if-no-files-found: warn
+          path: |
+            ${{ runner.temp }}/cuoshi-audit-raw.json
+            ${{ runner.temp }}/cuoshi-audit-summary.json
+
   cloud_postgres:
     name: Real PostgreSQL cloud contract (isolated)
     runs-on: ubuntu-latest

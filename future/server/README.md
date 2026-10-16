@@ -66,3 +66,7 @@ SQL 的审计禁止修改触发器只是**附加防线**，拥有数据库所有
 详细法律和产品边界：`docs/CN_CLOUD_ENGINEERING_SPEC.md`、`docs/CN_CLOUD_ADMIN_ROADMAP.md`。
 
 **当前没有公开入口，没有真实账号，不能部署给用户试用。**
+
+### 全设备会话强制退出（独立实现）
+
+新增 `sql/006_global_session_revocation.sql` 和 `AuthenticatedCloudService.logoutAllUser`。账户 `session_generation` 在数据库持久化；普通用户已验证会话可以强制使所有旧设备令牌失效。登录通过可信微信交换重新获取最新代际号，关键云端写入/删除事务在用户行锁下二次核对，避免等待中的旧设备写回。**该代码无正式微信身份源、无公开 HTTP API，不能单凭数据库检查声明可生产部署。**

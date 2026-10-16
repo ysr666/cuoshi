@@ -76,3 +76,9 @@
 ## 备注
 
 运行时本身采用用户操作触发的文件分享，不包含运营者云同步。此审计不判断隐私政策或微信正式审核是否通过；它们是独立门槛。
+
+## 新增：CI 持续追踪（2026-10-16）
+
+GitHub Actions 增加独立的 `dependency_audit` 任务，固定使用官方 npm Registry 和当前提交的 `package-lock.json`，原始审计 JSON 与去噪摘要随 Actions Artifact 保存 14 天。检查会公开报告与 `DEPENDENCY_AUDIT_BASELINE.json` 的差异：出现新增 Critical 时阻断 CI，High/Moderate/Low 增加时发出警告。
+
+**注意**：这是自动化风险监测，**不是清零或修复漏洞**；当前 v0.4 正式发布依然被 44 项尚未逐个评估的历史报告阻断。源代码、打包产物、攻击面和官方兼容升级仍需逐项人工与自动化验收。网络或审计格式出错时应当以 `inconclusive` 失败退出，而不是报告 0 漏洞。
