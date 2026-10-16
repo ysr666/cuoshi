@@ -61,6 +61,20 @@
 [网络数据安全管理条例](https://app.www.gov.cn/govdata/gov/202409/30/520076/article.html)、
 [个人信息保护合规审计管理办法](https://www.cac.gov.cn/2025-02/14/c_1741233507681519.htm)。
 
+## 6. 真实 PostgreSQL 后端验证（仍为未公开的隔离工程）
+
+后续云后端现在已有**非生产的真实数据库基础实现**，不仅是内存合同：
+
+- `future/server/sql/001_initial.sql`：快照、备份启用与通知版本、提交幂等回执、客服/审核案件、指定日期授权、管理员审计表；审计表有禁止 UPDATE/DELETE 的触发器。
+- `future/server/src/repository.ts`：按账号行 `SELECT FOR UPDATE` 串行化并发写入；比较版本与稳定 JSON 摘要，以事务提交备份+幂等回执；过期客户端必须看到冲突，不偷偷覆盖别人记录。
+- `future/server/src/ledger.ts`：补足对简记事件新增/编辑/删除、旧文本及元数据的校验，不能篡改旧历史却保持数字一致。
+- `future/server/src/adminRepository.ts`：先从数据库核对员工角色、案件及限时授权，再**在同一事务中先写审计**，才可提取指定日期正文。审计写入失败，整个访问失败。SQL 查询使用参数绑定。
+- `future/cloud/stableJson.ts`：云端摘要采用与字段序无关的稳定 JSON，以免 PostgreSQL `jsonb` 改变字段顺序造成误报。**不修改 v0.4 JSON 备份的 SHA-256 格式**。
+- `future/server/tests/check-postgres.mjs`：使用独立真实 PostgreSQL 测试数据库验证并发竞争、按人隔离、幂等、数据一致性、恶意简记、禁止普通管理员读正文、审计失败拒绝泄露和删除。CI 另起 `postgres:16-alpine` 测试服务，不连接生产数据库；在 Mac 本地使用一次性 PostgreSQL 17 容器通过。
+- 后端 `pg` 依赖有独立 lockfile， npm 官方 2026-10-16 审计该后端依赖树报告 0 项已知漏洞；**不等于整个 uni-app 主工程没有漏洞**，v0.4 的依赖审计阻断项保留。
+
+**未完成不能绕过的门槛**：真实微信/手机号身份认证、生产最小权限数据库角色、密钥管理、数据库加密、不可随意篡改的独立日志、数据副本清理、接口请求大小/速率限制、云端主体/备案/隐私要求及用户可见恢复界面。因此仍然**没有公开 HTTP 服务、真实云账号或任何用户数据上传**。细节参见 `future/server/README.md`。
+
 ## 6. 目前的代码与验收范围
 
 - `future/cloud/snapshotContract.ts`：纯内存服务器协议模拟，主动开启标记、owner 隔离、幂等、冲突、历史保全；**没有 HTTP、账号、数据库或自动上传代码**。

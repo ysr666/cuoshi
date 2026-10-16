@@ -64,3 +64,38 @@ jobs:
             /tmp/cuoshi-polish-editor-*.png
             /tmp/cuoshi-audit-year-zero-*.png
             /tmp/cuoshi-release-privacy-*.png
+
+  cloud_postgres:
+    name: Real PostgreSQL cloud contract (isolated)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: ci_only_disposable
+          POSTGRES_DB: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - name: Install shared TypeScript compiler
+        run: npm ci
+      - name: Install isolated PostgreSQL client
+        run: npm ci --prefix future/server --ignore-scripts --no-audit
+      - name: Migrate and test disposable PostgreSQL schema
+        env:
+          CUOSHI_TEST_POSTGRES_URL: postgresql://postgres:ci_only_disposable@127.0.0.1:5432/postgres
+        run: npm test --prefix future/server

@@ -3,7 +3,8 @@
  * This file is not imported by the v0.4 app or deployed to any service.
  * Atomic persistence and authenticated sessions MUST be implemented server-side.
  */
-import {canonical,sha256} from '../../src/core/backup'
+import {sha256} from '../../src/core/backup'
+import {stableJson} from './stableJson'
 import {cloneState,validate,type Records} from '../../src/core/model'
 
 export type Principal={userId:string;deviceId:string;cloudBackupEnabled:boolean}
@@ -54,7 +55,7 @@ export class CloudContractSimulator{
       return {kind:'rejected',reason:'invalid_request'}
     try{validate(req.records)}catch{return {kind:'rejected',reason:'validation'}}
     // Verify the complete document, including old note text, change timestamps and event IDs.
-    const incomingDigest=sha256(canonical(req.records))
+    const incomingDigest=sha256(stableJson(req.records))
     const requestFingerprint=sha256(JSON.stringify([req.baseRevision,req.baseDigest,principal.deviceId,incomingDigest]))
     const receiptKey=principal.userId+':'+req.idempotencyKey
     const previous=this.receipts.get(receiptKey)
@@ -70,7 +71,7 @@ export class CloudContractSimulator{
     // A restore or offline client may not secretly erase or rewrite events
     // already acknowledged by the server, even when its base token is correct.
     if(current&&(req.records.events.length<current.records.events.length||
-       current.records.events.some((event,index)=>JSON.stringify(event)!==JSON.stringify(req.records.events[index]))))
+       current.records.events.some((event,index)=>stableJson(event)!==stableJson(req.records.events[index]))))
       return {kind:'rejected',reason:'history_rewrite'}
     const next:CloudSnapshot={
       ownerId:principal.userId,revision:revision+1,digest:incomingDigest,
