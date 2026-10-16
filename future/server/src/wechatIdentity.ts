@@ -81,7 +81,7 @@ export async function loginWithWechatCode(
   const freshId=randomBytes(16).toString('hex')
   const db=await pool.connect()
   let opened=false
-  let result:{userId:string;isNewAccount:boolean}
+  let result:{userId:string;isNewAccount:boolean;generation?:number}
   try{
     await db.query('BEGIN')
     opened=true
@@ -110,6 +110,12 @@ export async function loginWithWechatCode(
       if(!inserted.rows.length)throw Error('wechat_identity_conflict')
       result={userId:freshId,isNewAccount:true}
     }
+    const generationRow=await db.query(
+      'SELECT session_generation,deleted_at FROM cloud_users WHERE user_id=$1',[result.userId]
+    )
+    if(!generationRow.rows.length||generationRow.rows[0].deleted_at!==null)throw Error('wechat_account_closed')
+    result.generation=Number(generationRow.rows[0].session_generation)
+    if(!Number.isSafeInteger(result.generation)||result.generation<0)throw Error('invalid_session_generation')
     await db.query('COMMIT')
     opened=false
   }catch(err){
@@ -119,9 +125,9 @@ export async function loginWithWechatCode(
   // A signed session is issued only after an authenticated exchange AND a
   // successful identity mapping transaction. Keys stay server-side.
   return {
-    ...result,deviceId,
+    userId:result.userId,isNewAccount:result.isNewAccount,deviceId,
     accessToken:issueServerSession(
-      {aud:'cuoshi-cloud-backup',sub:result.userId,deviceId},
+      {aud:'cuoshi-cloud-backup',sub:result.userId,deviceId,generation:result.generation},
       config.backupSigningKey,now
     )
   }

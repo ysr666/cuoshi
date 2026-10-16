@@ -13,7 +13,7 @@ import type {UploadRequest,UploadDecision,CloudSnapshot} from '../../cloud/snaps
 type DbRows={rows:Record<string,any>[]}
 export type DbClient={query(sql:string,params?:unknown[]):Promise<DbRows>;release():void}
 export type DbPool={connect():Promise<DbClient>}
-export type VerifiedUserSession={userId:string;deviceId:string}
+export type VerifiedUserSession={userId:string;deviceId:string;generation?:number}
 export type VerifiedStaffSession={staffId:string;mfaVerified:boolean}
 export type AuditResult={allowed:boolean;reason:string;day:unknown|null;events:unknown[]}
 const validId=(x:unknown)=>typeof x==='string'&&/^[a-zA-Z0-9_-]{8,128}$/.test(x)
@@ -52,8 +52,9 @@ export async function provisionVerifiedUser(pool:DbPool,s:VerifiedUserSession):P
   await pool.connect().then(async client=>{
     try{
       await client.query('INSERT INTO cloud_users(user_id) VALUES($1) ON CONFLICT(user_id) DO NOTHING',[s.userId])
-      const state=await client.query('SELECT deleted_at FROM cloud_users WHERE user_id=$1',[s.userId])
+      const state=await client.query('SELECT deleted_at,session_generation FROM cloud_users WHERE user_id=$1',[s.userId])
       if(!state.rows.length||state.rows[0].deleted_at!==null)throw Error('account_closed')
+      if(s.generation!==undefined&&Number(state.rows[0].session_generation)!==s.generation)throw Error('session_revoked')
     }finally{client.release()}
   })
 }
@@ -63,8 +64,9 @@ export async function setCloudConsent(pool:DbPool,s:VerifiedUserSession,enabled:
   if(typeof enabled!=='boolean'||!/^[-.a-zA-Z0-9_]{3,64}$/.test(noticeVersion))
     throw Error('invalid_consent')
   await transact(pool,async db=>{
-    const state=await db.query('SELECT user_id FROM cloud_users WHERE user_id=$1 AND deleted_at IS NULL FOR UPDATE',[s.userId])
+    const state=await db.query('SELECT user_id,session_generation FROM cloud_users WHERE user_id=$1 AND deleted_at IS NULL FOR UPDATE',[s.userId])
     if(!state.rows.length)throw Error('unverified_identity')
+    if(s.generation!==undefined&&Number(state.rows[0].session_generation)!==s.generation)throw Error('session_revoked')
     await db.query(`UPDATE cloud_users SET backup_enabled=$2,consent_version=$3,
       consent_at=CASE WHEN $2 THEN clock_timestamp() ELSE consent_at END
       WHERE user_id=$1`,[s.userId,enabled,noticeVersion])
@@ -76,7 +78,8 @@ export async function getCloudSnapshot(pool:DbPool,s:VerifiedUserSession):Promis
   try{
     const result=await db.query(`SELECT b.revision,b.digest,b.records FROM cloud_users u
       JOIN cloud_snapshots b ON b.user_id=u.user_id
-      WHERE u.user_id=$1 AND u.deleted_at IS NULL AND u.backup_enabled=TRUE`,[s.userId])
+      WHERE u.user_id=$1 AND u.deleted_at IS NULL AND u.backup_enabled=TRUE
+        AND ($2::bigint IS NULL OR u.session_generation=$2)`,[s.userId,s.generation??null])
     return result.rows[0]?snapshot(result.rows[0],s.userId):null
   }finally{db.release()}
 }
@@ -93,7 +96,8 @@ export async function getCloudBackupStatus(pool:DbPool,s:VerifiedUserSession):Pr
   try{
     const row=(await db.query(`SELECT u.backup_enabled,s.revision,s.updated_at
       FROM cloud_users u LEFT JOIN cloud_snapshots s ON s.user_id=u.user_id
-      WHERE u.user_id=$1 AND u.deleted_at IS NULL`,[s.userId])).rows[0]
+      WHERE u.user_id=$1 AND u.deleted_at IS NULL
+        AND ($2::bigint IS NULL OR u.session_generation=$2)`,[s.userId,s.generation??null])).rows[0]
     if(!row)throw Error('unverified_identity')
     return {
       enabled:row.backup_enabled===true,
@@ -121,8 +125,9 @@ export async function uploadCloudSnapshot(pool:DbPool,s:VerifiedUserSession,requ
   ])).digest('hex')
   return transact(pool,async db=>{
     // Serializes writers for the same account, including when the snapshot does not exist.
-    const owners=await db.query('SELECT backup_enabled FROM cloud_users WHERE user_id=$1 AND deleted_at IS NULL FOR UPDATE',[s.userId])
+    const owners=await db.query('SELECT backup_enabled,session_generation FROM cloud_users WHERE user_id=$1 AND deleted_at IS NULL FOR UPDATE',[s.userId])
     if(!owners.rows.length)return {kind:'rejected',reason:'authentication'}
+    if(s.generation!==undefined&&Number(owners.rows[0].session_generation)!==s.generation)throw Error('session_revoked')
     if(!owners.rows[0].backup_enabled)return {kind:'rejected',reason:'consent_required'}
     const receipt=await db.query(`SELECT request_digest,revision,digest
       FROM cloud_upload_receipts WHERE user_id=$1 AND idempotency_key=$2`,[s.userId,request.idempotencyKey])
@@ -159,8 +164,9 @@ export async function uploadCloudSnapshot(pool:DbPool,s:VerifiedUserSession,requ
 export async function deleteCloudBackup(pool:DbPool,s:VerifiedUserSession):Promise<void>{
   requireUser(s)
   await transact(pool,async db=>{
-    const users=await db.query('SELECT user_id FROM cloud_users WHERE user_id=$1 AND deleted_at IS NULL FOR UPDATE',[s.userId])
+    const users=await db.query('SELECT user_id,session_generation FROM cloud_users WHERE user_id=$1 AND deleted_at IS NULL FOR UPDATE',[s.userId])
     if(!users.rows.length)throw Error('unverified_identity')
+    if(s.generation!==undefined&&Number(users.rows[0].session_generation)!==s.generation)throw Error('session_revoked')
     await db.query('DELETE FROM cloud_upload_receipts WHERE user_id=$1',[s.userId])
     await db.query('DELETE FROM cloud_snapshots WHERE user_id=$1',[s.userId])
     await db.query('UPDATE cloud_users SET backup_enabled=FALSE WHERE user_id=$1',[s.userId])

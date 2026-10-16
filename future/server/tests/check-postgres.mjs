@@ -86,6 +86,9 @@ try{
     .replaceAll('__MAINTENANCE_ROLE__','"'+maintenanceRole+'"')
     .replaceAll('__REPORTING_ROLE__','"'+reportingRole+'"')
   await pool.query(cancellationMigration)
+  const generationMigration=readFileSync(new URL('../sql/006_global_session_revocation.sql',import.meta.url),'utf8')
+    .replaceAll('__SCHEMA__','"'+schema+'"').replaceAll('__BACKUP_ROLE__','"'+backupRole+'"')
+  await pool.query(generationMigration)
   function roleUrl(role,secret){
     const url=new URL(source)
     url.username=role
@@ -159,8 +162,8 @@ try{
   const nowSeconds=()=>Math.floor(Date.now()/1000)
   const service=new AuthenticatedCloudService(backupPool,adminPool,
     {backupKey:backupSigningKey,staffKey:staffSigningKey},nowSeconds,deletionPool)
-  const userToken=(userId,deviceId='device0001',issued=nowSeconds())=>
-    issueServerSession({aud:'cuoshi-cloud-backup',sub:userId,deviceId},backupSigningKey,issued)
+  const userToken=(userId,deviceId='device0001',issued=nowSeconds(),generation=0)=>
+    issueServerSession({aud:'cuoshi-cloud-backup',sub:userId,deviceId,generation},backupSigningKey,issued)
   const staffToken=(staffId,mfaAt=nowSeconds()-10,issued=nowSeconds())=>
     issueServerSession({aud:'cuoshi-staff-admin',sub:staffId,mfaAt},staffSigningKey,issued)
   const tokenA=userToken('account0001')
@@ -340,6 +343,23 @@ try{
     'Concurrent first snapshots must serialize')
   check(firstRace.filter(x=>x.kind==='conflict').length===1,
     'Initial competing client must not silently overwrite another upload')
+  const oldDeviceA=userToken(freshUser.userId,freshUser.deviceId)
+  const oldDeviceB=userToken(freshUser.userId,'device0005')
+  check((await service.status(oldDeviceB)).enabled,'Second device was initially authorized')
+  check((await service.logoutAllUser(oldDeviceA)).allDevicesSignedOut,
+    'Account-wide forced logout increments account session generation')
+  await assert.rejects(service.status(oldDeviceA),/session_revoked/);checks++
+  await assert.rejects(service.status(oldDeviceB),/session_revoked/);checks++
+  await assert.rejects(service.upload(oldDeviceB,up(state,1,null,'invalidreq01')),
+    /session_revoked/);checks++
+  const newDeviceToken=userToken(freshUser.userId,freshUser.deviceId,nowSeconds(),1)
+  check((await service.status(newDeviceToken)).enabled,
+    'Re-authentication succeeds in the same second with a new generation')
+  await assert.rejects(service.logoutAllUser(oldDeviceB),/session_revoked/);checks++
+  await assert.rejects(repository.deleteCloudBackup(backupPool,{
+    userId:freshUser.userId,deviceId:'device0005',generation:0
+  }),/session_revoked/);checks++
+  check((await service.status(tokenA)).enabled,'Other account stays signed in')
   const other=await repository.uploadCloudSnapshot(backupPool,b,up(state,0,null,'request0009'))
   check(other.kind==='accepted'&&other.receipt.revision===1,'Second owner independent')
   await repository.setCloudConsent(backupPool,a,false,'privacy-v1')
@@ -504,7 +524,18 @@ try{
   // User-requested account cancellation: preserve only non-identifying
   // backend operational totals and redacted security audit metadata.
   // Build a real WeChat-mapped account with private journal content.
-  const wxToken=wxLogin.accessToken
+  check((await service.logoutAllUser(wxLogin.accessToken)).allDevicesSignedOut,
+    'WeChat account can sign out all devices')
+  await assert.rejects(service.status(wxLogin.accessToken),/session_revoked/);checks++
+  const wxRelogin=await loginWithWechatCode(
+    identityPool,'wxrelogincode0001','device0001',wxConfig,mockExchange
+  )
+  check(!wxRelogin.isNewAccount&&wxRelogin.userId===wxLogin.userId,
+    'New WeChat identity exchange reuses account after global logout')
+  check(verifyServerSession(wxRelogin.accessToken,backupSigningKey,
+    'cuoshi-cloud-backup',nowSeconds())?.generation===1,
+    'New WeChat token uses latest database session generation')
+  const wxToken=wxRelogin.accessToken
   await service.setConsent(wxToken,true,'privacy-v1')
   const wxBackup=await service.upload(wxToken,up(state,0,null,'wxupload0001'))
   check(wxBackup.kind==='accepted','WeChat-mapped account has encrypted-transport-ready test backup')
@@ -525,6 +556,10 @@ try{
   check((await service.status(wxToken)).enabled,'Incorrect confirmation leaves account active')
   await assert.rejects(service.cancelAccount(staffToken('support0001'),ACCOUNT_DELETE_CONFIRMATION),
     /unauthorized/);checks++
+  const extraWxToken=userToken(wxLogin.userId,'device0008',nowSeconds(),1)
+  await service.logoutUser(extraWxToken)
+  check(Number((await pool.query('SELECT count(*) AS n FROM cloud_revoked_backup_tokens WHERE subject_id=$1',
+    [wxLogin.userId])).rows[0].n)===1,'Account-linked revoked nonce exists before cancellation')
   const beforeStat=await pool.query('SELECT COALESCE(sum(accounts_deleted),0) AS n FROM cloud_account_deletion_totals')
   const result=await service.cancelAccount(wxToken,ACCOUNT_DELETE_CONFIRMATION)
   check(result.deleted&&result.privateBackupErased&&result.redactedAuditRows===1,
@@ -533,6 +568,8 @@ try{
     'Cancellation receipt contains no private body or identifying subject')
   const snapshotGone=await pool.query('SELECT * FROM cloud_snapshots WHERE user_id=$1',[wxLogin.userId])
   check(snapshotGone.rows.length===0,'User private cloud snapshot physically deleted')
+  check((await pool.query('SELECT * FROM cloud_revoked_backup_tokens WHERE subject_id=$1',
+    [wxLogin.userId])).rows.length===0,'Cancellation scrubs account-linked revoked-token records')
   check((await pool.query('SELECT * FROM cloud_upload_receipts WHERE user_id=$1',
     [wxLogin.userId])).rows.length===0,'Backup idempotency history removed')
   check((await pool.query('SELECT * FROM cloud_wechat_identities WHERE user_id=$1',

@@ -75,6 +75,7 @@ BEGIN
   DELETE FROM __SCHEMA__.cloud_access_cases WHERE owner_id=p_user_id;
   DELETE FROM __SCHEMA__.cloud_wechat_identities WHERE user_id=p_user_id;
   DELETE FROM __SCHEMA__.cloud_upload_receipts WHERE user_id=p_user_id;
+  DELETE FROM __SCHEMA__.cloud_revoked_backup_tokens WHERE subject_id=p_user_id;
   DELETE FROM __SCHEMA__.cloud_snapshots WHERE user_id=p_user_id;
 
   -- No owner identifier or private date remains in operational audit entries.

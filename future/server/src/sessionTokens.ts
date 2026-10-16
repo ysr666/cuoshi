@@ -17,6 +17,7 @@ export type SessionClaims={
   exp:number
   deviceId?:string
   mfaAt?:number
+  generation?:number
 }
 const safeId=(s:unknown)=>typeof s==='string'&&/^[a-zA-Z0-9_-]{8,128}$/.test(s)
 const maxLifetime={ 'cuoshi-cloud-backup':15*60,'cuoshi-staff-admin':5*60 }
@@ -29,12 +30,14 @@ function hmac(payload:string,secret:Uint8Array){
 }
 /** Only backend auth orchestration is allowed to invoke this after provider verification. */
 export function issueServerSession(
-  identity:{aud:SessionAudience;sub:string;deviceId?:string;mfaAt?:number},
+  identity:{aud:SessionAudience;sub:string;deviceId?:string;mfaAt?:number;generation?:number},
   secret:Uint8Array,nowSeconds:number
 ):string{
   requireSecret(secret)
   if(!identity||!safeId(identity.sub)||!Number.isSafeInteger(nowSeconds)||nowSeconds<0)
     throw Error('invalid_session_claims')
+  if(identity.generation!==undefined&&(!Number.isSafeInteger(identity.generation)||identity.generation<0))
+    throw Error('invalid_session_generation')
   if(identity.aud==='cuoshi-cloud-backup'){
     if(!safeId(identity.deviceId)||identity.mfaAt!==undefined)throw Error('invalid_session_claims')
   }else if(identity.aud==='cuoshi-staff-admin'){
@@ -45,7 +48,7 @@ export function issueServerSession(
   const claims:SessionClaims={
     iss:'cuoshi-server',aud:identity.aud,sub:identity.sub,
     iat:nowSeconds,exp:nowSeconds+maxLifetime[identity.aud],
-    jti:randomBytes(16).toString('hex'),
+    jti:randomBytes(16).toString('hex'),generation:identity.generation??0,
     ...(identity.aud==='cuoshi-cloud-backup'?{deviceId:identity.deviceId}:{mfaAt:identity.mfaAt})
   }
   const encoded=Buffer.from(JSON.stringify(claims),'utf8').toString('base64url')
@@ -76,6 +79,7 @@ export function verifyServerSession(
   }catch{return null}
   if(!claims||claims.iss!=='cuoshi-server'||claims.aud!==audience||
      !safeId(claims.sub)||!safeId(claims.jti)||
+     (claims.generation!==undefined&&(!Number.isSafeInteger(claims.generation)||claims.generation<0))||
      !Number.isSafeInteger(claims.iat)||!Number.isSafeInteger(claims.exp)||
      claims.iat>nowSeconds||claims.iat<nowSeconds-24*60*60||
      claims.exp<=nowSeconds||claims.exp<=claims.iat||

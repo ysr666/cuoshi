@@ -62,12 +62,13 @@ export class AuthenticatedCloudService{
     await ensureSessionNotRevoked(this.backupDb,claims)
     const db=await this.backupDb.connect()
     try{
-      const row=await db.query('SELECT deleted_at FROM cloud_users WHERE user_id=$1',[claims.sub])
+      const row=await db.query('SELECT deleted_at,session_generation FROM cloud_users WHERE user_id=$1',[claims.sub])
       // Initial trusted bootstrap may not yet have a row. But tombstoned
       // accounts must NEVER be resumed with still-valid signed JWTs.
       if(row.rows[0]?.deleted_at)throw Error('account_closed')
+      if(row.rows[0]&&Number(row.rows[0].session_generation)!==(claims.generation??0))throw Error('session_revoked')
     }finally{db.release()}
-    return {userId:claims.sub,deviceId:claims.deviceId}
+    return {userId:claims.sub,deviceId:claims.deviceId,generation:claims.generation??0}
   }
   private async asStaff(token:unknown){
     const claims=this.readClaims(token,'cuoshi-staff-admin')
@@ -79,6 +80,20 @@ export class AuthenticatedCloudService{
     const claims=this.readClaims(token,'cuoshi-cloud-backup')
     if(!claims?.deviceId)throw Error('unauthorized')
     return revokeVerifiedSession(this.backupDb,claims)
+  }
+  /** Force all devices to re-authenticate; stale uploads also check generation under DB lock. */
+  async logoutAllUser(token:unknown){
+    const user=await this.asUser(token)
+    const db=await this.backupDb.connect()
+    try{
+      const result=await db.query(
+        'UPDATE cloud_users SET session_generation=session_generation+1 '+
+        'WHERE user_id=$1 AND deleted_at IS NULL AND session_generation=$2 RETURNING session_generation',
+        [user.userId,user.generation]
+      )
+      if(!result.rows.length)throw Error('session_revoked')
+      return {allDevicesSignedOut:true}
+    }finally{db.release()}
   }
   async logoutStaff(token:unknown){
     const claims=this.readClaims(token,'cuoshi-staff-admin')
