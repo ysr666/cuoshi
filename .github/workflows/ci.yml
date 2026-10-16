@@ -28,12 +28,17 @@ jobs:
         run: npm run typecheck
       - name: Core tests
         run: npm test
+      - name: Isolated future cloud authorization and snapshot contracts
+        run: npm run test:future:cloud
       - name: WeChat backup bridge contracts
         run: npm run test:wechat:backup-bridge
       - name: Build H5
         run: npm run build:h5
       - name: Build WeChat Mini Program
         run: npm run build:mp-weixin
+
+      - name: Ensure future cloud code cannot enter v0.4 bundles
+        run: npm run test:future:isolation
 
       - name: Install Chinese font fallback for visual review
         run: sudo apt-get update -qq && sudo apt-get install -y -qq fonts-noto-cjk

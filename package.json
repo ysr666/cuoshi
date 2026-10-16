@@ -25,7 +25,9 @@
     "test:h5:audit": "node tests/check-h5-audit.cjs",
     "test:h5:date-boundaries": "node tests/check-h5-date-boundaries.cjs",
     "test:wechat:backup-bridge": "node tests/check-wechat-backup-bridge.cjs",
-    "test:h5:release": "node tests/check-h5-release-readiness.cjs"
+    "test:h5:release": "node tests/check-h5-release-readiness.cjs",
+    "test:future:cloud": "node tests/check-future-cloud-contracts.mjs",
+    "test:future:isolation": "node tests/check-future-cloud-isolation.mjs"
   },
   "dependencies": {
     "@dcloudio/uni-app": "3.0.0-4080720251210001",
