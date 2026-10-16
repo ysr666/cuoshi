@@ -6,6 +6,12 @@
 
 本轮准备版二维码：[微信测试预览（临时有效）](https://raw.githubusercontent.com/ysr666/cuoshi/design/editorial-ui-v04-preview/previews/wechat-rc-prep-20261016.jpg)，**不能用来代替真机测试记录或正式 AppID**。设备和微信版本必须在结果表填写。
 
+## 二维码过期或 Mac 暂时离线时的测试包获取
+
+GitHub Actions 在每次 Draft PR 回归通过构建和隔离测试后，上传 **`wechat-preview-<run-id>`** 小程序编译产物（保留 7 天）。可从 [PR #4 的 Actions 运行记录](https://github.com/ysr666/cuoshi/pull/4/checks) 打开对应 run → Artifacts，下载 ZIP，解压并在微信开发者工具中**以专用测试 AppID**导入，手动生成最新测试预览二维码。
+
+这是仅供真机验收的**测试构建产物**，不是已发布的小程序、不是微信审核通过的证据，也不会自动导入 Mac 项目或上传任何用户 JSON。仓库公开，因此不要把私人记录、AppSecret、真实手机号或测试登录凭据放入编译包或 CI Artifact。实际真机结果仍须按 W01–W12 填写。
+
 ## 安全前提（先检查）
 
 - 只在**专用测试小程序 AppID / 预览环境**上操作。不要在已有私人记录的正式微信小程序或旧 H5 上做清空测试。
