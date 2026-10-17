@@ -1,12 +1,20 @@
 {
   "source": "npm audit --omit=dev --registry=https://registry.npmjs.org --json",
-  "date": "2026-10-16",
-  "status": "unresolved",
+  "date": "2026-10-17",
+  "status": "unresolved_after_patch_overrides",
   "vulnerabilities": {
     "critical": 0,
-    "high": 27,
-    "moderate": 11,
-    "low": 6,
-    "total": 44
+    "high": 21,
+    "moderate": 2,
+    "low": 9,
+    "total": 32
+  },
+  "compatibility_overrides": {
+    "ws": "8.22.0",
+    "postcss": "8.5.30",
+    "source-map-js": "1.2.2",
+    "jpeg-js": "0.4.4",
+    "phin": "3.7.1",
+    "adm-zip": "0.6.1"
   }
 }

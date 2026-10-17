@@ -46,5 +46,13 @@
     "typescript": "5.8.3",
     "vite": "5.2.8",
     "vue-tsc": "3.0.4"
+  },
+  "overrides": {
+    "ws": "8.22.0",
+    "postcss": "8.5.30",
+    "source-map-js": "1.2.2",
+    "jpeg-js": "0.4.4",
+    "phin": "3.7.1",
+    "adm-zip": "0.6.1"
   }
 }

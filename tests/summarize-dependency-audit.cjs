@@ -31,19 +31,21 @@ function summarize(raw){
     delta:changed,
     directVulnerablePackages:direct,
     newCritical:counts.critical>baseline.vulnerabilities.critical,
+    newHigh:counts.high>baseline.vulnerabilities.high,
     releaseApproved:false
   }
 }
 function selfTest(){
-  const ok={metadata:{vulnerabilities:{critical:0,high:28,moderate:11,low:6}},
+  const ok={metadata:{vulnerabilities:{critical:0,high:baseline.vulnerabilities.high+1,moderate:baseline.vulnerabilities.moderate,low:baseline.vulnerabilities.low}},
     vulnerabilities:{sample:{isDirect:true,severity:'high'}}}
   const s=summarize(ok)
   assert.equal(s.delta.high,1)
+  assert.equal(s.newHigh,true)
   assert.equal(s.releaseApproved,false)
   assert.equal(s.directVulnerablePackages[0].name,'sample')
   assert.throws(()=>summarize({error:{code:'ENOTFOUND'}}),/inconclusive/)
   assert.throws(()=>summarize({metadata:{vulnerabilities:{critical:0}}}),/invalid_counts/)
-  assert.equal(summarize({metadata:{vulnerabilities:{critical:1,high:27,moderate:11,low:6}}}).newCritical,true)
+  assert.equal(summarize({metadata:{vulnerabilities:{critical:1,high:baseline.vulnerabilities.high,moderate:baseline.vulnerabilities.moderate,low:baseline.vulnerabilities.low}}}).newCritical,true)
   console.log('PASS npm SCA parser and fail-closed self-tests')
 }
 if(process.argv[2]==='--self-test')selfTest()
@@ -56,8 +58,8 @@ else{
   console.log('Official npm audit (not release approval):',JSON.stringify(summary.observed))
   console.log('Baseline:',JSON.stringify(summary.baseline))
   console.log('Change:',JSON.stringify(summary.delta))
-  if(summary.newCritical){
-    console.error('::error::NEW CRITICAL npm advisory: investigate and block publication')
+  if(summary.newCritical||summary.newHigh){
+    console.error('::error::NEW CRITICAL/HIGH npm advisory compared with reviewed baseline: investigate and block publication')
     process.exitCode=1
   }else if(severities.some(key=>summary.delta[key]>0)){
     console.log('::warning::Known dependency risks increased; triage before release')

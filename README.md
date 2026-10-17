@@ -29,6 +29,7 @@ Chrome H5 交互测试由 CI 执行。微信真机必须另按 W01–W12 进行�
 - [iPhone 真机验收](docs/WECHAT_IPHONE_BACKUP_QA.md)
 - [微信审核资料草案](docs/WECHAT_REVIEW_PACKET_DRAFT.md)
 - [隐私处理说明草案](docs/PRIVACY_NOTICE_DRAFT.md)
-- [依赖风险与处置记录](docs/DEPENDENCY_AUDIT_2026-10-16.md)
+- [依赖审计与兼容补丁记录](docs/DEPENDENCY_AUDIT_2026-10-16.md)
+- [剩余依赖风险的攻击面初步分级](docs/DEPENDENCY_SECURITY_TRIAGE_V04.md)
 
 **未来微信/手机号账号、云备份、同步与管理员后台仍保留在 [原 Draft PR #4](https://github.com/ysr666/cuoshi/pull/4)，不属于当前首发。** 本分支不自动合并 `main`，不对真实用户开放云功能。
