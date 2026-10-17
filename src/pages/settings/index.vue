@@ -2,7 +2,7 @@
 import {ref} from 'vue'
 import {onShow} from '@dcloudio/uni-app'
 import Screen from '../../components/Screen.vue'
-import {records,initialize,syncFromStorage,setTheme,replaceRecords,clearRecords,storageError} from '../../core/store'
+import {records,initialize,syncFromStorage,setTheme,replaceRecords,clearRecords,storageError,draftCleanupWarning} from '../../core/store'
 import {exportBackup,parseBackup} from '../../core/backup'
 import {saveBackupFile,selectBackupFile} from '../../platform/backupIO'
 import {localDate} from '../../core/model'
@@ -57,6 +57,7 @@ function clear(){uni.showModal({title:'清除全部记录？',content:'这将删
     <view class="heading">设置</view>
     <view class="subheading">让它更像你喜欢的样子。</view>
     <text v-if="storageError" class="warning">{{storageError}}</text>
+    <text v-if="draftCleanupWarning" class="warning" role="alert">{{draftCleanupWarning}}</text>
     <view class="group">
       <text class="group-title">外观</text>
       <view class="theme-row" role="button" @click="select('paper')">
