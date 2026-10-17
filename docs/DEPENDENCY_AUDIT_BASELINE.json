@@ -1,13 +1,13 @@
 {
   "source": "npm audit --omit=dev --registry=https://registry.npmjs.org --json",
   "date": "2026-10-18",
-  "status": "unresolved_after_transitive_fixes_dependency_trim_and_intlify_compatibility_overrides",
+  "status": "unresolved_after_compatible_toolchain_overrides",
   "vulnerabilities": {
     "critical": 0,
-    "high": 14,
-    "moderate": 2,
+    "high": 13,
+    "moderate": 0,
     "low": 7,
-    "total": 23
+    "total": 20
   },
   "compatibility_overrides": {
     "ws": "8.22.0",
@@ -18,9 +18,9 @@
     "adm-zip": "0.6.1"
   },
   "observation": {
-    "source": "Mac isolated official npm Registry audit; verify with upcoming GitHub CI Artifact",
-    "sourceBranch": "security/v04-intlify-compat-spike-1018",
-    "note": "23 unresolved affected packages; not release acceptance"
+    "source": "Mac official npm Registry audit; verify via CI artifact",
+    "sourceBranch": "security/v04-toolchain-patches-1018",
+    "note": "20 unresolved affected packages; not release acceptance"
   },
   "knownAffectedPackages": {
     "@babel/core": "low",
@@ -40,19 +40,13 @@
     "@vue/server-renderer": "high",
     "braces": "high",
     "chokidar": "high",
-    "esbuild": "moderate",
     "fast-glob": "high",
     "micromatch": "high",
-    "postcss-selector-parser": "moderate",
-    "unimport": "high",
     "vue": "high"
   },
   "knownDirectAdvisoryUrls": [
     "https://github.com/advisories/GHSA-4x5r-pxfx-6jf8",
-    "https://github.com/advisories/GHSA-67mh-4wv8-2f99",
     "https://github.com/advisories/GHSA-g2v6-rqmx-r4w6",
-    "https://github.com/advisories/GHSA-rj75-hqrm-r3gf",
-    "https://github.com/advisories/GHSA-vfj7-8cjw-p6xm",
-    "https://github.com/advisories/GHSA-w9m9-85wc-3x92"
+    "https://github.com/advisories/GHSA-vfj7-8cjw-p6xm"
   ]
 }
