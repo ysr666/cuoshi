@@ -3,12 +3,12 @@
 
 ## 审计口径和修复证据
 
-- 命令：`npm audit --omit=dev --registry=https://registry.npmjs.org --json`；受影响包统计从 **44 → 32 → 28**，High **27 → 21 → 19**、Moderate **11 → 2**、Low **6 → 9 → 7**、Critical **0 → 0**。层级统计变化源于依赖图重新计算，并非 12 个互不关联的漏洞全部消除。
+- 命令：`npm audit --omit=dev --registry=https://registry.npmjs.org --json`；受影响包统计从 **44 → 32 → 28 → 23**，High **27 → 21 → 19 → 14**、Moderate **11 → 2**、Low **6 → 9 → 7**、Critical **0 → 0**。层级统计变化源于依赖图重新计算，并非 12 个互不关联的漏洞全部消除。
 - 六个版本固定的传递依赖补丁：`ws@8.22.0`、`postcss@8.5.30`、`source-map-js@1.2.2`、`jpeg-js@0.4.4`、`phin@3.7.1`、`adm-zip@0.6.1`。原有 DCloud/Vue 主框架版本未改。CI、锁文件、两端构建和浏览器回归必须同时通过。
 - 本分支的源文件没有未来云模块，也没有后台 API；`test:release:scope` 在构建后检查运行包。**代码搜索不能单独证明某个第三方漏洞不可利用。**
 - 本表的「候选攻击面」根据包职责与构建链初判，不是渗透测试结论。相同源漏洞可能波及多个 DCloud 传递包；修复时不得只看 npm 数量。
 
-## 当前剩余受影响包（完整目录，共 28 个）
+## 当前剩余受影响包（完整目录，共 23 个）
 
 | 受影响包 | npm 风险 | 候选攻击面 | 下一步处置 |
 | --- | --- | --- | --- |
@@ -19,11 +19,6 @@
 | `@dcloudio/uni-h5` | high | 客户端/框架运行时待核 | 对照 DCloud 官方兼容矩阵后隔离升级，需真实微信 QA |
 | `@dcloudio/uni-h5-vite` | high | 框架混合/间接依赖待核 | 逐项核对 advisory、是否打包及兼容补丁 |
 | `@dcloudio/uni-h5-vue` | high | 客户端/框架运行时待核 | 逐项核对 advisory、是否打包及兼容补丁 |
-| `@intlify/core-base` | high | 客户端/框架运行时待核 | 核对 9.1.x 旧 CLI 依赖与 9.14.x 客户端链，独立验证升级 |
-| `@intlify/message-compiler` | high | 客户端/框架运行时待核 | 核对 9.1.x 旧 CLI 依赖与 9.14.x 客户端链，独立验证升级 |
-| `@intlify/message-resolver` | high | 客户端/框架运行时待核 | 核对 9.1.x 旧 CLI 依赖与 9.14.x 客户端链，独立验证升级 |
-| `@intlify/runtime` | high | 客户端/框架运行时待核 | 核对 9.1.x 旧 CLI 依赖与 9.14.x 客户端链，独立验证升级 |
-| `@intlify/vue-devtools` | high | 框架混合/间接依赖待核 | 核对 9.1.x 旧 CLI 依赖与 9.14.x 客户端链，独立验证升级 |
 | `@vue/server-renderer` | high | 框架混合/间接依赖待核 | 对照 DCloud 官方兼容矩阵后隔离升级，需真实微信 QA |
 | `braces` | high | Node 构建/开发工具候选 | 核查构建阶段输入边界、目录扫描及 glob 模式可控性 |
 | `chokidar` | high | Node 构建/开发工具候选 | 核查构建阶段输入边界、目录扫描及 glob 模式可控性 |
@@ -43,14 +38,14 @@
 
 ## 2026-10-17 · 增量风险身份证明（新增 CI 保护，不是漏洞修复）
 
-最初将 GitHub Actions 原始报告（run `38986168245`，对应 `391d295`）中的 32 个受影响包及 23 条直接 GHSA URL 固化为监控基线。2026-10-18 在兼容精简后，以官方 npm Registry 的**实际 28 个包、8 条直接 GHSA URL** 更新基线，原始新报告需随新 CI Artifact 保存。基线只代表**尚未解决风险**，绝不代表豁免或安全批准。
+最初将 GitHub Actions 原始报告（run `38986168245`，对应 `391d295`）中的 32 个受影响包及 23 条直接 GHSA URL 固化为监控基线。2026-10-18 在兼容精简后，以官方 npm Registry 的**实际 28 个包、8 条直接 GHSA URL**；经后续工具链组件兼容试验进一步更新为 **23 个包、6 条直接 GHSA URL** 更新基线，原始新报告需随新 CI Artifact 保存。基线只代表**尚未解决风险**，绝不代表豁免或安全批准。
 
 `tests/summarize-dependency-audit.cjs` 现会同时核对：
 - 原始报告元数据、逐包数量与风险等级必须一致；npm Registry 错误、报告不完整时失败，不把失败当零风险。
 - **新增公告 URL、首次受影响的包、旧包风险等级上升**，无论总告警数量上升、下降还是不变，都标为 `riskRegression`，使 CI 失败。
 - 输出完整的公告 URL、直接受影响依赖、新旧包和严重性差异，便于未来定位漏洞及保留证据；每次运行 `releaseApproved` 一律为 `false`。
 
-该机制能发现以旧漏洞减少抵消新漏洞造成的**总量假稳定**，但不能取代人工审查：相同 URL 的新版影响范围、未发布的新漏洞、与实际微信 JS 的可利用性仍需逐项分析。**剩余 28 项既存受影响包全部仍为待处置风险，发布阻断不变。**
+该机制能发现以旧漏洞减少抵消新漏洞造成的**总量假稳定**，但不能取代人工审查：相同 URL 的新版影响范围、未发布的新漏洞、与实际微信 JS 的可利用性仍需逐项分析。**剩余 23 项既存受影响包仍为待处置风险，发布阻断不变。**
 
 ## 编译产物核对：发现 DCloud 资源预加载（需单独真机复核）
 
@@ -78,6 +73,14 @@ Mac 隔离工作区 `/Users/ysradmin/Projects/cuoshi-v04-privacy-audit-1018` 的
 
 两个隔离工作区的 `dist/build/mp-weixin/common/vendor.js`、`app.js` 和 H5 `index.html` **SHA-256 完全相同**；本地 TS、核心和 H5/微信构建、隐式 CDN 预加载防护及范围隔离通过。完整浏览器/原生检查、官方 GitHub CI 通过前不视为发布可用。
 
+## 2026-10-18 · 兼容升级 DCloud CLI 间接国际化工具依赖
+
+`@dcloudio/uni-cli-shared` 仍然依赖旧 `@intlify/core-base@9.1.9` 工具链，包含旧版消息编译器等，属于**构建阶段调用路径**而不是「错事」自有文字渲染接口。在独立 worktree 中使用 npm overrides，将同一族 `@intlify/core-base`、`message-compiler`、`message-resolver`、`runtime`、`vue-devtools` 钉到可解析的 9.14.5；其余 DCloud、Vue、Vite 主版本不变。
+
+**官方 npm Registry**：从 28 个受影响包（19 High / 2 Moderate / 7 Low）降到 **23 个（14 High / 2 Moderate / 7 Low）**，不再涉及上述五个旧 Intlify 间接包；6 条直接 GHSA URL 未引入新身份，仍不得视为 6 个漏洞已处置完毕。仅基于源码构建、自动化通过不等于供应链完全安全。
+
+Mac 两个隔离 worktree 生成的 **51 个微信小程序文件及 28 个 H5 文件全部逐字节一致**，说明这轮升级没有改变当前用户可运行的前端产物。未来若更新 DCloud 主框架，需复核依赖约束和这组 overrides，不能假设永远兼容。完整浏览器回归、GitHub CI 和 W01–W12 仍按正式发布门槛独立检查。
+
 ## 具体工程决策和下一步
 
 1. **先保留 6 个已完成的锁定补丁并维持回归门槛。** 每次继续修复前对比官方 npm JSON，不接受拿网络报错当 0 的结果。
@@ -86,4 +89,4 @@ Mac 隔离工作区 `/Users/ysradmin/Projects/cuoshi-v04-privacy-audit-1018` 的
 4. **Vite/SSR 与框架绑定风险**：DCloud 插件当前声明 `vite@5.2.8` 的精确 peer；Vue 锁定 3.4.21。不要将 npm 自动修复建议的 DCloud 0.x 旧版本作为可兼容修复；应另建框架升级试验、比较正式编译结果、真机 W01–W12 回归再决定。
 5. 需补最终产物动态/静态第三方入口审计、服务类目/隐私核验、正式主体及真机数据恢复验收，才能给这些剩余项可追溯的修复/缓解/风险接受决定。
 
-**发布结论：BLOCKED。** 未经明确安全验收不得因为从 44 降到 28 就创建正式 RC 标签或合并。
+**发布结论：BLOCKED。** 未经明确安全验收不得因为从 44 降到 23 就创建正式 RC 标签或合并。

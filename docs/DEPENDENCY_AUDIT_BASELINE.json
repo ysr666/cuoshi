@@ -1,13 +1,13 @@
 {
   "source": "npm audit --omit=dev --registry=https://registry.npmjs.org --json",
   "date": "2026-10-18",
-  "status": "unresolved_after_compatible_transitive_fixes_and_unused_dependency_removal",
+  "status": "unresolved_after_transitive_fixes_dependency_trim_and_intlify_compatibility_overrides",
   "vulnerabilities": {
     "critical": 0,
-    "high": 19,
+    "high": 14,
     "moderate": 2,
     "low": 7,
-    "total": 28
+    "total": 23
   },
   "compatibility_overrides": {
     "ws": "8.22.0",
@@ -18,9 +18,9 @@
     "adm-zip": "0.6.1"
   },
   "observation": {
-    "source": "Mac isolated official npm Registry audit JSON; validated with GitHub CI after commit",
-    "sourceBranch": "security/v04-dependency-prune-spike-1018",
-    "note": "28 unresolved affected packages; not release acceptance"
+    "source": "Mac isolated official npm Registry audit; verify with upcoming GitHub CI Artifact",
+    "sourceBranch": "security/v04-intlify-compat-spike-1018",
+    "note": "23 unresolved affected packages; not release acceptance"
   },
   "knownAffectedPackages": {
     "@babel/core": "low",
@@ -37,11 +37,6 @@
     "@dcloudio/uni-mp-weixin": "low",
     "@dcloudio/uni-push": "low",
     "@dcloudio/uni-stat": "low",
-    "@intlify/core-base": "high",
-    "@intlify/message-compiler": "high",
-    "@intlify/message-resolver": "high",
-    "@intlify/runtime": "high",
-    "@intlify/vue-devtools": "high",
     "@vue/server-renderer": "high",
     "braces": "high",
     "chokidar": "high",
@@ -56,10 +51,8 @@
     "https://github.com/advisories/GHSA-4x5r-pxfx-6jf8",
     "https://github.com/advisories/GHSA-67mh-4wv8-2f99",
     "https://github.com/advisories/GHSA-g2v6-rqmx-r4w6",
-    "https://github.com/advisories/GHSA-p2ph-7g93-hw3m",
     "https://github.com/advisories/GHSA-rj75-hqrm-r3gf",
     "https://github.com/advisories/GHSA-vfj7-8cjw-p6xm",
-    "https://github.com/advisories/GHSA-w9m9-85wc-3x92",
-    "https://github.com/advisories/GHSA-x8qp-wqqm-57ph"
+    "https://github.com/advisories/GHSA-w9m9-85wc-3x92"
   ]
 }
