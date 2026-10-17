@@ -36,6 +36,9 @@ jobs:
       - name: Build WeChat Mini Program
         run: npm run build:mp-weixin
 
+      - name: Verify no implicit DCloud CDN preload in WeChat build
+        run: npm run test:wechat:no-implicit-preload
+
       - name: Enforce release scope, no future cloud and no accidental network SDK
         run: npm run test:release:scope
 

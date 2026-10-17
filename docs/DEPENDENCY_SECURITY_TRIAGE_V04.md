@@ -66,6 +66,14 @@
 
 **处理门槛**：正式 iPhone 微信测试时，核对该静态资源请求是否执行、是否可禁用以及是否属于必要网络处理。首发版本自称本地优先，不应在未经审查/告知的情况下接受不必要的第三方网络连接。可优先采用兼容的 DCloud 上游配置或补丁，**不得为了消除字符串而盲改压缩后的 vendor 或牺牲跨端兼容性**。此项尚未结案，不能将「没有自建账号 API」误写为「运行时绝无网络请求」。
 
+## 2026-10-18 · 微信 CDN 隐式预加载定向规避（Mac 编译已通过）
+
+在官方锁定版 `@dcloudio/uni-mp-weixin/dist/uni.mp.esm.js` 的 `preloadAsset()` 中，明确找到打包器生产模式触发的 `wx.preloadAssets` 和 `__UNI_PRELOAD_SHADOW_IMAGE__`。这是一项非业务必需的 DCloud 灰色阴影图片预加载，不是用户授权的上传或备份流程。
+
+本分支通过 `vite.config.ts` 的 `enforce: pre` 插件，**只对微信正式 build** 移除调用点，不改动 `wx.preloadAssets` 全局方法，不修改 `node_modules`、H5、已有数据模型或微信文件分享 API；如果上游源码变化、找不到唯一调用点则终止构建。新增 `tests/check-wechat-no-implicit-preload.cjs`：需要真实微信构建产物存在，逐个检查打包的 JS，不允许预加载相关字符串残留；并加入 CI。
+
+Mac 隔离工作区 `/Users/ysradmin/Projects/cuoshi-v04-privacy-audit-1018` 的微信生产编译成功，16 个构建 JS 文件检查通过。**仍需** GitHub CI 验收以及 iPhone 微信实际网络/功能测试；此修改不意味着第三方库其他依赖网络请求全部不存在。保留其余依赖安全、隐私与注册发布门槛。
+
 ## 具体工程决策和下一步
 
 1. **先保留 6 个已完成的锁定补丁并维持回归门槛。** 每次继续修复前对比官方 npm JSON，不接受拿网络报错当 0 的结果。

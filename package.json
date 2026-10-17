@@ -25,6 +25,7 @@
     "test:h5:audit": "node tests/check-h5-audit.cjs",
     "test:h5:date-boundaries": "node tests/check-h5-date-boundaries.cjs",
     "test:wechat:backup-bridge": "node tests/check-wechat-backup-bridge.cjs",
+    "test:wechat:no-implicit-preload": "node tests/check-wechat-no-implicit-preload.cjs",
     "test:h5:release": "node tests/check-h5-release-readiness.cjs",
     "test:release:scope": "node tests/check-release-scope.cjs"
   },

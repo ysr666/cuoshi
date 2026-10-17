@@ -31,6 +31,7 @@
 
 - [ ] **真实 iPhone 微信**：按 `docs/WECHAT_IPHONE_BACKUP_QA.md` 实际完成 W01–W12，并留下不含私人内容的复测结果，尤其分享文件是否真的到达聊天与再次选择、恢复历史。
 - [ ] 微信真机：长文字、输入键盘、安全区、触摸反馈、夜间或小屏显示；长时间后台恢复/跨日期，不丢数据。
+- [x] **微信编译包预加载静态检查**：DCloud 非必要 CDN 阴影图预加载已在 source transform 定向禁用，并加入 CI 编译产物断言（本机编译 16 JS 通过；正式 GitHub CI 待验）。
 - [ ] **第三方网络调用复核**：现有微信构建 `common/vendor.js` 的 DCloud 框架初始化代码包含条件性 CDN 静态图片预加载。应在真机核对实际发起与必要性；若不必要则通过兼容方法禁用，并复核隐私告知。详见 `docs/DEPENDENCY_SECURITY_TRIAGE_V04.md`。此项不代表用户文字被上传。
 - [ ] **阻断：依赖安全风险尚未处置完毕。** npm 官方漏洞库对标记为生产依赖的整棵依赖树报告 21 High / 2 Moderate / 9 Low / 0 Critical，需按真正打入微信运行包、构建工具漏洞及可利用性逐项分类与处理，见 `docs/DEPENDENCY_AUDIT_2026-10-16.md` 与 `docs/DEPENDENCY_SECURITY_TRIAGE_V04.md`；不能以当前可正常编译代替安全批准。
 - [ ] 正式小程序 AppID 与账号主体已注册；个人主体允许的类目、名称、版本审核材料已经实际确认。
