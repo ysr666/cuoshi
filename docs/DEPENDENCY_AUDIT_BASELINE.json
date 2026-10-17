@@ -1,13 +1,13 @@
 {
   "source": "npm audit --omit=dev --registry=https://registry.npmjs.org --json",
-  "date": "2026-10-17",
-  "status": "unresolved_after_patch_overrides",
+  "date": "2026-10-18",
+  "status": "unresolved_after_compatible_transitive_fixes_and_unused_dependency_removal",
   "vulnerabilities": {
     "critical": 0,
-    "high": 21,
+    "high": 19,
     "moderate": 2,
-    "low": 9,
-    "total": 32
+    "low": 7,
+    "total": 28
   },
   "compatibility_overrides": {
     "ws": "8.22.0",
@@ -18,16 +18,13 @@
     "adm-zip": "0.6.1"
   },
   "observation": {
-    "sourceRunId": 38986168245,
-    "sourceCommit": "391d29597ef1b0a9dc221e4c727f34a123cc8424",
-    "note": "Unresolved npm advisory snapshot for regression detection, NOT acceptance of these vulnerabilities"
+    "source": "Mac isolated official npm Registry audit JSON; validated with GitHub CI after commit",
+    "sourceBranch": "security/v04-dependency-prune-spike-1018",
+    "note": "28 unresolved affected packages; not release acceptance"
   },
   "knownAffectedPackages": {
     "@babel/core": "low",
     "@dcloudio/uni-app": "high",
-    "@dcloudio/uni-app-plus": "low",
-    "@dcloudio/uni-app-uts": "high",
-    "@dcloudio/uni-app-vite": "low",
     "@dcloudio/uni-cli-shared": "high",
     "@dcloudio/uni-cloud": "high",
     "@dcloudio/uni-components": "high",
@@ -53,32 +50,16 @@
     "micromatch": "high",
     "postcss-selector-parser": "moderate",
     "unimport": "high",
-    "vite": "high",
     "vue": "high"
   },
   "knownDirectAdvisoryUrls": [
-    "https://github.com/advisories/GHSA-356w-63v5-8wf4",
-    "https://github.com/advisories/GHSA-4r4m-qw57-chr8",
-    "https://github.com/advisories/GHSA-4w7w-66w2-5vf9",
     "https://github.com/advisories/GHSA-4x5r-pxfx-6jf8",
-    "https://github.com/advisories/GHSA-64vr-g452-qvp3",
     "https://github.com/advisories/GHSA-67mh-4wv8-2f99",
-    "https://github.com/advisories/GHSA-859w-5945-r5v3",
-    "https://github.com/advisories/GHSA-93m4-6634-74q7",
-    "https://github.com/advisories/GHSA-9cwx-2883-4wfx",
-    "https://github.com/advisories/GHSA-c27g-q93r-2cwf",
-    "https://github.com/advisories/GHSA-fx2h-pf6j-xcff",
     "https://github.com/advisories/GHSA-g2v6-rqmx-r4w6",
-    "https://github.com/advisories/GHSA-g4jq-h2w9-997c",
-    "https://github.com/advisories/GHSA-jqfw-vq24-v9c3",
     "https://github.com/advisories/GHSA-p2ph-7g93-hw3m",
     "https://github.com/advisories/GHSA-rj75-hqrm-r3gf",
-    "https://github.com/advisories/GHSA-v6wh-96g9-6wx3",
     "https://github.com/advisories/GHSA-vfj7-8cjw-p6xm",
-    "https://github.com/advisories/GHSA-vg6x-rcgg-rjx6",
     "https://github.com/advisories/GHSA-w9m9-85wc-3x92",
-    "https://github.com/advisories/GHSA-x574-m823-4x7w",
-    "https://github.com/advisories/GHSA-x8qp-wqqm-57ph",
-    "https://github.com/advisories/GHSA-xcj6-pq6g-qj4x"
+    "https://github.com/advisories/GHSA-x8qp-wqqm-57ph"
   ]
 }
