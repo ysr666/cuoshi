@@ -16,6 +16,14 @@ async function waitRoute(mp,path){
   }
   throw Error('Navigation did not reach '+path)
 }
+async function awaitElement(page,selector){
+  for(let retry=0;retry<24;retry++){
+    const found=await page.$(selector)
+    if(found)return found
+    await new Promise(r=>setTimeout(r,250))
+  }
+  throw Error('Native element not ready: '+selector+' on '+page.path)
+}
 ;(async()=>{
   const mp=await automator.launch({cliPath,projectPath})
   try{
@@ -31,7 +39,7 @@ async function waitRoute(mp,path){
     assert.ok(today,'Today cell exists')
     await today.tap()
     const detail=await waitRoute(mp,'pages/detail/index')
-    assert.ok(await detail.$('.history-title'),'Date detail includes history')
+    assert.equal(await (await awaitElement(detail,'.history-title')).text(),'修改历史')
     console.log('PASS WeChat calendar + detail')
     p=await mp.switchTab('/pages/stats/index')
     await p.waitFor(300)
@@ -41,8 +49,14 @@ async function waitRoute(mp,path){
     await p.waitFor(300)
     assert.equal(await (await p.$('.heading')).text(),'设置')
     const options=await p.$$('.option')
-    assert.ok(options.length>=4,'Settings actions exist')
-    await options[1].tap()
+    assert.ok(options.length>=3,'Settings data controls exist')
+    await (await awaitElement(p,'.privacy-toggle')).tap()
+    const disclosure=await awaitElement(p,'.privacy-expanded')
+    assert.ok(disclosure,'Native privacy disclosure mounted')
+    console.log('PASS WeChat privacy disclosure')
+    const themes=await p.$$('.theme-row')
+    assert.equal(themes.length,2,'Two visible theme choices')
+    await themes[1].tap()
     await p.waitFor(400)
     const data=await mp.callWxMethod('getStorageSync','cuoshi-uni-v1')
     const record=typeof data==='string'?JSON.parse(data):data

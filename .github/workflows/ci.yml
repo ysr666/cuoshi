@@ -1,0 +1,112 @@
+name: Cuoshi cross-platform CI
+
+on:
+  push:
+    branches:
+      - main
+      - release/v0.4-rc1-prep
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    name: Release-scope, typecheck, H5 and WeChat builds
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - name: Install dependencies
+        run: npm ci
+      - name: Typecheck
+        run: npm run typecheck
+      - name: Core tests
+        run: npm test
+      - name: WeChat backup bridge contracts
+        run: npm run test:wechat:backup-bridge
+      - name: Build H5
+        run: npm run build:h5
+      - name: Build WeChat Mini Program
+        run: npm run build:mp-weixin
+
+      - name: Verify no implicit DCloud CDN preload in WeChat build
+        run: npm run test:wechat:no-implicit-preload
+
+      - name: Enforce release scope, no future cloud and no accidental network SDK
+        run: npm run test:release:scope
+
+      - name: Inspect WeChat preview build for accidentally packaged private files
+        run: node tests/check-wechat-preview-artifact.cjs
+      - name: Upload isolated WeChat preview build for real-device QA
+        uses: actions/upload-artifact@v4
+        with:
+          name: wechat-preview-${{ github.run_id }}
+          path: dist/build/mp-weixin/
+          if-no-files-found: error
+          retention-days: 7
+      - name: Install Chinese font fallback for visual review
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq fonts-noto-cjk
+      - name: Set up Chrome for real H5 browser checks
+        id: chrome
+        uses: browser-actions/setup-chrome@v2
+      - name: H5 layout, typography, touch feedback and notes
+        env:
+          CHROME_PATH: ${{ steps.chrome.outputs.chrome-path }}
+        run: npm run test:h5:layout && npm run test:h5:typography && npm run test:h5:refinement && npm run test:h5:notes && npm run test:h5:feedback && npm run test:h5:polish && npm run test:h5:audit && npm run test:h5:extended && npm run test:h5:date-boundaries && npm run test:h5:release
+
+      - name: Upload H5 screenshots for design review
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: h5-review-${{ github.run_id }}
+          if-no-files-found: ignore
+          retention-days: 7
+          path: |
+            /tmp/cuoshi-type-setting-*.png
+            /tmp/cuoshi-refined-*.png
+            /tmp/cuoshi-feedback-*.png
+            /tmp/cuoshi-polish-editor-*.png
+            /tmp/cuoshi-audit-year-zero-*.png
+            /tmp/cuoshi-release-privacy-*.png
+
+  dependency_audit:
+    name: Official npm security advisory inventory (unresolved baseline)
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout pinned lockfile
+        uses: actions/checkout@v4
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Audit parser self-tests
+        run: node tests/summarize-dependency-audit.cjs --self-test
+      - name: Query official npm advisory database
+        shell: bash
+        run: |
+          set +e
+          npm audit --omit=dev --registry=https://registry.npmjs.org --json > "$RUNNER_TEMP/cuoshi-audit-raw.json"
+          audit_exit=$?
+          set -e
+          echo "npm audit exit code: $audit_exit (nonzero is expected for known vulnerabilities)"
+          node tests/summarize-dependency-audit.cjs "$RUNNER_TEMP/cuoshi-audit-raw.json" "$RUNNER_TEMP/cuoshi-audit-summary.json"
+      - name: Save machine-readable risk inventory
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: npm-sca-${{ github.run_id }}
+          retention-days: 14
+          if-no-files-found: warn
+          path: |
+            ${{ runner.temp }}/cuoshi-audit-raw.json
+            ${{ runner.temp }}/cuoshi-audit-summary.json

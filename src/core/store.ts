@@ -8,6 +8,7 @@ export const records=ref<Records>(fresh())
 export const drafts=ref<Record<string,string>>({})
 export const ready=ref(false)
 export const storageError=ref('')
+export const draftCleanupWarning=ref('')
 export const lastUndo=ref<{date:string;before:number|null;after:number|null}|null>(null)
 let snapshot=''
 let undoExpiry=0
@@ -89,9 +90,40 @@ export function saveDraft(key:string,body:string):boolean{
   try{uni.setStorageSync(DRAFTS_KEY,next);drafts.value=next;return true}
   catch{throw Error('草稿保存失败：请及时提交简记')}
 }
-export function removeDraft(key:string):void{try{saveDraft(key,'')}catch(e){console.error(e)}}
+export function removeDraft(key:string):void{
+  // The note itself may already have been committed. A failed or silently
+  // ignored draft removal must be surfaced, or stale text can reappear after
+  // restart and invite an accidental duplicate note.
+  try{
+    saveDraft(key,'')
+    const disk=read(DRAFTS_KEY) as Record<string,string>|undefined
+    if(disk&&Object.prototype.hasOwnProperty.call(disk,key))throw Error('草稿副本仍在本机')
+  }catch{
+    throw Error('正式简记已保存，但旧草稿没有清理成功；重新打开后若出现相同文字，请勿重复提交。')
+  }
+}
 export function day(key:string){return dayOf(records.value,key)}
 export function recentPastChanges():number{return records.value.events.filter(e=>e.opDate===localDate()&&e.targetDate<e.opDate&&['initial','count','unrecord'].includes(e.type)).length}
+/** Only erases unsubmitted drafts. Never rewrites the saved count/note/history record. */
+export function retryDraftCleanup():void{
+  if(!ready.value)initialize()
+  // Keep this operation idempotent so a UI retry after partial failure is safe.
+  try{uni.removeStorageSync(DRAFTS_KEY)}catch{console.warn('草稿删除失败，尝试覆盖为空记录')}
+  try{
+    let diskDrafts=read(DRAFTS_KEY)
+    if(diskDrafts!==undefined&&JSON.stringify(diskDrafts)!=='{}'){
+      uni.setStorageSync(DRAFTS_KEY,{})
+      diskDrafts=read(DRAFTS_KEY)
+    }
+    if(diskDrafts!==undefined&&JSON.stringify(diskDrafts)!=='{}')throw Error('草稿清理校验失败')
+    drafts.value={}
+    draftCleanupWarning.value=''
+  }catch{
+    const message='未提交草稿可能仍在本机，暂未确认清理完成。请检查存储空间后重试。'
+    draftCleanupWarning.value=message
+    throw Error(message)
+  }
+}
 /** Destructive replacement only AFTER user confirmation in UI; keep drafts until successful write. */
 export function replaceRecords(next:Records):void{
   validate(next)
@@ -101,6 +133,7 @@ export function replaceRecords(next:Records):void{
   if((disk?JSON.stringify(disk):'')!==snapshot)throw Error('另一个页面刚修改了数据，请先重新打开再导入')
   try{uni.setStorageSync(KEY,cloneState(next));records.value=cloneState(next);snapshot=JSON.stringify(next);lastUndo.value=null}
   catch{throw Error('导入写入失败，原有内容可能未被替换，请重新检查')}
-  try{uni.removeStorageSync(DRAFTS_KEY);drafts.value={}}catch(e){console.warn('草稿未清理',e)}
+  try{retryDraftCleanup()}
+  catch{throw Error('主记录已替换，但未提交草稿可能仍在本机。清除尚未完成，可在设置中单独重试清理草稿。')}
 }
 export function clearRecords():void{replaceRecords({...fresh(),theme:records.value.theme})}

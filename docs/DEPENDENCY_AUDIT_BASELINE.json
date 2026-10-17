@@ -1,0 +1,52 @@
+{
+  "source": "npm audit --omit=dev --registry=https://registry.npmjs.org --json",
+  "date": "2026-10-18",
+  "status": "unresolved_after_compatible_toolchain_overrides",
+  "vulnerabilities": {
+    "critical": 0,
+    "high": 13,
+    "moderate": 0,
+    "low": 7,
+    "total": 20
+  },
+  "compatibility_overrides": {
+    "ws": "8.22.0",
+    "postcss": "8.5.30",
+    "source-map-js": "1.2.2",
+    "jpeg-js": "0.4.4",
+    "phin": "3.7.1",
+    "adm-zip": "0.6.1"
+  },
+  "observation": {
+    "source": "Mac official npm Registry audit; verify via CI artifact",
+    "sourceBranch": "security/v04-toolchain-patches-1018",
+    "note": "20 unresolved affected packages; not release acceptance"
+  },
+  "knownAffectedPackages": {
+    "@babel/core": "low",
+    "@dcloudio/uni-app": "high",
+    "@dcloudio/uni-cli-shared": "high",
+    "@dcloudio/uni-cloud": "high",
+    "@dcloudio/uni-components": "high",
+    "@dcloudio/uni-console": "low",
+    "@dcloudio/uni-h5": "high",
+    "@dcloudio/uni-h5-vite": "high",
+    "@dcloudio/uni-h5-vue": "high",
+    "@dcloudio/uni-mp-compiler": "low",
+    "@dcloudio/uni-mp-vite": "low",
+    "@dcloudio/uni-mp-weixin": "low",
+    "@dcloudio/uni-push": "low",
+    "@dcloudio/uni-stat": "low",
+    "@vue/server-renderer": "high",
+    "braces": "high",
+    "chokidar": "high",
+    "fast-glob": "high",
+    "micromatch": "high",
+    "vue": "high"
+  },
+  "knownDirectAdvisoryUrls": [
+    "https://github.com/advisories/GHSA-4x5r-pxfx-6jf8",
+    "https://github.com/advisories/GHSA-g2v6-rqmx-r4w6",
+    "https://github.com/advisories/GHSA-vfj7-8cjw-p6xm"
+  ]
+}

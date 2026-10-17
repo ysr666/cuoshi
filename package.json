@@ -2,29 +2,38 @@
   "name": "cuoshi-uniapp",
   "version": "0.4.0-alpha.3",
   "private": true,
-  "description": "Cuoshi cross-platform offline-first app alpha.2",
+  "description": "Offline-first Cuoshi v0.4 WeChat/H5 release candidate (cloud features excluded)",
   "scripts": {
     "dev:h5": "uni -p h5",
     "build:h5": "uni build -p h5",
     "dev:mp-weixin": "uni -p mp-weixin",
     "build:mp-weixin": "uni build -p mp-weixin",
-    "dev:app": "uni -p app",
     "test:core": "node tests/check-core.mjs",
     "test:v04": "node tests/check-v04.mjs",
     "test:store": "node tests/check-store.mjs",
     "test": "npm run test:core && npm run test:v04 && npm run test:store",
     "typecheck": "vue-tsc --noEmit",
     "test:h5": "node tests/check-h5-flow.cjs",
-    "test:h5:extended": "node tests/check-h5-extended.cjs"
+    "test:h5:extended": "node tests/check-h5-extended.cjs",
+    "test:h5:layout": "node tests/check-h5-layout.cjs",
+    "test:h5:notes": "node tests/check-h5-notes-ux.cjs",
+    "test:h5:polish": "node tests/check-h5-polish.cjs",
+    "test:h5:typography": "node tests/check-h5-typography.cjs",
+    "test:h5:refinement": "node tests/check-h5-refinement.cjs",
+    "test:h5:feedback": "node tests/check-h5-feedback.cjs",
+    "test:h5:audit": "node tests/check-h5-audit.cjs",
+    "test:h5:date-boundaries": "node tests/check-h5-date-boundaries.cjs",
+    "test:wechat:backup-bridge": "node tests/check-wechat-backup-bridge.cjs",
+    "test:wechat:no-implicit-preload": "node tests/check-wechat-no-implicit-preload.cjs",
+    "test:h5:release": "node tests/check-h5-release-readiness.cjs",
+    "test:release:scope": "node tests/check-release-scope.cjs"
   },
   "dependencies": {
     "@dcloudio/uni-app": "3.0.0-4080720251210001",
-    "@dcloudio/uni-app-plus": "3.0.0-4080720251210001",
     "@dcloudio/uni-components": "3.0.0-4080720251210001",
     "@dcloudio/uni-h5": "3.0.0-4080720251210001",
     "@dcloudio/uni-mp-weixin": "3.0.0-4080720251210001",
-    "vue": "3.4.21",
-    "vue-i18n": "9.14.5"
+    "vue": "3.4.21"
   },
   "devDependencies": {
     "@dcloudio/types": "3.4.19",
@@ -35,5 +44,21 @@
     "typescript": "5.8.3",
     "vite": "5.2.8",
     "vue-tsc": "3.0.4"
+  },
+  "overrides": {
+    "ws": "8.22.0",
+    "postcss": "8.5.30",
+    "source-map-js": "1.2.2",
+    "jpeg-js": "0.4.4",
+    "phin": "3.7.1",
+    "adm-zip": "0.6.1",
+    "@intlify/core-base": "9.14.5",
+    "@intlify/message-compiler": "9.14.5",
+    "@intlify/message-resolver": "9.14.5",
+    "@intlify/runtime": "9.14.5",
+    "@intlify/vue-devtools": "9.14.5",
+    "esbuild": "0.25.12",
+    "postcss-selector-parser": "7.1.6",
+    "unimport": "4.1.2"
   }
 }
