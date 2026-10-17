@@ -19,7 +19,16 @@ const notes=computed(()=>day(props.date).notes)
 const editing=ref(''), editText=ref('')
 function textValue(e:Event):string{const custom=e as Event & {detail?:{value?:string}};return typeof custom.detail?.value==='string'?custom.detail.value:(e.target as HTMLTextAreaElement|null)?.value||''}
 function onChange(e:Event){input.value=textValue(e);try{draftOkay.value=saveDraft(props.date,input.value)}catch(err){draftOkay.value=false;notify(String(err))}}
-function submit(){if(!input.value.trim()||!dateIsCurrent())return;try{if(addNote(props.date,input.value)){removeDraft(props.date);input.value='';composerRevision.value++;notify('这几个字也留下了')}}catch(e){notify(String(e))}}
+function submit(){
+  if(!input.value.trim()||!dateIsCurrent())return
+  let committed=false
+  try{committed=addNote(props.date,input.value)}catch(e){notify(String(e));return}
+  if(!committed)return
+  input.value=''
+  composerRevision.value++
+  try{removeDraft(props.date);draftOkay.value=true;notify('这几个字也留下了')}
+  catch(e){draftOkay.value=false;notify(String(e))}
+}
 function begin(id:string,text:string){if(!dateIsCurrent())return;editing.value=id;editText.value=text}
 function editChange(e:Event){editText.value=textValue(e)}
 function saveEdit(){if(!dateIsCurrent())return;try{const changed=updateNote(props.date,editing.value,editText.value);editing.value='';if(changed)notify('简记已更新，旧文仍在历史里')}catch(e){notify(String(e))}}

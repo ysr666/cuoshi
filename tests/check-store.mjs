@@ -11,10 +11,10 @@ try{
   const types=join(dir,'globals.d.ts');writeFileSync(types,"declare module 'vue' { export function ref<T>(initial:T): {value:T} }; declare const uni:any;\n")
   const output=join(dir,'dist')
   execFileSync('tsc',['--target','ES2022','--module','CommonJS','--moduleResolution','node','--skipLibCheck','--outDir',output,resolve('src/core/store.ts'),types],{stdio:'pipe'})
-  const storage=new Map();let failWrites=false,failDraftRemoval=false,failDraftOverwrite=false
+  const storage=new Map();let failWrites=false,failDraftRemoval=false,failDraftOverwrite=false,ignoreDraftClear=false
   globalThis.uni={
     getStorageSync:(key)=>storage.get(key)??'',
-    setStorageSync:(key,value)=>{if(failWrites)throw Error('quota reached');if(key==='cuoshi-uni-drafts-v1'&&failDraftOverwrite)throw Error('draft overwrite denied');storage.set(key,JSON.parse(JSON.stringify(value)))},
+    setStorageSync:(key,value)=>{if(failWrites)throw Error('quota reached');if(key==='cuoshi-uni-drafts-v1'&&failDraftOverwrite)throw Error('draft overwrite denied');if(key==='cuoshi-uni-drafts-v1'&&ignoreDraftClear&&Object.keys(value).length===0)return;storage.set(key,JSON.parse(JSON.stringify(value)))},
     removeStorageSync:(key)=>{if(key==='cuoshi-uni-drafts-v1'&&failDraftRemoval)throw Error('draft removal denied');return storage.delete(key)}
   }
   let store=req(join(output,'store.js')),model=req(join(output,'model.js'))
@@ -31,6 +31,13 @@ try{
   ok(store.saveDraft(date,'待写完的文字'),'draft save')
   ok(store.drafts.value[date]==='待写完的文字','draft memory')
   store.removeDraft(date);ok(!store.drafts.value[date],'draft deleted')
+  store.saveDraft(date,'private note draft')
+  ignoreDraftClear=true
+  assert.throws(()=>store.removeDraft(date),/正式简记已保存，但旧草稿没有清理成功/);checks++
+  ok(storage.get('cuoshi-uni-drafts-v1')[date]==='private note draft','silent draft-write failure cannot report success')
+  ignoreDraftClear=false
+  store.removeDraft(date)
+  ok(!storage.get('cuoshi-uni-drafts-v1')[date],'recovered single-note draft cleanup verified')
   let next=JSON.parse(JSON.stringify(storage.get('cuoshi-uni-v1')))
   model.setCount(next,date,4)
   storage.set('cuoshi-uni-v1',next)

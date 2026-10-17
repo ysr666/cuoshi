@@ -90,7 +90,18 @@ export function saveDraft(key:string,body:string):boolean{
   try{uni.setStorageSync(DRAFTS_KEY,next);drafts.value=next;return true}
   catch{throw Error('草稿保存失败：请及时提交简记')}
 }
-export function removeDraft(key:string):void{try{saveDraft(key,'')}catch(e){console.error(e)}}
+export function removeDraft(key:string):void{
+  // The note itself may already have been committed. A failed or silently
+  // ignored draft removal must be surfaced, or stale text can reappear after
+  // restart and invite an accidental duplicate note.
+  try{
+    saveDraft(key,'')
+    const disk=read(DRAFTS_KEY) as Record<string,string>|undefined
+    if(disk&&Object.prototype.hasOwnProperty.call(disk,key))throw Error('草稿副本仍在本机')
+  }catch{
+    throw Error('正式简记已保存，但旧草稿没有清理成功；重新打开后若出现相同文字，请勿重复提交。')
+  }
+}
 export function day(key:string){return dayOf(records.value,key)}
 export function recentPastChanges():number{return records.value.events.filter(e=>e.opDate===localDate()&&e.targetDate<e.opDate&&['initial','count','unrecord'].includes(e.type)).length}
 /** Destructive replacement only AFTER user confirmation in UI; keep drafts until successful write. */
