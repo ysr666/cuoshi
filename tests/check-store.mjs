@@ -79,7 +79,13 @@ try{
   ok(store.records.value.days[date].count===3,'primary replacement completed despite draft cleanup error')
   ok(storage.get('cuoshi-uni-drafts-v1')[date].includes('private draft'),'failed cleanup does not fabricate successful deletion')
   ok(store.draftCleanupWarning.value.includes('未提交草稿可能仍在本机'),'privacy failure is persistently visible in Settings')
+  assert.throws(()=>store.retryDraftCleanup(),/未提交草稿可能仍在本机/);checks++
+  ok(store.records.value.days[date].count===3,'failed draft retry never mutates formal records')
   failDraftRemoval=false;failDraftOverwrite=false
+  store.retryDraftCleanup()
+  ok(store.records.value.days[date].count===3,'successful draft-only retry leaves formal records and history unchanged')
+  ok(!storage.has('cuoshi-uni-drafts-v1'),'draft-only retry erases stale private draft')
+  ok(!store.draftCleanupWarning.value,'draft-only retry clears persistent error status')
   store.clearRecords();ok(store.records.value.events.length===0,'clear records')
   ok(!storage.has('cuoshi-uni-drafts-v1'),'successful retry removes the previously retained private draft')
   ok(!store.draftCleanupWarning.value,'successful retry clears stale privacy warning')

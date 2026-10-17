@@ -2,7 +2,7 @@
 import {ref} from 'vue'
 import {onShow} from '@dcloudio/uni-app'
 import Screen from '../../components/Screen.vue'
-import {records,initialize,syncFromStorage,setTheme,replaceRecords,clearRecords,storageError,draftCleanupWarning} from '../../core/store'
+import {records,initialize,syncFromStorage,setTheme,replaceRecords,clearRecords,retryDraftCleanup,storageError,draftCleanupWarning} from '../../core/store'
 import {exportBackup,parseBackup} from '../../core/backup'
 import {saveBackupFile,selectBackupFile} from '../../platform/backupIO'
 import {localDate} from '../../core/model'
@@ -46,6 +46,14 @@ async function restore(){
   }catch(e){const msg=String(e);if(!msg.includes('已取消'))notify(msg)}
   finally{busy.value=false}
 }
+function retryCleanup(){
+  if(busy.value)return
+  uni.showModal({title:'只清理残留草稿？',
+    content:'只会清除本机所有未提交的草稿，不会再替换正式数字、简记或修改历史。被清理的草稿无法恢复。',
+    confirmText:'清理草稿',
+    success:r=>{if(!r.confirm)return;try{retryDraftCleanup();notify('未提交草稿已确认清理')}catch(e){notify(String(e))}}
+  })
+}
 function clear(){uni.showModal({title:'清除全部记录？',content:'这将删除当前设备中所有日期、简记及历史。无法撤销，请先导出备份。',confirmText:'继续',success:r=>{
   if(!r.confirm)return
   uni.showModal({title:'最后确认',content:'全部本地数据将被替换为空白记录。',confirmText:'删除全部',success:r2=>{if(!r2.confirm)return;try{clearRecords();notify('本地记录已清空')}catch(e){notify(String(e))}}})
@@ -58,6 +66,7 @@ function clear(){uni.showModal({title:'清除全部记录？',content:'这将删
     <view class="subheading">让它更像你喜欢的样子。</view>
     <text v-if="storageError" class="warning">{{storageError}}</text>
     <text v-if="draftCleanupWarning" class="warning" role="alert">{{draftCleanupWarning}}</text>
+    <view v-if="draftCleanupWarning" class="option danger" role="button" @click="retryCleanup"><text>仅重试清理未提交草稿</text></view>
     <view class="group">
       <text class="group-title">外观</text>
       <view class="theme-row" role="button" @click="select('paper')">
