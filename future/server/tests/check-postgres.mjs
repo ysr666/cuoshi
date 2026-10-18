@@ -440,8 +440,8 @@ try{
   m.appendNote(injection,today,"'; DROP TABLE cloud_users; --")
   const injected=await repository.uploadCloudSnapshot(backupPool,a,up(injection,3,third.receipt.digest,'request0013'))
   check(injected.kind==='accepted','SQL-injection-looking note treated as text')
-  check((await pool.query('SELECT count(*) AS total FROM cloud_users')).rows[0].total==='5',
-    'Schema intact after SQL injection probe')
+  check((await pool.query('SELECT count(*) AS total FROM cloud_users')).rows[0].total==='6',
+    'Schema intact after SQL injection probe, including first-link migration account')
   // Seed test-only verified staff and an explicit scoped support ticket.
   for(const [id,role] of [['support0001','support'],['reviewer001','safety_reviewer'],
     ['superadmin1','super_admin'],['auditor0001','auditor']])
