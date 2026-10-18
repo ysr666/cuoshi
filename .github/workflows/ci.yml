@@ -61,6 +61,11 @@ jobs:
           CHROME_PATH: ${{ steps.chrome.outputs.chrome-path }}
         run: npm run test:h5:layout && npm run test:h5:typography && npm run test:h5:refinement && npm run test:h5:notes && npm run test:h5:feedback && npm run test:h5:polish && npm run test:h5:audit && npm run test:h5:extended && npm run test:h5:date-boundaries && npm run test:h5:release
 
+      - name: H5 silent storage-write failure regression
+        env:
+          CHROME_PATH: ${{ steps.chrome.outputs.chrome-path }}
+        run: npm run test:h5:storage
+
       - name: Upload H5 screenshots for design review
         if: always()
         uses: actions/upload-artifact@v4

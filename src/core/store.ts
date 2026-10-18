@@ -44,8 +44,15 @@ export function commit(fn:(next:Records)=>boolean):boolean{
   const next=cloneState(records.value),changed=fn(next)
   if(!changed)return false
   validate(next)
-  try{uni.setStorageSync(KEY,next);records.value=next;snapshot=JSON.stringify(next);return true}
-  catch(e){storageError.value='本机记录保存失败，请检查存储空间';throw e}
+  const serialized=JSON.stringify(next)
+  try{
+    uni.setStorageSync(KEY,next)
+    if(JSON.stringify(read(KEY))!==serialized)throw Error('主记录写入后校验失败')
+    records.value=next;snapshot=serialized;return true
+  }catch(e){
+    storageError.value='本机记录保存未能确认，请保留现有数据，重新打开后检查'
+    throw Error('本机记录保存未能确认，请保留现有数据，重新打开后检查')
+  }
 }
 export function syncFromStorage():void{
   if(!ready.value)return initialize()
@@ -87,8 +94,11 @@ export function setTheme(skin:Skin):boolean{return commit(s=>{if(s.theme===skin)
 export function saveDraft(key:string,body:string):boolean{
   const next={...drafts.value}
   if(body)next[key]=body;else delete next[key]
-  try{uni.setStorageSync(DRAFTS_KEY,next);drafts.value=next;return true}
-  catch{throw Error('草稿保存失败：请及时提交简记')}
+  try{
+    uni.setStorageSync(DRAFTS_KEY,next)
+    if(JSON.stringify(read(DRAFTS_KEY))!==JSON.stringify(next))throw Error('草稿写入后校验失败')
+    drafts.value=next;return true
+  }catch{throw Error('草稿保存未能确认：请及时提交简记')}
 }
 export function removeDraft(key:string):void{
   // The note itself may already have been committed. A failed or silently
@@ -131,8 +141,15 @@ export function replaceRecords(next:Records):void{
   if(storageError.value)throw Error(storageError.value)
   const disk=read(KEY) as Records|undefined
   if((disk?JSON.stringify(disk):'')!==snapshot)throw Error('另一个页面刚修改了数据，请先重新打开再导入')
-  try{uni.setStorageSync(KEY,cloneState(next));records.value=cloneState(next);snapshot=JSON.stringify(next);lastUndo.value=null}
-  catch{throw Error('导入写入失败，原有内容可能未被替换，请重新检查')}
+  const replacement=cloneState(next),serialized=JSON.stringify(replacement)
+  try{
+    uni.setStorageSync(KEY,replacement)
+    if(JSON.stringify(read(KEY))!==serialized)throw Error('主记录写入后校验失败')
+    records.value=replacement;snapshot=serialized;lastUndo.value=null
+  }catch{
+    storageError.value='导入结果未能确认，已暂停后续写入；请保留备份并重新打开检查'
+    throw Error(storageError.value)
+  }
   try{retryDraftCleanup()}
   catch{throw Error('主记录已替换，但未提交草稿可能仍在本机。清除尚未完成，可在设置中单独重试清理草稿。')}
 }
