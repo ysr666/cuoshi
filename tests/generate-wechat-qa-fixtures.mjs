@@ -16,7 +16,10 @@ const tmp=mkdtempSync(join(tmpdir(),'cuoshi-wechat-fixture-'))
 try {
   const compiled=join(tmp,'js')
   mkdirSync(compiled)
-  execFileSync('tsc',['--target','ES2022','--module','CommonJS','--moduleResolution','node','--skipLibCheck','--outDir',compiled,resolve('src/core/model.ts'),resolve('src/core/backup.ts')],{stdio:'pipe'})
+  // Call the exact lockfile-installed compiler: the runner's global `tsc`
+  // may have a different major version and incompatible flags.
+  const localTsc=createRequire(import.meta.url).resolve('typescript/bin/tsc')
+  execFileSync(process.execPath,[localTsc,'--target','ES2022','--module','CommonJS','--moduleResolution','node','--skipLibCheck','--outDir',compiled,resolve('src/core/model.ts'),resolve('src/core/backup.ts')],{stdio:'inherit'})
   const req=createRequire(import.meta.url)
   const m=req(join(compiled,'model.js')),b=req(join(compiled,'backup.js'))
   const today=m.localDate(),yesterday=m.dateOffset(today,-1)
