@@ -7,6 +7,7 @@ import {tmpdir} from 'node:os'
 import {join,resolve} from 'node:path'
 import {fileURLToPath} from 'node:url'
 import crypto from 'node:crypto'
+import {createServer} from 'node:http'
 const root=fileURLToPath(new URL('../../../',import.meta.url))
 const require=createRequire(new URL('../package.json',import.meta.url))
 const {Pool}=require('pg')
@@ -39,7 +40,8 @@ try{
     resolve(root,'future/server/src/accountCancellation.ts'),
     resolve(root,'future/server/src/deletionReporting.ts'),
     resolve(root,'future/cloud/initialMigration.ts'),
-    resolve(root,'future/cloud/automaticSync.ts')
+    resolve(root,'future/cloud/automaticSync.ts'),
+    resolve(root,'future/server/src/backupHttp.ts')
   ],{cwd:root,stdio:'pipe'})
   const m=require(join(out,'src/core/model.js'))
   const {
@@ -47,6 +49,7 @@ try{
     INITIAL_MIGRATION_CONFIRMATION
   }=require(join(out,'future/cloud/initialMigration.js'))
   const {createLinkedJournal,runAutomaticSyncOnce}=require(join(out,'future/cloud/automaticSync.js'))
+  const {createBackupHttpHandler}=require(join(out,'future/server/src/backupHttp.js'))
   const repository=require(join(out,'future/server/src/repository.js'))
   const admin=require(join(out,'future/server/src/adminRepository.js'))
   const {AuthenticatedCloudService}=require(join(out,'future/server/src/authenticatedService.js'))
@@ -437,6 +440,46 @@ try{
   check(autoJournal.pending===null&&autoJournal.cursor.revision===3,
     'Cursor persisted only after complete cloud readback')
 
+  // Real localhost HTTP service + restricted PostgreSQL service; no public
+  // listener or unverified user-controlled owner ID.
+  const httpServer=createServer(createBackupHttpHandler(service))
+  await new Promise((resolve,reject)=>{
+    httpServer.once('error',reject)
+    httpServer.listen(0,'127.0.0.1',resolve)
+  })
+  try{
+    const address=httpServer.address()
+    const url='http://127.0.0.1:'+address.port+'/v1/backup/snapshot'
+    const headers={Authorization:'Bearer '+linkToken,'Content-Type':'application/json'}
+    const getResponse=await fetch(url,{headers})
+    check(getResponse.status===200,
+      'Real PostgreSQL snapshot served through authenticated localhost HTTP')
+    const httpSnapshot=await getResponse.json()
+    check(httpSnapshot.revision===3&&httpSnapshot.ownerId===linkUser.userId,
+      'HTTP snapshot bound to verified owner and prior revision')
+    check((await fetch(url,{headers:{Authorization:'Bearer bad'}})).status===401,
+      'Malformed bearer denied before querying PostgreSQL')
+    const nextHttpRecords=m.cloneState(httpSnapshot.records)
+    m.appendNote(nextHttpRecords,today,'隔离数据库 HTTP 环回的新增简记')
+    const uploadBody={baseRevision:httpSnapshot.revision,baseDigest:httpSnapshot.digest,
+      idempotencyKey:'httpDbSync0001',records:nextHttpRecords}
+    const send=()=>fetch(url,{method:'PUT',headers,body:JSON.stringify(uploadBody)})
+    const acceptedHttp=await send()
+    const decision=await acceptedHttp.json()
+    check(acceptedHttp.status===200&&decision.kind==='accepted'&&
+      decision.receipt.revision===4,
+      'HTTP PUT inserts complete snapshot using real limited PostgreSQL role')
+    const replayHttp=await send()
+    check(replayHttp.status===200&&(await replayHttp.json()).kind==='replayed',
+      'HTTP idempotent replay returns existing PostgreSQL receipt')
+    const staleHttp=await fetch(url,{method:'PUT',headers,body:JSON.stringify({
+      ...uploadBody,idempotencyKey:'httpDbSync0002'
+    })})
+    check(staleHttp.status===409&&(await staleHttp.json()).reason==='stale_revision',
+      'HTTP preserves transactional cross-device revision conflict')
+    check((await service.readBackup(linkToken)).revision===4,
+      'Replayed and conflicting HTTP requests did not double-increment revision')
+  }finally{await new Promise(resolve=>httpServer.close(resolve))}
   const changedDuringUpload=m.cloneState(importedLocal)
   m.appendNote(changedDuringUpload,today,'同步期间新增的本地文字')
   check(verifyInitialMigration({

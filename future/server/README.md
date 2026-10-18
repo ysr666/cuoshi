@@ -74,3 +74,7 @@ SQL 的审计禁止修改触发器只是**附加防线**，拥有数据库所有
 ## v0.5 客户端云同步适配边界（未部署）
 
 `../cloud/initialMigration.ts`、`automaticSync.ts` 与 `clientAdapters.ts` 已具备首次迁移、断网与幂等重试、账号分区本地队列、注入式 HTTPS / `uni.request` 的合同验证。**客户端必须在每次网络调用前核对队列账号与最新短期会话的 owner 一致，避免切换登录账号时交叉上传。当前不存在已启用的 HTTP Listener、生产域名、已登录的真实微信账号或实际自动上传**。后端 `AuthenticatedCloudService` 仍只可在正式微信身份核验和严格授权服务端路由之后被调用；不能把任意客户端传来的 `userId` 作为 `VerifiedUserSession`。正式上云前需连接真实网络、安全审查与跨设备验收。
+
+## 未来隔离的 HTTP 入口（未启动）
+
+`src/backupHttp.ts` 现在包含受保护的 `GET/PUT /v1/backup/snapshot` 请求处理函数，仅接收 Bearer 会话，把身份验证交给 `AuthenticatedCloudService`，支持真实 PostgreSQL 幂等回执与 CAS 冲突。**代码不包含 `listen()`、不暴露任何端口**；`tests/check-future-backup-http.mjs` 才会使用 `127.0.0.1` 临时端口进行非生产测试。正式上云必须另外实现微信可信登录、TLS、域名、限流、监控、生产数据加密与删除政策；不得把代码存在仓库中理解为服务已发布。

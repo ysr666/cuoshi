@@ -148,3 +148,15 @@
 - **测试界限**：`npm run test:future:client-adapters` 使用**仅内存保存的合成账号和虚构记录**，对 50 项场景做注入式调用、断网、重启、跨账号隔离、静默存储故障、令牌缺失、HTTPS URL 规则、云端冲突与安全读回验证；没有真实网络。未来 HTTP 服务还没有真正部署，不能凭此声明微信登录/云同步已经可供用户使用。
 
 后续需要：正式微信 code2Session 可信登录、实际云域名和网络白名单、真实 `uni` 存储适配验收、用户开关/退出/同步状态界面、避免后台过频请求、限权云数据库和端到端多手机测试。以上内容**只进入云研发 Draft PR #4，不并入 v0.4 首发 PR #5**。
+
+## 2026-10-19 · 客户端到 PostgreSQL 的 HTTP 备份接口（不对公网开放）
+
+隔离模块 `future/server/src/backupHttp.ts` 提供固定 `GET/PUT /v1/backup/snapshot` 路由的 **Node.js 请求处理函数**，与客户端 `clientAdapters.ts` 的固定 HTTPS 协议保持一致。它**没有创建监听器、没有登录/发令牌后门、没有部署程序与正式域名**。未来必须由具有有效 TLS、反向代理配置与可信微信 code2Session 登录的宿主程序显式挂载。
+
+- **身份不从请求体获取**：只接受 Authorization Bearer 短期 token，真正用户身份由服务端 `AuthenticatedCloudService` 验签、数据库会话撤销及账号代际号验证后确定。请求必须正好包含 `baseRevision/baseDigest/idempotencyKey/records` 四项，额外 `ownerId/userId/token` 等字段一律拒绝；不通过 URL query、前端断言或 HTTP header 的任意 userId 选择账号。
+- **拒绝不合法输入**：PUT 限 `application/json; charset=utf-8`，请求体 11 MiB 上限，超限在 JSON 解析前拒绝，UTF-8 严格解码；路径、方法、Content-Length 异常直接拒绝。错误响应不携带原始令牌、私密简记、SQL 错误或服务器堆栈。
+- **客户端协议语义**：GET 200 返回本人 `CloudSnapshot`，204 表示尚未有备份；PUT 200 返回 `accepted/replayed` 幂等回执，409 返回 CAS revision/digest 冲突，400/401/403/422 为对应客户端错误。所有结果带 `Cache-Control: no-store` 等隐私头，不开放通配 CORS。
+- **安全验收**：`npm run test:future:backup-http` 仅在 `127.0.0.1` 随机端口临时启动模拟服务器，以 24 项 HTTP/JSON/认证/大文件/完整历史场景验证与真实客户端备份适配器的一致性；在 `future/server/tests/check-postgres.mjs` 增加使用 PostgreSQL 最小权限角色的真实 HTTP GET/PUT/重复请求/CAS 冲突检查。**测试仍不能证明已生产上线**。
+- **剩余生产门槛**：真实 HTTPS 证书、域名白名单、服务端 Host/Origin 策略、请求限流/超时、日志脱敏、审计/KMS、数据库备份及账户删除保留策略、真正微信会话刷新与多设备真机回归；未完成前不能挂公共监听或承诺云备份可用。
+
+此模块只在 [v0.5 云研发 Draft PR #4](https://github.com/ysr666/cuoshi/pull/4)，不进入 v0.4 首发包。

@@ -40,6 +40,8 @@ jobs:
         run: npm run test:future:auto-sync
       - name: Future authenticated uni.request and durable local journal adapters
         run: npm run test:future:client-adapters
+      - name: Future backup HTTP route loopback security and client-to-server protocol
+        run: npm run test:future:backup-http
       - name: WeChat backup bridge contracts
         run: npm run test:wechat:backup-bridge
       - name: Build H5

@@ -8,7 +8,7 @@ import {sha256} from '../../src/core/backup'
 import {validate,type Records} from '../../src/core/model'
 import {stableJson} from './stableJson'
 import type {SyncJournal,SyncPort} from './automaticSync'
-import type {CloudSnapshot,UploadRequest,UploadDecision} from './snapshotContract'
+import type {CloudSnapshot,UploadRequest,UploadDecision,UploadReceipt} from './snapshotContract'
 
 const validId=(x:unknown):x is string=>typeof x==='string'&&/^[A-Za-z0-9_-]{8,128}$/.test(x)
 const validHash=(x:unknown)=>typeof x==='string'&&/^[a-f0-9]{64}$/.test(x)
@@ -175,11 +175,21 @@ export function createAuthenticatedBackupHttpBridge(config:SyncHttpBridgeConfig)
       const serialized=JSON.stringify(request)
       if(utf8Bytes(serialized)>10*1024*1024)throw Error('sync_upload_too_large')
       const response=await send('PUT',request)
-      if(response.statusCode===401||response.statusCode===403)
-        return {kind:'rejected',reason:'authentication'}
-      if(response.statusCode===422)
-        return {kind:'rejected',reason:'validation'}
       const body=response.data as Record<string,any>
+      if(response.statusCode===401)
+        return {kind:'rejected',reason:'authentication'}
+      if(response.statusCode===403)
+        return {kind:'rejected',reason:
+          body?.kind==='rejected'&&body.reason==='consent_required'
+            ?'consent_required':'authentication'}
+      if(response.statusCode===400)
+        return {kind:'rejected',reason:'invalid_request'}
+      if(response.statusCode===422){
+        if(body?.kind==='rejected'&&
+          ['validation','history_rewrite','idempotency_mismatch'].includes(body.reason))
+          return {kind:'rejected',reason:body.reason}
+        return {kind:'rejected',reason:'validation'}
+      }
       if(response.statusCode===409){
         if(body?.kind!=='conflict'||!Number.isSafeInteger(body.currentRevision)||
            body.currentRevision<0||
@@ -203,11 +213,16 @@ export function createAuthenticatedBackupHttpBridge(config:SyncHttpBridgeConfig)
          !Number.isSafeInteger(receipt.revision)||Number(receipt.revision)<1||
          !validHash(receipt.digest)||!validId(receipt.idempotencyKey))
         throw Error('sync_cloud_receipt_invalid')
-      if(body.kind==='accepted')return {
-        kind:'accepted',snapshot:copy(body.snapshot) as CloudSnapshot,
-        receipt:copy(receipt) as UploadDecision & any
+      const typedReceipt=copy(receipt) as UploadReceipt
+      if(body.kind==='accepted'){
+        const snapshot=body.snapshot as CloudSnapshot|undefined
+        if(!snapshot||!validId(snapshot.ownerId)||
+           !Number.isSafeInteger(snapshot.revision)||!validHash(snapshot.digest)||
+           !snapshot.records||typeof snapshot.records!=='object')
+          throw Error('sync_cloud_upload_invalid')
+        return {kind:'accepted',snapshot:copy(snapshot),receipt:typedReceipt}
       }
-      return {kind:'replayed',receipt:copy(receipt) as UploadDecision & any}
+      return {kind:'replayed',receipt:typedReceipt}
     }
   }
 }
