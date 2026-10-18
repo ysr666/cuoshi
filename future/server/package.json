@@ -12,6 +12,6 @@
   },
   "scripts": {
     "test": "node ./tests/check-postgres.mjs",
-    "check:types": "tsc --noEmit --strict --target ES2022 --module CommonJS --moduleResolution node --skipLibCheck ./src/repository.ts ./src/adminRepository.ts ./src/authenticatedService.ts ./src/sessionTokens.ts ./src/wechatIdentity.ts ./src/sessionRevocation.ts ./src/accountCancellation.ts ./src/deletionReporting.ts ./src/backupHttp.ts"
+    "check:types": "tsc --noEmit --strict --target ES2022 --module CommonJS --moduleResolution node --skipLibCheck ./src/repository.ts ./src/adminRepository.ts ./src/authenticatedService.ts ./src/sessionTokens.ts ./src/wechatIdentity.ts ./src/sessionRevocation.ts ./src/accountCancellation.ts ./src/deletionReporting.ts ./src/backupHttp.ts ./src/accountHttp.ts"
   }
 }

@@ -160,3 +160,13 @@
 - **剩余生产门槛**：真实 HTTPS 证书、域名白名单、服务端 Host/Origin 策略、请求限流/超时、日志脱敏、审计/KMS、数据库备份及账户删除保留策略、真正微信会话刷新与多设备真机回归；未完成前不能挂公共监听或承诺云备份可用。
 
 此模块只在 [v0.5 云研发 Draft PR #4](https://github.com/ysr666/cuoshi/pull/4)，不进入 v0.4 首发包。
+
+## 2026-10-19 · 微信登录与用户主动云备份开关（P1）
+
+隔离服务端 `future/server/src/accountHttp.ts` 提供 `POST /v1/auth/wechat`、`GET /v1/backup/status`、`PUT /v1/backup/consent`，全部需经过严格请求格式、私密 no-store 响应、安全错误映射；登录接口只接受真实 `wx.login` **一次性 code**，并在受限 PostgreSQL 身份表中验证可重复登录、已消费 code 不能重放。微信 `openid` 只由服务器调用官方 jscode2session 取得并使用服务端 HMAC 映射，不从客户端表单、昵称或手机号推断身份。任何第三方 `session_key` 均不得发给客户端。
+
+隔离客户端 `future/cloud/wechatSession.ts` 通过**显式注入的**微信 `login`、HTTP 传输与设备标识，获取服务端签名的短期会话并只在内存中缓存；临近过期自动重新获取 code；多调用方共享登录飞行任务；账号发生变化、退出时未完成的请求、服务端撤销令牌、授权状态异常均需安全失败，不能将 A 账号本地历史拿 B 的令牌上传。`getStatus` 与 `setCloudConsent` 由明确的 UI 行为触发，不自动开启上传；关闭云备份也不能误删之前的备份数据。
+
+新增 `npm run test:future:account-http` **30 项本地模拟 HTTP 测试**及 `npm run test:future:wechat-session` **33 项微信会话客户端合同测试**，并扩展真实 PostgreSQL 测试。未部署微信 AppSecret、服务器真实域名或生产认证服务；所有身份与正文均为测试模拟。后续仍必须实现微信身份网关与集中限流、正式登录及隐私授权页面、实际云存储/审计/删除流程、客户端云同步状态呈现和跨设备真机验收。
+
+**这两项服务都不自动上线，也绝不进入 v0.4 首发小程序。**

@@ -78,3 +78,11 @@ SQL 的审计禁止修改触发器只是**附加防线**，拥有数据库所有
 ## 未来隔离的 HTTP 入口（未启动）
 
 `src/backupHttp.ts` 现在包含受保护的 `GET/PUT /v1/backup/snapshot` 请求处理函数，仅接收 Bearer 会话，把身份验证交给 `AuthenticatedCloudService`，支持真实 PostgreSQL 幂等回执与 CAS 冲突。**代码不包含 `listen()`、不暴露任何端口**；`tests/check-future-backup-http.mjs` 才会使用 `127.0.0.1` 临时端口进行非生产测试。正式上云必须另外实现微信可信登录、TLS、域名、限流、监控、生产数据加密与删除政策；不得把代码存在仓库中理解为服务已发布。
+
+## 2026-10-19 · 可信微信登录、云端授权 HTTP 路由（仍未部署）
+
+`src/accountHttp.ts` 增加隔离的 `POST /v1/auth/wechat`（接受有限长度的 `wx.login` 临时代码与设备 ID，调用**服务端凭证**配置的 `loginWithWechatCode` 和可信 `jscode2session` 交换器）、`GET /v1/backup/status`（Bearer token）及 `PUT /v1/backup/consent`（显式开关和隐私说明版本）。登录从不自动启用云备份，旧账号不能被错误地显示为“默认关闭”。云备份状态必须查询真实的认证服务。
+
+登录路由必须通过独立的 `permitLogin` 服务端限流器注入；未提供该依赖则无法创建处理函数。仅在隔离测试中显式使用允许所有请求的限流模拟器，**生产环境必须部署跨实例、抗滥用的集中限流，并保证授权 code 不进入 URL、日志、分析或持久队列**。此模块只导出请求处理函数，没有创建服务监听或微信真实密钥。
+
+`tests/check-future-account-http.mjs` 通过 30 项回环测试覆盖登录、授权默认关闭、显式同意、取消同意、令牌与请求体校验、重放及限流。PostgreSQL 集成测试额外走真实权限隔离的 `cloud_wechat_identities`、已消费 code 与 `AuthenticatedCloudService`，验证短期会话签发与实际用户授权。云端路由未经正式 AppID、TLS、主体、备案、网关和微信真机验收不得上线。

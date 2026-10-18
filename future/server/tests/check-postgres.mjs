@@ -41,7 +41,8 @@ try{
     resolve(root,'future/server/src/deletionReporting.ts'),
     resolve(root,'future/cloud/initialMigration.ts'),
     resolve(root,'future/cloud/automaticSync.ts'),
-    resolve(root,'future/server/src/backupHttp.ts')
+    resolve(root,'future/server/src/backupHttp.ts'),
+    resolve(root,'future/server/src/accountHttp.ts')
   ],{cwd:root,stdio:'pipe'})
   const m=require(join(out,'src/core/model.js'))
   const {
@@ -50,6 +51,7 @@ try{
   }=require(join(out,'future/cloud/initialMigration.js'))
   const {createLinkedJournal,runAutomaticSyncOnce}=require(join(out,'future/cloud/automaticSync.js'))
   const {createBackupHttpHandler}=require(join(out,'future/server/src/backupHttp.js'))
+  const {createAccountHttpHandler}=require(join(out,'future/server/src/accountHttp.js'))
   const repository=require(join(out,'future/server/src/repository.js'))
   const admin=require(join(out,'future/server/src/adminRepository.js'))
   const {AuthenticatedCloudService}=require(join(out,'future/server/src/authenticatedService.js'))
@@ -213,6 +215,58 @@ try{
     wxConfig,mockExchange)
   check(!loginAgain.isNewAccount&&loginAgain.userId===wxLogin.userId,
     'Same WeChat identity maps to existing account')
+  // Real signed-login HTTP route through the separate minimal-permission
+  // WeChat identity PostgreSQL role and cloud consent service.
+  const testAuthHttp=createAccountHttpHandler({
+    identityDb:identityPool,authConfig:wxConfig,exchange:mockExchange,
+    login:loginWithWechatCode,account:service,
+    permitLogin:()=>true // localhost-only fixture; production MUST rate limit
+  })
+  const authServer=createServer(testAuthHttp)
+  await new Promise((resolve,reject)=>{
+    authServer.once('error',reject)
+    authServer.listen(0,'127.0.0.1',resolve)
+  })
+  try{
+    const addr=authServer.address()
+    const target='http://127.0.0.1:'+addr.port
+    const body=JSON.stringify({code:'wxhttpcode0001',deviceId:'device0099'})
+    const authReply=await fetch(target+'/v1/auth/wechat',{
+      method:'POST',headers:{'Content-Type':'application/json'},body
+    })
+    check(authReply.status===200,
+      'WeChat HTTP route completes trusted exchange with restricted identity DB')
+    const authenticated=await authReply.json()
+    check(authenticated.ownerId===wxLogin.userId&&
+      authenticated.isNewAccount===false&&authenticated.deviceId==='device0099',
+      'Existing WeChat account resolved from provider identity, not caller owner')
+    check(verifyServerSession(authenticated.accessToken,backupSigningKey,
+      'cuoshi-cloud-backup',nowSeconds())?.sub===wxLogin.userId,
+      'HTTP route only issues service-compatible signed cloud backup token')
+    const headers={Authorization:'Bearer '+authenticated.accessToken}
+    const statusReply=await fetch(target+'/v1/backup/status',{headers})
+    check(statusReply.status===200&&(await statusReply.json()).enabled===false,
+      'WeChat HTTP login does not automatically activate cloud backup')
+    const consentReply=await fetch(target+'/v1/backup/consent',{
+      method:'PUT',headers:{...headers,'Content-Type':'application/json'},
+      body:JSON.stringify({enabled:true,noticeVersion:'privacy-v1'})
+    })
+    check(consentReply.status===200&&(await consentReply.json()).enabled===true,
+      'Explicit HTTP consent updates real PostgreSQL account under trusted token')
+    const offReply=await fetch(target+'/v1/backup/consent',{
+      method:'PUT',headers:{...headers,'Content-Type':'application/json'},
+      body:JSON.stringify({enabled:false,noticeVersion:'privacy-v1'})
+    })
+    check(offReply.status===200&&(await offReply.json()).enabled===false,
+      'HTTP opt-out reverts database consent without deleting records')
+    check((await fetch(target+'/v1/auth/wechat',{
+      method:'POST',headers:{'Content-Type':'application/json'},body
+    })).status===401,'Replay of WeChat one-time code fails under actual SQL uniqueness')
+    check((await fetch(target+'/v1/backup/status',{
+      headers:{Authorization:'Bearer '+staffToken('support0001')}
+    })).status===401,'Staff token audience cannot access user backup status')
+  }finally{await new Promise(resolve=>authServer.close(resolve))}
+
   await assert.rejects(loginWithWechatCode(identityPool,'wecode0001','device0001',
     wxConfig,mockExchange),/wechat_code_already_used/);checks++
   const secondUser=await loginWithWechatCode(identityPool,'othercode0001','device0003',

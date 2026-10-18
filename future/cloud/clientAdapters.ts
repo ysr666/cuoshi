@@ -37,7 +37,7 @@ export type LocalSyncStorage={
 }
 export type SyncHttpRequest={
   url:string
-  method:'GET'|'PUT'
+  method:'GET'|'PUT'|'POST'
   header:Record<string,string>
   data?:unknown
 }

@@ -33,7 +33,9 @@
     "test:future:first-link": "node tests/check-future-initial-migration.mjs",
     "test:future:auto-sync": "node tests/check-future-automatic-sync.mjs",
     "test:future:client-adapters": "node tests/check-future-client-adapters.mjs",
-    "test:future:backup-http": "node tests/check-future-backup-http.mjs"
+    "test:future:backup-http": "node tests/check-future-backup-http.mjs",
+    "test:future:account-http": "node tests/check-future-account-http.mjs",
+    "test:future:wechat-session": "node tests/check-future-wechat-session.mjs"
   },
   "dependencies": {
     "@dcloudio/uni-app": "3.0.0-4080720251210001",

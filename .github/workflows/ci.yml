@@ -42,6 +42,10 @@ jobs:
         run: npm run test:future:client-adapters
       - name: Future backup HTTP route loopback security and client-to-server protocol
         run: npm run test:future:backup-http
+      - name: Future trusted WeChat code login and explicit consent HTTP
+        run: npm run test:future:account-http
+      - name: WeChat session refresh, account switch and consent client contracts
+        run: npm run test:future:wechat-session
       - name: WeChat backup bridge contracts
         run: npm run test:wechat:backup-bridge
       - name: Build H5

@@ -16,10 +16,10 @@ type Backend=Pick<AuthenticatedCloudService,'readBackup'|'upload'>
 type PublicCode='bad_request'|'unauthorized'|'access_denied'|'not_found'|
   'method_not_allowed'|'payload_too_large'|'unsupported_media_type'|
   'cloud_temporarily_unavailable'
-class HttpFailure extends Error{
+export class HttpFailure extends Error{
   constructor(readonly status:number,readonly code:PublicCode){super(code)}
 }
-function answer(res:ServerResponse,status:number,payload?:unknown){
+export function answer(res:ServerResponse,status:number,payload?:unknown){
   res.setHeader('Cache-Control','no-store, private')
   res.setHeader('Pragma','no-cache')
   res.setHeader('X-Content-Type-Options','nosniff')
@@ -36,14 +36,14 @@ function answer(res:ServerResponse,status:number,payload?:unknown){
   res.writeHead(status)
   res.end(json)
 }
-function bearer(req:IncomingMessage):string{
+export function bearer(req:IncomingMessage):string{
   const value=req.headers.authorization
   if(typeof value!=='string'||value.length>2000||
      !/^Bearer [A-Za-z0-9_.-]{90,1800}$/.test(value))
     throw new HttpFailure(401,'unauthorized')
   return value.slice(7)
 }
-async function collectJson(req:IncomingMessage):Promise<unknown>{
+export async function collectJson(req:IncomingMessage,limit=MAX_BODY_BYTES):Promise<unknown>{
   const media=req.headers['content-type']
   if(typeof media!=='string'||
      !/^application\/json(?:\s*;\s*charset\s*=\s*utf-8)?$/i.test(media))
@@ -52,7 +52,7 @@ async function collectJson(req:IncomingMessage):Promise<unknown>{
   if(declared!==undefined&&(!/^\d+$/.test(declared)||
      !Number.isSafeInteger(Number(declared))))
     throw new HttpFailure(400,'bad_request')
-  if(declared!==undefined&&Number(declared)>MAX_BODY_BYTES){
+  if(declared!==undefined&&Number(declared)>limit){
     req.resume()
     throw new HttpFailure(413,'payload_too_large')
   }
@@ -62,7 +62,7 @@ async function collectJson(req:IncomingMessage):Promise<unknown>{
     for await(const part of req){
       const bytes=Buffer.isBuffer(part)?part:Buffer.from(part)
       used+=bytes.byteLength
-      if(used>MAX_BODY_BYTES)throw new HttpFailure(413,'payload_too_large')
+      if(used>limit)throw new HttpFailure(413,'payload_too_large')
       parts.push(bytes)
     }
   }catch(e){
@@ -91,7 +91,7 @@ function requestShape(raw:unknown):UploadRequest{
     throw new HttpFailure(400,'bad_request')
   return data as unknown as UploadRequest
 }
-function errorResponse(error:unknown):HttpFailure{
+export function errorResponse(error:unknown):HttpFailure{
   if(error instanceof HttpFailure)return error
   // Do not expose stack traces, SQL/table names, tokens or private notes.
   if(error instanceof Error){
