@@ -38,13 +38,15 @@ try{
     resolve(root,'future/server/src/wechatIdentity.ts'),
     resolve(root,'future/server/src/accountCancellation.ts'),
     resolve(root,'future/server/src/deletionReporting.ts'),
-    resolve(root,'future/cloud/initialMigration.ts')
+    resolve(root,'future/cloud/initialMigration.ts'),
+    resolve(root,'future/cloud/automaticSync.ts')
   ],{cwd:root,stdio:'pipe'})
   const m=require(join(out,'src/core/model.js'))
   const {
     previewInitialMigration,prepareInitialMigration,verifyInitialMigration,
     INITIAL_MIGRATION_CONFIRMATION
   }=require(join(out,'future/cloud/initialMigration.js'))
+  const {createLinkedJournal,runAutomaticSyncOnce}=require(join(out,'future/cloud/automaticSync.js'))
   const repository=require(join(out,'future/server/src/repository.js'))
   const admin=require(join(out,'future/server/src/adminRepository.js'))
   const {AuthenticatedCloudService}=require(join(out,'future/server/src/authenticatedService.js'))
@@ -395,6 +397,46 @@ try{
     'Second device first-link cannot overwrite version already stored in DB')
   check((await service.readBackup(linkToken)).revision===1,
     'Losing device never increments existing cloud version')
+  // First-link subsequent user edits flow through the *real* restricted
+  // PostgreSQL backup service using the same opt-in automatic sync port.
+  let autoLocal=m.cloneState(importedLocal)
+  let autoJournal=createLinkedJournal(linkUser.userId,linkUser.deviceId,
+    linkedReadback,autoLocal),syncKeySeq=0
+  let loseAutoResponse=false
+  const autoPort={
+    load(){return JSON.parse(JSON.stringify(autoJournal))},
+    save(next){autoJournal=JSON.parse(JSON.stringify(next))},
+    readLocal(){return m.cloneState(autoLocal)},
+    readCloud:()=>service.readBackup(linkToken),
+    newIdempotencyKey:()=>`autoPgReq${String(++syncKeySeq).padStart(8,'0')}`,
+    async upload(req){
+      const decision=await service.upload(linkToken,req)
+      if(loseAutoResponse){loseAutoResponse=false;throw Error('simulated HTTP disconnect')}
+      return decision
+    }
+  }
+  const syncArgs={ownerId:linkUser.userId,deviceId:linkUser.deviceId,consentEnabled:true}
+  m.appendNote(autoLocal,today,'首次迁移后的新增简记')
+  const syncOne=await runAutomaticSyncOnce(autoPort,syncArgs)
+  check(syncOne.kind==='synced'&&syncOne.revision===2,
+    'PostgreSQL auto-sync accepts new local event after first migration')
+  check((await service.readBackup(linkToken)).records.events.length===5,
+    'Incremental snapshot preserves complete prior and new note history')
+  m.setCount(autoLocal,today,5)
+  loseAutoResponse=true
+  const lostReply=await runAutomaticSyncOnce(autoPort,syncArgs)
+  check(lostReply.kind==='retry_later'&&autoJournal.pending!==null,
+    'Network failure AFTER commit keeps same durable pending payload')
+  check((await service.readBackup(linkToken)).revision===3,
+    'PostgreSQL committed before response was lost')
+  const replay=await runAutomaticSyncOnce(autoPort,syncArgs)
+  check(replay.kind==='synced'&&replay.revision===3,
+    'Automatic queue replays identical idempotency key and verifies readback')
+  check((await service.readBackup(linkToken)).revision===3,
+    'Idempotent replay cannot create duplicate cloud revision')
+  check(autoJournal.pending===null&&autoJournal.cursor.revision===3,
+    'Cursor persisted only after complete cloud readback')
+
   const changedDuringUpload=m.cloneState(importedLocal)
   m.appendNote(changedDuringUpload,today,'同步期间新增的本地文字')
   check(verifyInitialMigration({
