@@ -70,7 +70,7 @@ try{
   const origin='https://sync.example.invalid'
   const httpOptions={
     http:{request:async()=>({statusCode:204,data:null})},
-    authentication:{getAccessToken:async()=> 'a'.repeat(32)}
+    ownerId:user,authentication:{getVerifiedSession:async()=>({ownerId:user,accessToken:'a'.repeat(32)})}
   }
   for(const candidate of [
     'http://sync.example.invalid','https://me:pw@sync.example.invalid',
@@ -78,6 +78,7 @@ try{
     'https://localhost','file:///etc/passwd'
   ])throws(()=>createAuthenticatedBackupHttpBridge({...httpOptions,origin:candidate}),
     /origin_invalid/)
+  let sessionOwner=user
   let token='simulated_signed_session_token_0001'
   let offline=false,lostReply=false,damagedRead=false,brokenReceipt=false
   let requests=[],serial=0
@@ -102,8 +103,12 @@ try{
     }
   }
   const bridge=createAuthenticatedBackupHttpBridge({
-    origin,http,authentication:{getAccessToken:async()=>token}
+    origin,http,ownerId:user,authentication:{getVerifiedSession:async()=>({ownerId:sessionOwner,accessToken:token})}
   })
+  throws(()=>createFutureSyncPort({
+    ownerId:other,deviceId:device,storage,currentRecords:()=>local,
+    http:bridge,secureRequestId:()=> 'request0000001'
+  }),/http_cross_account/)
   const args={ownerId:user,deviceId:device,consentEnabled:true}
   function port(){
     return createFutureSyncPort({
@@ -129,6 +134,18 @@ try{
   active=port()
   ok((await runAutomaticSyncOnce(active,args)).kind==='synced',
     'Fresh adapter after restart loads same durable revision cursor')
+  // A user can log out or switch accounts while the old sync port exists.
+  // No old-account notes may be transmitted using the new owner's token.
+  const priorCalls=requests.length
+  sessionOwner=other
+  await rejects(()=>bridge.readCloud(),/session_owner_changed/)
+  await rejects(()=>bridge.upload({
+    baseRevision:1,baseDigest:seed.receipt.digest,
+    idempotencyKey:'accswitch0001',records:local
+  }),/session_owner_changed/)
+  ok(requests.length===priorCalls,
+    'Cross-account session switch is denied before any network operation')
+  sessionOwner=user
   m.appendNote(local,day,'断网时仅保存在本机')
   offline=true
   ok((await runAutomaticSyncOnce(active,args)).kind==='retry_later',
@@ -172,7 +189,7 @@ try{
     }else options.fail({message:'simulated offline'})
   }})
   const wrapped=createAuthenticatedBackupHttpBridge({
-    origin,http:fromUni,authentication:{getAccessToken:async()=>token}
+    origin,http:fromUni,ownerId:user,authentication:{getVerifiedSession:async()=>({ownerId:sessionOwner,accessToken:token})}
   })
   ok((await wrapped.readCloud()).records.days[day].count===5,
     'Injected uni.request successfully adapts to authenticated cloud reads')

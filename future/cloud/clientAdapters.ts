@@ -45,9 +45,14 @@ export type SyncHttpResponse={statusCode:number;data:unknown}
 export type SyncHttpTransport={
   request(input:SyncHttpRequest):Promise<SyncHttpResponse>
 }
-export type SyncAuthentication={getAccessToken():Promise<string>}
+export type SyncAuthentication={
+  /** Trusted client identity manager; the server still independently verifies JWT. */
+  getVerifiedSession():Promise<{ownerId:string;accessToken:string}>
+}
 export type SyncHttpBridgeConfig={
   origin:string
+  /** Bound at login, never taken from a request's user-supplied body. */
+  ownerId:string
   http:SyncHttpTransport
   authentication:SyncAuthentication
 }
@@ -119,11 +124,17 @@ function parseOrigin(raw:string):string{
 const authPattern=/^[A-Za-z0-9_\-\.]+$/
 export function createAuthenticatedBackupHttpBridge(config:SyncHttpBridgeConfig){
   const origin=parseOrigin(config.origin)
+  if(!validId(config.ownerId))throw Error('sync_http_owner_required')
   if(typeof config.http?.request!=='function'||
-     typeof config.authentication?.getAccessToken!=='function')
+     typeof config.authentication?.getVerifiedSession!=='function')
     throw Error('sync_http_adapter_required')
   async function send(method:'GET'|'PUT',data?:unknown):Promise<SyncHttpResponse>{
-    const token=await config.authentication.getAccessToken()
+    const session=await config.authentication.getVerifiedSession()
+    // Critical account-switch boundary: a pending account A snapshot must
+    // never be sent using account B's otherwise valid cloud JWT.
+    if(!session||session.ownerId!==config.ownerId)
+      throw Error('sync_session_owner_changed')
+    const token=session.accessToken
     if(typeof token!=='string'||token.length<20||token.length>8192||
        !authPattern.test(token))throw Error('sync_access_token_missing')
     const response=await config.http.request({
@@ -140,6 +151,7 @@ export function createAuthenticatedBackupHttpBridge(config:SyncHttpBridgeConfig)
     return response
   }
   return {
+    ownerId:config.ownerId,
     async readCloud():Promise<CloudSnapshot|null>{
       const response=await send('GET')
       if(response.statusCode===204||response.statusCode===404)return null
@@ -247,6 +259,8 @@ export function createFutureSyncPort(args:{
   secureRequestId:()=>string
 }):SyncPort{
   const journal=createDurableJournalStore(args)
+  if(args.http?.ownerId!==args.ownerId)
+    throw Error('sync_http_cross_account')
   if(typeof args.currentRecords!=='function'||typeof args.secureRequestId!=='function')
     throw Error('sync_client_dependencies_required')
   return {
