@@ -20,7 +20,7 @@ function launch(wx){
 }
 function stub(){
   const data=new Map(),shared=[],writes=[],removals=[],read=[];
-  let outcome='success',chooser='success',readError=false;
+  let outcome='success',chooser='success',readError=false,statMode='normal';
   const manager={
     writeFileSync(file,body,encoding){
       assert.equal(encoding,'utf8');
@@ -32,6 +32,13 @@ function stub(){
       if(readError)throw Error('file permission denied');
       if(!data.has(file))throw Error('missing file');
       return data.get(file);
+    },
+    statSync(file,recursive){
+      assert.equal(recursive,false);
+      if(statMode==='error')throw Error('stat not supported')
+      if(statMode==='oversized')return {size:16*1024*1024}
+      if(statMode==='malformed')return {}
+      return {size:Buffer.byteLength(data.get(file)||'','utf8')}
     }
   };
   const wx={
@@ -51,11 +58,12 @@ function stub(){
       if(chooser==='cancel')return options.fail({errMsg:'chooseMessageFile:fail cancel'});
       if(chooser==='permission')return options.fail({errMsg:'chooseMessageFile:fail permission denied'});
       if(chooser==='oversized')return options.success({tempFiles:[{path:'chat://file.json',size:16*1024*1024}]});
+      if(chooser==='missingSize')return options.success({tempFiles:[{path:'chat://file.json'}]});
       options.success({tempFiles:[{path:'chat://file.json',size:128}]});
     }
   };
   return {wx,data,shared,writes,removals,read,
-    setShare:v=>outcome=v,setChooser:v=>chooser=v,setReadError:v=>readError=v};
+    setShare:v=>outcome=v,setChooser:v=>chooser=v,setReadError:v=>readError=v,setStatMode:v=>statMode=v};
 }
 
 (async()=>{
@@ -101,7 +109,19 @@ function stub(){
  await assert.rejects(io.selectBackupFile(),/选择备份文件失败/);checks++;
  env.setChooser('oversized');
  await assert.rejects(io.selectBackupFile(),/15 MB/);checks++;
- env.setChooser('success');env.setReadError(true);
+ env.setChooser('success');env.setStatMode('oversized');
+ const beforeOversizedRead=env.read.length;
+ await assert.rejects(io.selectBackupFile(),/15 MB/);checks++;
+ ok(env.read.length===beforeOversizedRead,'Oversized actual file is refused before sync read despite smaller picker metadata');
+ env.setChooser('missingSize');env.setStatMode('normal');
+ ok((await io.selectBackupFile())===payload,'Missing picker size can safely use filesystem stat metadata');
+ env.setStatMode('error');
+ const beforeUnknownRead=env.read.length;
+ await assert.rejects(io.selectBackupFile(),/无法确认备份文件大小/);checks++;
+ ok(env.read.length===beforeUnknownRead,'Unknown file length never triggers unbounded JSON read');
+ env.setChooser('success'); // Client with picker size but no stat is still compatible.
+ ok((await io.selectBackupFile())===payload,'Older file managers may fall back to valid picker size');
+ env.setStatMode('normal');env.setReadError(true);
  await assert.rejects(io.selectBackupFile(),/permission denied/);checks++;
  env.setReadError(false);
  const noChooser=stub();

@@ -74,7 +74,27 @@ export async function selectBackupFile():Promise<string>{
   // #ifdef MP-WEIXIN
   if(typeof wx!=='undefined'&&wx.chooseMessageFile)return new Promise((resolve,reject)=>{
     wx.chooseMessageFile({count:1,type:'file',extension:['json'],success:(r:any)=>{
-      try{const f=r.tempFiles?.[0];if(!f)throw Error('没有选择文件');if(f.size>15*1024*1024)throw Error('备份文件超过 15 MB');resolve(wx.getFileSystemManager().readFileSync(f.path,'utf8'))}catch(e){reject(e)}
+      try{
+        const file=r.tempFiles?.[0]
+        if(!file||typeof file.path!=='string'||!file.path)throw Error('没有选择文件')
+        const limit=15*1024*1024
+        const validSize=(n:any):n is number=>Number.isSafeInteger(n)&&n>=0
+        // The message-file picker normally supplies bytes, but older clients
+        // may omit size. Prefer checking filesystem metadata before allocating
+        // a potentially enormous plaintext JSON string.
+        if(validSize(file.size)&&file.size>limit)throw Error('备份文件超过 15 MB')
+        const fs=wx.getFileSystemManager()
+        let diskSize:unknown
+        if(typeof fs.statSync==='function'){
+          try{diskSize=fs.statSync(file.path,false)?.size}catch{ /* picker size may still be available */ }
+        }
+        if(validSize(diskSize)&&diskSize>limit)throw Error('备份文件超过 15 MB')
+        if(!validSize(file.size)&&!validSize(diskSize))throw Error('无法确认备份文件大小，请升级微信或换一个文件重试')
+        const body=fs.readFileSync(file.path,'utf8')
+        if(typeof body!=='string')throw Error('备份文件读取格式不正确')
+        if(body.length>limit)throw Error('备份文件超过 15 MB')
+        resolve(body)
+      }catch(e){reject(e)}
     },fail:(error:any)=>{
       const msg=String(error?.errMsg||error?.message||'')
       reject(Error(/cancel|取消/i.test(msg)?'已取消选择':'选择备份文件失败，请检查微信聊天文件与访问权限'))
