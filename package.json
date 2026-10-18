@@ -31,7 +31,8 @@
     "test:future:auth": "node tests/check-future-auth.mjs",
     "test:future:recovery": "node tests/check-future-cloud-recovery.mjs",
     "test:future:first-link": "node tests/check-future-initial-migration.mjs",
-    "test:future:auto-sync": "node tests/check-future-automatic-sync.mjs"
+    "test:future:auto-sync": "node tests/check-future-automatic-sync.mjs",
+    "test:future:client-adapters": "node tests/check-future-client-adapters.mjs"
   },
   "dependencies": {
     "@dcloudio/uni-app": "3.0.0-4080720251210001",

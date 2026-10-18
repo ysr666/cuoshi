@@ -2,7 +2,7 @@
  * Future v0.5 opt-in automatic cloud backup. Pure orchestration around an
  * injected transport and durable journal: NEVER imported by the v0.4 app.
  *
- * Calls sharing the same adapter use an in-process single-flight lock; a
+ * Calls for the same account/device use an in-process single-flight lock; a
  * production client must also serialize instances using the same durable
  * journal across page/app lifecycles and isolate journals by account/device.
  */
@@ -162,15 +162,18 @@ function receiptMatches(receipt:UploadReceipt,cloud:CloudSnapshot,p:Pending,owne
  * scheduled retry. Caller must persist journal BEFORE attempting any upload.
  * Never resets the first-link cursor or silently merges divergent devices.
  */
-const inFlight=new WeakSet<SyncPort>()
+const inFlightAccounts=new Set<string>()
 export async function runAutomaticSyncOnce(port:SyncPort,args:{
   ownerId:string;deviceId:string;consentEnabled:boolean
 }):Promise<SyncResult>{
-  if(inFlight.has(port))return {kind:'retry_later',reason:'sync_already_running'}
-  inFlight.add(port)
-  try{
   const {ownerId,deviceId,consentEnabled}=args
   checkOwner(ownerId,deviceId,consentEnabled)
+  // Multiple independently constructed adapters in one app lifetime must
+  // coordinate, not just repeated calls on the very same object.
+  const flightKey=ownerId+':'+deviceId
+  if(inFlightAccounts.has(flightKey))return {kind:'retry_later',reason:'sync_already_running'}
+  inFlightAccounts.add(flightKey)
+  try{
   const state=port.load()
   if(!state)return {kind:'requires_first_link'}
   verifyJournal(state,ownerId,deviceId)
@@ -178,7 +181,10 @@ export async function runAutomaticSyncOnce(port:SyncPort,args:{
   let cloud:CloudSnapshot|null
   try{cloud=await port.readCloud()}
   catch{return {kind:'retry_later',reason:'cloud_unavailable'} }
-  if(!verifyCloud(cloud,ownerId))return {kind:'manual_conflict',reason:'cloud_missing_after_link'}
+  let cloudVerified=false
+  try{cloudVerified=verifyCloud(cloud,ownerId)}
+  catch{return {kind:'manual_conflict',reason:'cloud_integrity_invalid'}}
+  if(!cloudVerified||!cloud)return {kind:'manual_conflict',reason:'cloud_missing_after_link'}
   if(cloud.revision!==state.cursor.revision||cloud.digest!==state.cursor.digest)
     return {kind:'manual_conflict',reason:'cloud_revision_changed'}
   const current=port.readLocal()
@@ -196,6 +202,6 @@ export async function runAutomaticSyncOnce(port:SyncPort,args:{
   durable(port,staged)
   return await submit(port,staged,ownerId)
   }finally{
-    inFlight.delete(port)
+    inFlightAccounts.delete(flightKey)
   }
 }

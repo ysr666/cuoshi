@@ -70,3 +70,7 @@ SQL 的审计禁止修改触发器只是**附加防线**，拥有数据库所有
 ### 全设备会话强制退出（独立实现）
 
 新增 `sql/006_global_session_revocation.sql` 和 `AuthenticatedCloudService.logoutAllUser`。账户 `session_generation` 在数据库持久化；普通用户已验证会话可以强制使所有旧设备令牌失效。登录通过可信微信交换重新获取最新代际号，关键云端写入/删除事务在用户行锁下二次核对，避免等待中的旧设备写回。**该代码无正式微信身份源、无公开 HTTP API，不能单凭数据库检查声明可生产部署。**
+
+## v0.5 客户端云同步适配边界（未部署）
+
+`../cloud/initialMigration.ts`、`automaticSync.ts` 与 `clientAdapters.ts` 已具备首次迁移、断网与幂等重试、账号分区本地队列、注入式 HTTPS / `uni.request` 的合同验证。**当前不存在已启用的 HTTP Listener、生产域名、已登录的真实微信账号或实际自动上传**。后端 `AuthenticatedCloudService` 仍只可在正式微信身份核验和严格授权服务端路由之后被调用；不能把任意客户端传来的 `userId` 作为 `VerifiedUserSession`。正式上云前需连接真实网络、安全审查与跨设备验收。
