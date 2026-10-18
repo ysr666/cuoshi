@@ -29,7 +29,8 @@
     "test:future:cloud": "node tests/check-future-cloud-contracts.mjs",
     "test:future:isolation": "node tests/check-future-cloud-isolation.mjs",
     "test:future:auth": "node tests/check-future-auth.mjs",
-    "test:future:recovery": "node tests/check-future-cloud-recovery.mjs"
+    "test:future:recovery": "node tests/check-future-cloud-recovery.mjs",
+    "test:future:first-link": "node tests/check-future-initial-migration.mjs"
   },
   "dependencies": {
     "@dcloudio/uni-app": "3.0.0-4080720251210001",
