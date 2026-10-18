@@ -130,7 +130,7 @@ async function submit(port:SyncPort,state:SyncJournal,ownerId:string):Promise<Sy
   let verified=false
   try{verified=verifyCloud(cloud,ownerId)}
   catch{verified=false}
-  if(!verified||!receiptMatches(receipt,cloud!,pending,ownerId)){
+  if(!cloud||!verified||!receiptMatches(receipt,cloud,pending,ownerId)){
     // An inconsistent server readback is NOT transient network downtime:
     // halt unattended retries until the owner has reconciled the snapshot.
     state.pending={...pending,blocked:true}
