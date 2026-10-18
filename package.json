@@ -27,6 +27,8 @@
     "test:wechat:no-implicit-preload": "node tests/check-wechat-no-implicit-preload.cjs",
     "test:h5:release": "node tests/check-h5-release-readiness.cjs",
     "test:h5:storage": "node tests/check-h5-write-verification.cjs",
+    "qa:wechat:fixtures": "node tests/generate-wechat-qa-fixtures.mjs",
+    "qa:wechat:fixtures:large": "node tests/generate-wechat-qa-fixtures.mjs --oversized",
     "test:release:scope": "node tests/check-release-scope.cjs"
   },
   "dependencies": {
@@ -60,6 +62,7 @@
     "@intlify/vue-devtools": "9.14.5",
     "esbuild": "0.25.12",
     "postcss-selector-parser": "7.1.6",
-    "unimport": "4.1.2"
+    "unimport": "4.1.2",
+    "@babel/core": "7.29.6"
   }
 }

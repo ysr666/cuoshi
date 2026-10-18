@@ -1,13 +1,13 @@
 {
   "source": "npm audit --omit=dev --registry=https://registry.npmjs.org --json",
   "date": "2026-10-18",
-  "status": "unresolved_after_compatible_toolchain_overrides",
+  "status": "unresolved_after_official_babel_7_29_6_patch_manual_severity_review",
   "vulnerabilities": {
     "critical": 0,
-    "high": 13,
+    "high": 19,
     "moderate": 0,
-    "low": 7,
-    "total": 20
+    "low": 0,
+    "total": 19
   },
   "compatibility_overrides": {
     "ws": "8.22.0",
@@ -18,25 +18,24 @@
     "adm-zip": "0.6.1"
   },
   "observation": {
-    "source": "Mac official npm Registry audit; verify via CI artifact",
-    "sourceBranch": "security/v04-toolchain-patches-1018",
-    "note": "20 unresolved affected packages; not release acceptance"
+    "source": "Official npm Registry audit after @babel/core 7.29.6 lockfile override; revalidated on GitHub CI",
+    "sourceBranch": "security/v04-babel-1028",
+    "note": "19 remaining; 6 propagated DCloud packages changed display from low to high because Babel low root disappeared. No new GHSA identity or new affected package; release still BLOCKED."
   },
   "knownAffectedPackages": {
-    "@babel/core": "low",
     "@dcloudio/uni-app": "high",
     "@dcloudio/uni-cli-shared": "high",
     "@dcloudio/uni-cloud": "high",
     "@dcloudio/uni-components": "high",
-    "@dcloudio/uni-console": "low",
+    "@dcloudio/uni-console": "high",
     "@dcloudio/uni-h5": "high",
     "@dcloudio/uni-h5-vite": "high",
     "@dcloudio/uni-h5-vue": "high",
-    "@dcloudio/uni-mp-compiler": "low",
-    "@dcloudio/uni-mp-vite": "low",
-    "@dcloudio/uni-mp-weixin": "low",
-    "@dcloudio/uni-push": "low",
-    "@dcloudio/uni-stat": "low",
+    "@dcloudio/uni-mp-compiler": "high",
+    "@dcloudio/uni-mp-vite": "high",
+    "@dcloudio/uni-mp-weixin": "high",
+    "@dcloudio/uni-push": "high",
+    "@dcloudio/uni-stat": "high",
     "@vue/server-renderer": "high",
     "braces": "high",
     "chokidar": "high",
@@ -45,7 +44,6 @@
     "vue": "high"
   },
   "knownDirectAdvisoryUrls": [
-    "https://github.com/advisories/GHSA-4x5r-pxfx-6jf8",
     "https://github.com/advisories/GHSA-g2v6-rqmx-r4w6",
     "https://github.com/advisories/GHSA-vfj7-8cjw-p6xm"
   ]

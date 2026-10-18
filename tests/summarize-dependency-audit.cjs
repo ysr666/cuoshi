@@ -93,11 +93,19 @@ function selfTest(){
   assert.deepEqual(summarize(swapped).newlyAffectedPackages,['unknown-unreviewed-package'])
   assert.equal(summarize(swapped).riskRegression,true)
   const escalated=make()
-  const lowName=Object.keys(escalated.vulnerabilities).find(name=>escalated.vulnerabilities[name].severity==='low'&&escalated.vulnerabilities[name].via.length===0)
-  escalated.vulnerabilities[lowName].severity='moderate'
-  escalated.metadata.vulnerabilities.low--
-  escalated.metadata.vulnerabilities.moderate++
-  assert.equal(summarize(escalated).severityEscalations[0].name,lowName)
+  // A new, fully patched inventory may have zero lows; the regression check
+  // must still test escalating an existing noncritical package.
+  const candidate=Object.keys(escalated.vulnerabilities)
+    .find(name=>escalated.vulnerabilities[name].severity==='low'&&escalated.vulnerabilities[name].via.length===0)
+    || Object.keys(escalated.vulnerabilities)
+      .find(name=>escalated.vulnerabilities[name].severity!=='critical'&&escalated.vulnerabilities[name].via.length===0)
+  assert.ok(candidate,'Need at least one noncritical baseline package to test an escalation')
+  const prior=escalated.vulnerabilities[candidate].severity
+  const raised={low:'moderate',moderate:'high',high:'critical'}[prior]
+  escalated.vulnerabilities[candidate].severity=raised
+  escalated.metadata.vulnerabilities[prior]--
+  escalated.metadata.vulnerabilities[raised]++
+  assert.equal(summarize(escalated).severityEscalations[0].name,candidate)
   assert.equal(summarize(escalated).riskRegression,true)
   assert.throws(()=>summarize({error:{code:'ENOTFOUND'}}),/inconclusive/)
   assert.throws(()=>summarize({metadata:{vulnerabilities:{critical:0}},vulnerabilities:{}}),/invalid_counts/)

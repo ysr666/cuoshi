@@ -31,6 +31,8 @@ jobs:
         run: npm test
       - name: WeChat backup bridge contracts
         run: npm run test:wechat:backup-bridge
+      - name: Synthetic iPhone QA JSON fixture validation (no user data)
+        run: node tests/generate-wechat-qa-fixtures.mjs "$RUNNER_TEMP/cuoshi-fixtures"
       - name: Build H5
         run: npm run build:h5
       - name: Build WeChat Mini Program
