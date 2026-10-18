@@ -37,9 +37,14 @@ try{
     resolve(root,'future/server/src/authenticatedService.ts'),
     resolve(root,'future/server/src/wechatIdentity.ts'),
     resolve(root,'future/server/src/accountCancellation.ts'),
-    resolve(root,'future/server/src/deletionReporting.ts')
+    resolve(root,'future/server/src/deletionReporting.ts'),
+    resolve(root,'future/cloud/initialMigration.ts')
   ],{cwd:root,stdio:'pipe'})
   const m=require(join(out,'src/core/model.js'))
+  const {
+    previewInitialMigration,prepareInitialMigration,verifyInitialMigration,
+    INITIAL_MIGRATION_CONFIRMATION
+  }=require(join(out,'future/cloud/initialMigration.js'))
   const repository=require(join(out,'future/server/src/repository.js'))
   const admin=require(join(out,'future/server/src/adminRepository.js'))
   const {AuthenticatedCloudService}=require(join(out,'future/server/src/authenticatedService.js'))
@@ -343,6 +348,62 @@ try{
     'Concurrent first snapshots must serialize')
   check(firstRace.filter(x=>x.kind==='conflict').length===1,
     'Initial competing client must not silently overwrite another upload')
+  // v0.5 first-link: actual authenticated PostgreSQL path, not only the
+  // in-memory CAS simulator. No existing user record may be overwritten.
+  const linkUser={userId:'account0004',deviceId:'device0040'}
+  const linkToken=userToken(linkUser.userId,linkUser.deviceId)
+  await service.provision(linkToken)
+  const importedLocal=m.fresh()
+  m.setCount(importedLocal,yesterday,0)
+  m.appendNote(importedLocal,yesterday,'测试旧简记正文，后来重新看待')
+  m.editNote(importedLocal,yesterday,importedLocal.days[yesterday].notes[0].id,
+    '重新看待后的简记')
+  m.setCount(importedLocal,today,2)
+  check((await service.status(linkToken)).enabled===false,
+    'Newly linked cloud account requires explicit consent')
+  await service.setConsent(linkToken,true,'privacy-v1')
+  const firstLinkPreview=previewInitialMigration(importedLocal,
+    await service.readBackup(linkToken),linkUser.userId)
+  check(firstLinkPreview.status==='upload_local'&&
+    !JSON.stringify(firstLinkPreview).includes('简记正文'),
+    'First-link preview permits populated local with no cloud and leaks no text')
+  const firstLinkPrepared=prepareInitialMigration({
+    currentLocal:importedLocal,currentCloud:null,preview:firstLinkPreview,
+    authenticatedOwnerId:linkUser.userId,authenticatedDeviceId:linkUser.deviceId,
+    cloudConsentEnabled:true,confirmation:INITIAL_MIGRATION_CONFIRMATION,
+    idempotencyKey:'firstlink0001'
+  })
+  check(firstLinkPrepared.request.records.events.length===4,
+    'Migration includes every old event and not only current values')
+  const linked=await service.upload(linkToken,firstLinkPrepared.request)
+  check(linked.kind==='accepted'&&linked.receipt.revision===1,
+    'First-link insert-only CAS commits through restricted backup DB role')
+  const linkedReadback=await service.readBackup(linkToken)
+  check(verifyInitialMigration({
+    prepared:firstLinkPrepared,currentLocal:importedLocal,
+    receipt:linked.receipt,readback:linkedReadback,
+    authenticatedOwnerId:linkUser.userId
+  }).status==='synced','Read-back proof confirms complete cloud durability')
+  check(linkedReadback.records.days[yesterday].count===0&&
+    linkedReadback.records.events[1].newText.includes('旧简记正文'),
+    'Postgres JSONB preserved explicit zero and previous private note text')
+  const secondLinkToken=userToken(linkUser.userId,'device0041')
+  const lostRace=await service.upload(secondLinkToken,{
+    ...firstLinkPrepared.request,idempotencyKey:'firstlink0002'
+  })
+  check(lostRace.kind==='conflict'&&lostRace.reason==='stale_revision',
+    'Second device first-link cannot overwrite version already stored in DB')
+  check((await service.readBackup(linkToken)).revision===1,
+    'Losing device never increments existing cloud version')
+  const changedDuringUpload=m.cloneState(importedLocal)
+  m.appendNote(changedDuringUpload,today,'同步期间新增的本地文字')
+  check(verifyInitialMigration({
+    prepared:firstLinkPrepared,currentLocal:changedDuringUpload,
+    receipt:linked.receipt,readback:linkedReadback,
+    authenticatedOwnerId:linkUser.userId
+  }).status==='local_changed_after_upload',
+    'Local edits while uploading remain pending rather than falsely synced')
+
   const oldDeviceA=userToken(freshUser.userId,freshUser.deviceId)
   const oldDeviceB=userToken(freshUser.userId,'device0005')
   check((await service.status(oldDeviceB)).enabled,'Second device was initially authorized')
