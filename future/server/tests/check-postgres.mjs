@@ -43,7 +43,8 @@ try{
     resolve(root,'future/cloud/automaticSync.ts'),
     resolve(root,'future/server/src/backupHttp.ts'),
     resolve(root,'future/server/src/accountHttp.ts'),
-    resolve(root,'future/server/src/cloudHttpHost.ts')
+    resolve(root,'future/server/src/cloudHttpHost.ts'),
+    resolve(root,'future/server/src/loginRateLimiter.ts')
   ],{cwd:root,stdio:'pipe'})
   const m=require(join(out,'src/core/model.js'))
   const {
@@ -53,6 +54,7 @@ try{
   const {createLinkedJournal,runAutomaticSyncOnce}=require(join(out,'future/cloud/automaticSync.js'))
   const {createBackupHttpHandler}=require(join(out,'future/server/src/backupHttp.js'))
   const {listenCloudLoopbackForQa}=require(join(out,'future/server/src/cloudHttpHost.js'))
+  const {createPostgresWechatLoginLimiter}=require(join(out,'future/server/src/loginRateLimiter.js'))
   const repository=require(join(out,'future/server/src/repository.js'))
   const admin=require(join(out,'future/server/src/adminRepository.js'))
   const {AuthenticatedCloudService}=require(join(out,'future/server/src/authenticatedService.js'))
@@ -102,6 +104,11 @@ try{
   const generationMigration=readFileSync(new URL('../sql/006_global_session_revocation.sql',import.meta.url),'utf8')
     .replaceAll('__SCHEMA__','"'+schema+'"').replaceAll('__BACKUP_ROLE__','"'+backupRole+'"')
   await pool.query(generationMigration)
+  const loginLimitMigration=readFileSync(new URL('../sql/007_login_rate_limits.sql',import.meta.url),'utf8')
+    .replaceAll('__SCHEMA__','"'+schema+'"')
+    .replaceAll('__AUTH_ROLE__','"'+identityRole+'"')
+    .replaceAll('__MAINTENANCE_ROLE__','"'+maintenanceRole+'"')
+  await pool.query(loginLimitMigration)
   function roleUrl(role,secret){
     const url=new URL(source)
     url.username=role
@@ -134,6 +141,13 @@ try{
   await attempt(adminPool,'SELECT * FROM cloud_upload_receipts')
   await attempt(adminPool,'INSERT INTO cloud_admin_audit(staff_id,owner_id,day_key,decision,reason) VALUES(\'x\',\'y\',\'2026-10-16\',\'allow\',\'fake\')')
   await attempt(backupPool,"SELECT * FROM cloud_read_day('support0001',TRUE,'account0001','2026-10-16','ticket0001')")
+  await attempt(identityPool,'SELECT * FROM cloud_wechat_login_rate_windows')
+  await attempt(backupPool,'SELECT * FROM cloud_wechat_login_rate_windows')
+  await attempt(adminPool,'SELECT * FROM cloud_wechat_login_rate_windows')
+  await attempt(reportingPool,'SELECT * FROM cloud_wechat_login_rate_windows')
+  await attempt(identityPool,'DELETE FROM cloud_wechat_login_rate_windows')
+  await attempt(identityPool,'SELECT cloud_prune_wechat_login_windows()')
+  await attempt(backupPool,"SELECT cloud_take_wechat_login_slot('"+'f'.repeat(64)+"')")
   await attempt(identityPool,'SELECT * FROM cloud_snapshots')
   await attempt(identityPool,'SELECT * FROM cloud_staff')
   await attempt(identityPool,'SELECT * FROM cloud_admin_audit')
@@ -216,13 +230,42 @@ try{
     wxConfig,mockExchange)
   check(!loginAgain.isNewAccount&&loginAgain.userId===wxLogin.userId,
     'Same WeChat identity maps to existing account')
+  // Cross-worker limiter: independent Node objects share an atomic SQL quota.
+  const limitKey=crypto.randomBytes(32)
+  const permitLogin=createPostgresWechatLoginLimiter({db:identityPool,peerHmacKey:limitKey})
+  const limiter2=createPostgresWechatLoginLimiter({db:identityPool,peerHmacKey:limitKey})
+  const fakeRequest=(peer,forwarded='203.0.113.21')=>({
+    socket:{remoteAddress:peer},headers:{'x-forwarded-for':forwarded}
+  })
+  const workerSlots=await Promise.all(Array.from({length:12},(_,index)=>
+    (index%2?limiter2:permitLogin)(fakeRequest('192.0.2.42'))))
+  check(workerSlots.every(x=>x===true),
+    'Two worker instances consume exactly 12 concurrency-safe same-IP DB slots')
+  const globalBefore=(await pool.query(`SELECT attempts FROM cloud_wechat_login_rate_windows
+    WHERE scope='global'`)).rows[0].attempts
+  check(!await permitLogin(fakeRequest('192.0.2.42')),
+    'Thirteenth same-IP login is denied under durable database quota')
+  const globalAfter=(await pool.query(`SELECT attempts FROM cloud_wechat_login_rate_windows
+    WHERE scope='global'`)).rows[0].attempts
+  check(globalAfter===globalBefore,
+    'Denied peer login atomically rolls back its global quota increment')
+  check(await limiter2(fakeRequest('192.0.2.43','192.0.2.42')),
+    'Different socket peer still allowed despite forged forwarded header')
+  check(!await permitLogin(fakeRequest('invalid-ip')),
+    'Malformed remote address never consumes shared limit')
+  check((await pool.query('SELECT count(*) AS n FROM cloud_wechat_login_rate_windows'))
+    .rows[0].n==='3','Only one shared global and two keyed peer windows persisted')
+  check(!JSON.stringify((await pool.query('SELECT * FROM cloud_wechat_login_rate_windows')).rows)
+    .includes('192.0.2.42'),'Database never stores raw client IPs')
+  check((await maintenancePool.query('SELECT cloud_prune_wechat_login_windows() AS deleted'))
+    .rows[0].deleted===0,'Maintenance role can prune only expired windows')
   // Real signed-login HTTP route through the separate minimal-permission
   // WeChat identity PostgreSQL role and cloud consent service.
   let httpWechatTokenForRedactionCheck
   const qa=await listenCloudLoopbackForQa({
     account:{identityDb:identityPool,authConfig:wxConfig,exchange:mockExchange,
       login:loginWithWechatCode,account:service,
-      permitLogin:()=>true // localhost-only fixture; production MUST rate limit
+      permitLogin // real role-restricted PostgreSQL shared rate limiter
     },
     backup:service
   },'SYNTHETIC_TEST_ONLY')
@@ -302,6 +345,18 @@ try{
     check((await fetch(target+'/v1/auth/wechat',{
       method:'POST',headers:{'Content-Type':'application/json'},body
     })).status===401,'Replay of WeChat one-time code fails under actual SQL uniqueness')
+    for(let n=0;n<9;n++){
+      const blocked=await fetch(target+'/v1/auth/wechat',{
+        method:'POST',headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({code:'rejectme0001',deviceId:'device0099'})
+      })
+      if(blocked.status!==401)throw Error('unexpected_login_limit_before_per_peer_cap')
+    }
+    check((await fetch(target+'/v1/auth/wechat',{
+      method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({code:'rejectme0001',deviceId:'device0099'})
+    })).status===429,
+      'Real combined HTTP login denies 13th same-peer attempt before WeChat exchange')
     check((await fetch(target+'/v1/backup/status',{
       headers:{Authorization:'Bearer '+staffToken('support0001')}
     })).status===401,'Staff token audience cannot access user backup status')

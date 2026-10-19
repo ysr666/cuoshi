@@ -48,7 +48,8 @@
     "typecheck:future:cloud-ui": "vue-tsc --noEmit -p future/tsconfig.ui.json",
     "build:future:cloud-ui": "vite build --config future/preview/vite.config.ts",
     "test:future:cloud-ui": "node tests/check-future-cloud-ui.cjs",
-    "test:future:http-host": "node tests/check-future-cloud-http-host.mjs"
+    "test:future:http-host": "node tests/check-future-cloud-http-host.mjs",
+    "test:future:login-rate": "node tests/check-future-login-rate-limiter.mjs"
   },
   "dependencies": {
     "@dcloudio/uni-app": "3.0.0-4080720251210001",

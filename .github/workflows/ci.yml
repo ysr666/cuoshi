@@ -58,6 +58,8 @@ jobs:
         run: npm run test:future:account-http
       - name: Composed localhost-only cloud HTTP listener and route isolation
         run: npm run test:future:http-host
+      - name: Persistent SQL login limiter HMAC, socket IP and fail-closed contracts
+        run: npm run test:future:login-rate
       - name: WeChat session refresh, account switch and consent client contracts
         run: npm run test:future:wechat-session
       - name: Future cloud settings Vue typecheck
