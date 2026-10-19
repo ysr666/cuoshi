@@ -42,6 +42,8 @@ jobs:
         run: npm run test:future:first-link-ui
       - name: Non-destructive two-device cloud history difference review
         run: npm run test:future:conflict-review
+      - name: Cloud-default automatic uploads, offline notice and reconnect replay
+        run: npm run test:future:cloud-first
       - name: Durable opt-in background sync, retry and cross-device conflict
         run: npm run test:future:auto-sync
       - name: Future authenticated uni.request and durable local journal adapters
@@ -80,7 +82,7 @@ jobs:
         uses: browser-actions/setup-chrome@v2
       - name: Build isolated v0.5 cloud settings demo (synthetic data only)
         run: npm run build:future:cloud-ui
-      - name: Test v0.5 opt-in cloud settings user flow in Chrome
+      - name: Test v0.5 cloud-default auto sync and offline notice in Chrome
         run: npm run test:future:cloud-ui
       - name: H5 layout, typography, touch feedback and notes
         env:

@@ -1,93 +1,83 @@
-import {createApp,defineComponent,h} from 'vue'
-import CloudBackupPanel from '../ui/CloudBackupPanel.vue'
-import {createCloudSettingsController} from '../ui/cloudSettingsController'
-import type {CloudSettingsAuth,CloudSettingsWork} from '../ui/cloudSettingsController'
+/** Cloud-first product-direction preview. Synthetic data and transport only. */
+import {createApp,defineComponent,h,ref} from 'vue'
+import CloudFirstPanel from '../ui/CloudFirstPanel.vue'
+import {createCloudFirst,type CloudState} from '../cloud/cloudFirst'
+import {CloudContractSimulator} from '../cloud/snapshotContract'
+import {createDurableJournalStore} from '../cloud/clientAdapters'
+import {fresh,setCount,appendNote,cloneState,localDate,type Records} from '../../src/core/model'
+import {sha256} from '../../src/core/backup'
+import {stableJson} from '../cloud/stableJson'
 
-const dummyRecords={enabled:false,hasStoredBackup:false,revision:null,lastSuccessAt:null}
-let sessionActive=false,consent=false,cloudSaved=false,linked=false,unsent=false,offline=false,conflict=false
-let currentAccount='account0001'
-const auth:CloudSettingsAuth={
-  async getVerifiedSession(){
-    if(offline)throw Error('wechat_session_cloud_unavailable')
-    sessionActive=true
-    return {ownerId:currentAccount,accessToken:'this_is_a_deliberate_fake_preview_token_never_valid_in_cloud'}
-  },
-  async getStatus(){
-    if(offline)throw Error('wechat_session_cloud_unavailable')
-    return {...dummyRecords,enabled:consent,hasStoredBackup:cloudSaved,
-      revision:cloudSaved?1:null,lastSuccessAt:cloudSaved?'2026-10-19 08:00 · 模拟':null}
-  },
-  async setCloudConsent(enabled){
-    if(offline)throw Error('wechat_session_cloud_unavailable')
-    consent=enabled
-    return auth.getStatus()
-  },
-  async logoutCurrentDevice(){
-    if(offline)throw Error('wechat_session_logout_not_confirmed')
-    sessionActive=false
-  }
+const principal={userId:'account0001',deviceId:'device0001',cloudBackupEnabled:false}
+const cloud=new CloudContractSimulator()
+const entries=new Map<string,string>()
+const storage={
+ getStorageSync:(key:string)=>entries.get(key)??'',
+ setStorageSync:(key:string,value:string)=>{entries.set(key,value)}
 }
-const work:CloudSettingsWork={
-  async reviewFirstBackup(){
-    return {
-      status:cloudSaved?'already_on_cloud':'upload_local',
-      ownerId:currentAccount,localDigest:'a'.repeat(64),
-      cloudRevision:cloudSaved?1:0,cloudDigest:cloudSaved?'a'.repeat(64):null,
-      localRecordedDays:4,localEventCount:8,cloudRecordedDays:cloudSaved?4:0,
-      cloudEventCount:cloudSaved?8:0
-    }
-  },
-  async reviewConflict(){
-    if(offline)throw Error('wechat_session_cloud_unavailable')
-    return {
-      kind:conflict?'different':'identical',
-      ownerId:currentAccount,
-      cloudRevision:cloudSaved?2:null,
-      localDigest:'b'.repeat(64),cloudDigest:cloudSaved?'c'.repeat(64):null,
-      historyRelation:conflict?'diverged':'identical',
-      localEvents:10,cloudEvents:9,localDays:5,cloudDays:5,
-      differingDays:conflict?2:0,truncatedDays:false,
-      days:conflict?[
-        {date:'2026-10-18',kind:'different',localCount:3,cloudCount:2,
-          localNotes:1,cloudNotes:2,notesDiffer:true},
-        {date:'2026-10-17',kind:'local_only',localCount:0,cloudCount:null,
-          localNotes:1,cloudNotes:0,notesDiffer:true}
-      ]:[]
-    } as import('../cloud/conflictReview').ConflictReview
-  },
-  hasVerifiedLink:owner=>linked&&owner===currentAccount,
-  hasUnsentChanges:()=>unsent,
-  async firstBackup(){
-    if(offline)return {kind:'retry_later',reason:'offline'}
-    if(conflict)return {kind:'manual_conflict',reason:'stale_revision'}
-    cloudSaved=true;linked=true;unsent=false
-    return {kind:'synced',revision:1}
-  },
-  async syncNow(){
-    if(offline)return {kind:'retry_later',reason:'offline'}
-    if(conflict)return {kind:'manual_conflict',reason:'stale_revision'}
-    unsent=false
-    return {kind:'synced',revision:1}
-  }
+const journal=createDurableJournalStore({storage,
+ ownerId:principal.userId,deviceId:principal.deviceId})
+let local:Records=fresh(),internet=true,consent=false
+let serial=0,submissions=0
+const view=ref<CloudState>({
+ phase:'notice',message:'开始使用前，请了解记录与简记将自动保存在云端。',
+ pendingLocal:false,hasCloudBackup:false
+})
+const auth={
+ async getVerifiedSession(){if(!internet)throw Error('network_unavailable')
+   return {ownerId:principal.userId,accessToken:'DEMO_NOT_A_REAL_TOKEN'}},
+ async getStatus(){if(!internet)throw Error('network_unavailable')
+   return {enabled:consent,hasStoredBackup:!!cloud.readForOwner(principal,principal.userId)}},
+ async setCloudConsent(enabled:boolean){if(!internet)throw Error('network_unavailable')
+   consent=enabled;principal.cloudBackupEnabled=enabled;return {enabled}}
 }
-const controller=createCloudSettingsController({auth,work,noticeVersion:'privacy-v1'})
-// Simulation switches are for isolated QA only. They are absent from the
-// real v0.4 bundle and MUST NOT be used as production cloud claims.
+const port={
+ storage,load:journal.load,save:journal.save,
+ readLocal:()=>cloneState(local),
+ readCloud:async()=>{if(!internet)throw Error('network_unavailable')
+   return cloud.readForOwner(principal,principal.userId)},
+ upload:async(req:import('../cloud/snapshotContract').UploadRequest)=>{
+   if(!internet)throw Error('network_unavailable')
+   submissions++
+   return cloud.propose(principal,req)
+ },
+ newIdempotencyKey:()=> 'democloud'+String(++serial).padStart(8,'0')
+}
+const ctl=createCloudFirst({
+ ownerId:principal.userId,deviceId:principal.deviceId,
+ auth,port,noticeVersion:'privacy-v1',
+ onChange:s=>{view.value=s},
+ async replaceCleanLocal(records,expected){
+   if(sha256(stableJson(local))!==expected)throw Error('local_state_changed')
+   local=cloneState(records)
+ }
+})
+const busy=ref(false)
+async function act(op:()=>Promise<unknown>){
+ if(busy.value)return
+ busy.value=true
+ try{await op()}finally{busy.value=false}
+}
+// Synthetic lifecycle hooks; production should inject uni.onNetworkStatusChange,
+// app onShow, and invoke after the record has been durably written.
 Object.assign(window,{__cuoshiDemo:{
-  offline(value:boolean){offline=value},
-  conflict(value:boolean){conflict=value},
-  unsent(value:boolean){unsent=value},
-  account(value:string){currentAccount=value},
-  snapshot(){return {sessionActive,consent,cloudSaved,linked,unsent,offline,conflict,
-    phase:controller.view.phase}}
+ offline(value:boolean){internet=!value},
+ async online(){internet=true;await ctl.onNetworkRestored()},
+ async add(){setCount(local,localDate(),(local.days[localDate()]?.count??0)+1);return ctl.onLocalSaved()},
+ async note(){appendNote(local,localDate(),'仅供演示的简记');return ctl.onLocalSaved()},
+ async foreground(){return ctl.onForeground()},
+ snapshot(){return {phase:ctl.state().phase,consent,submissions,
+   pending:ctl.state().pendingLocal,cloudRevision:cloud.readForOwner(principal,principal.userId)?.revision??0}}
 }})
 const Demo=defineComponent({
-  render:()=>h('div',{class:'demo-shell'},[
-    h('div',{class:'demo-banner'},'错事 · 交互实验室 / v0.5'),
-    h(CloudBackupPanel,{controller,demonstration:true})
-  ])
+ render:()=>h('div',{class:'shell'},[
+  h('div',{class:'banner'},'错事 · v0.5 云端优先体验（模拟）'),
+  h(CloudFirstPanel,{state:view.value,demonstration:true,busy:busy.value,
+   onAccept:()=>{void act(()=>ctl.acceptCloudNotice())},
+   onRetry:()=>{void act(()=>ctl.onNetworkRestored())}})
+ ])
 })
-const styles=document.createElement('style')
-styles.textContent='*{box-sizing:border-box}html,body{padding:0;margin:0;background:#f7f3eb;color:#292723}.demo-shell{margin:auto;max-width:440px;padding:20px 25px 50px}.demo-banner{color:#77716a;font-size:12px;padding:9px 0;border-bottom:1px solid #ded8ce}'
-document.head.append(styles)
+const style=document.createElement('style')
+style.textContent='*{box-sizing:border-box}html,body{padding:0;margin:0;background:#f7f3eb;color:#292723}.shell{max-width:440px;margin:0 auto;padding:16px 24px 50px}.banner{font:12px PingFang SC,sans-serif;color:#81786e;padding:12px 0;border-bottom:1px solid #ded8ce}'
+document.head.append(style)
 createApp(Demo).mount('#app')

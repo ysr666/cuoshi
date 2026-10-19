@@ -1,138 +1,74 @@
-/**
- * Isolated v0.5 Vue cloud-backup UI real Chrome interactions.
- * No real WeChat login, no production host, no user records.
- */
+/** v0.5 cloud-first production-direction demo; real Chrome, fictional data. */
 const assert=require('node:assert/strict')
 const {createServer}=require('node:http')
 const {readFileSync,existsSync}=require('node:fs')
 const {join,resolve,extname}=require('node:path')
 const {chromium}=require('playwright-core')
 const root=resolve('future/preview-dist')
-if(!existsSync(join(root,'index.html')))
-  throw Error('Build preview with npm run build:future:cloud-ui first')
-const mime={'.html':'text/html; charset=utf-8','.css':'text/css; charset=utf-8',
-  '.js':'text/javascript; charset=utf-8','.svg':'image/svg+xml'}
-const server=createServer((req,res)=>{
-  let file=join(root,(req.url||'/').replace(/^\//,''))
-  if(req.url==='/')file=join(root,'index.html')
-  if(!file.startsWith(root)||!existsSync(file)){res.writeHead(404);res.end();return}
-  res.setHeader('Content-Type',mime[extname(file)]||'application/octet-stream')
-  res.writeHead(200);res.end(readFileSync(file))
+if(!existsSync(join(root,'index.html')))throw Error('Build isolated preview first')
+const mime={'.html':'text/html; charset=utf-8','.css':'text/css; charset=utf-8','.js':'text/javascript; charset=utf-8'}
+const srv=createServer((req,res)=>{
+ const path=join(root,req.url==='/'?'index.html':(req.url||'').replace(/^\//,''))
+ if(!path.startsWith(root)||!existsSync(path)){res.writeHead(404);res.end();return}
+ res.setHeader('Content-Type',mime[extname(path)]||'application/octet-stream')
+ res.end(readFileSync(path))
 })
-const listen=()=>new Promise(resolve=>server.listen(0,'127.0.0.1',resolve))
-const close=()=>new Promise(resolve=>server.close(resolve))
 ;(async()=>{
-  await listen()
-  const url='http://127.0.0.1:'+server.address().port
-  const browser=await chromium.launch({headless:true,
-    executablePath:process.env.CHROME_PATH||(process.platform==='darwin'
-      ?'/Applications/Google Chrome.app/Contents/MacOS/Google Chrome':'/usr/bin/google-chrome')})
-  let total=0
-  const check=(value,msg)=>{assert.ok(value,msg);total++}
-  try{
-    for(const width of [320,390,430]){
-      const page=await browser.newPage({viewport:{width,height:844},deviceScaleFactor:1})
-      const errors=[];page.on('pageerror',e=>errors.push(e.message))
-      page.setDefaultTimeout(6000)
-      await page.goto(url,{waitUntil:'networkidle'})
-      check(await page.getByText('只记录在这里',{exact:true}).isVisible(),
-        'Signed-out preview starts local-only')
-      check((await page.evaluate(()=>window.__cuoshiDemo.snapshot())).cloudSaved===false,
-        'Opening UI does not use mock cloud upload')
-      check((await page.locator('[data-testid="first-backup"]').count())===0,
-        'No backup button before user authorization')
-      check(await page.evaluate(()=>document.documentElement.scrollWidth)<=width+1,
-        'No horizontal overflow at '+width+'px')
-      if(width===390){
-        await page.screenshot({path:'/tmp/cuoshi-future-cloud-signedout-390.png',fullPage:true})
-      }
-      await page.getByTestId('login').click()
-      check(await page.getByText('还没有开启云备份',{exact:true}).isVisible(),
-        'WeChat login leaves cloud backups disabled')
-      await page.getByTestId('enable').click()
-      check(await page.getByText('开启云备份？',{exact:true}).isVisible(),
-        'Cloud opt-in has explicit confirmation before changing status')
-      await page.getByText('再想想',{exact:true}).click()
-      check(await page.getByText('未开启',{exact:true}).isVisible(),
-        'Cancelling cloud opt-in did not enable it')
-      await page.getByTestId('enable').click()
-      await page.getByTestId('confirm-action').click()
-      check(await page.getByText('准备第一次备份',{exact:true}).isVisible(),
-        'Enabling cloud consent does not silently upload records')
-      check((await page.evaluate(()=>window.__cuoshiDemo.snapshot())).cloudSaved===false,
-        'Separate user confirmation required for first full-history migration')
-      await page.getByTestId('first-backup').click()
-      check(await page.getByText('首次上传本机完整历史？',{exact:true}).isVisible(),
-        'First upload explicitly describes private history transfer')
-      check(await page.getByText(/本机记录 4 天，含 8 条完整修改历史/).isVisible(),
-        'First upload includes accurate non-sensitive reviewed counts')
-      if(width===390)await page.screenshot({
-        path:'/tmp/cuoshi-future-cloud-first-review-390.png',fullPage:true
-      })
-      await page.getByTestId('confirm-action').click()
-      check(await page.getByText('已同步',{exact:true}).isVisible(),
-        'Verified first-link result rendered')
-      if(width===390)await page.screenshot({
-        path:'/tmp/cuoshi-future-cloud-synced-390.png',fullPage:true
-      })
-      await page.evaluate(()=>window.__cuoshiDemo.offline(true))
-      await page.getByTestId('sync-now').click()
-      check(await page.getByText('暂时还没传上去',{exact:true}).isVisible(),
-        'Offline retry shows pending, never success')
-      await page.getByTestId('logout').click()
-      await page.getByTestId('confirm-action').click()
-      check(await page.getByText('操作暂未完成',{exact:true}).isVisible(),
-        'Server-unconfirmed logout cannot show signed out')
-      check(await page.getByTestId('logout').isVisible(),
-        'A failed logout retains signed-in account controls')
-      await page.evaluate(()=>window.__cuoshiDemo.offline(false))
-      await page.getByTestId('sync-now').click()
-      check(await page.getByText('已同步',{exact:true}).isVisible(),
-        'Client can retry and return to verified state')
-      await page.evaluate(()=>window.__cuoshiDemo.conflict(true))
-      await page.getByTestId('sync-now').click()
-      check(await page.getByText('需要你确认的不同记录',{exact:true}).isVisible(),
-        'Divergent remote history clearly pauses cloud sync')
-      await page.getByTestId('review-conflict').click()
-      check(await page.getByTestId('conflict-review').isVisible(),
-        'User can inspect a safe read-only comparison')
-      check(await page.getByText('本机已记录',{exact:true}).isVisible(),
-        'Conflict summary shows local recorded day count')
-      check(await page.getByText('云端已记录',{exact:true}).isVisible(),
-        'Conflict summary shows cloud recorded day count')
-      check(await page.getByText('两边的修改历史已有分叉',{exact:true}).isVisible(),
-        'Divergent event histories have a grounded label')
-      check(await page.getByText('2026-10-18',{exact:true}).isVisible(),
-        'Differing day appears by date')
-      check(await page.getByText('本机 3 件 · 1 条简记',{exact:true}).isVisible(),
-        'Local count and note count are shown')
-      check(await page.getByText('云端 2 件 · 2 条简记',{exact:true}).isVisible(),
-        'Cloud count and note count are shown')
-      check((await page.getByText('强制覆盖',{exact:true}).count())===0,
-        'No destructive overwrite control is offered')
-      if(width===390)await page.screenshot({
-        path:'/tmp/cuoshi-future-cloud-conflict-detail-390.png',fullPage:true
-      })
-      await page.evaluate(()=>window.__cuoshiDemo.conflict(false))
-      await page.getByTestId('sync-now').click()
-      await page.evaluate(()=>window.__cuoshiDemo.unsent(true))
-      await page.getByTestId('logout').click()
-      await page.getByTestId('confirm-action').click()
-      check(await page.getByText('还有记录等待同步',{exact:true}).isVisible(),
-        'Unsent local data blocks sign-out')
-      await page.evaluate(()=>window.__cuoshiDemo.unsent(false))
-      await page.getByTestId('logout').click()
-      await page.getByTestId('confirm-action').click()
-      check(await page.getByTestId('login').isVisible(),
-        'Only server-confirmed logout returns to signed-out UI')
-      check((await page.evaluate(()=>window.__cuoshiDemo.snapshot())).sessionActive===false,
-        'Sign-out clears fake local session but keeps existing cloud data')
-      check(errors.length===0,'No runtime errors: '+errors.join(' | '))
-      check(await page.evaluate(()=>document.documentElement.scrollWidth)<=width+1,
-        'No horizontal overflow after actions on '+width+'px')
-      console.log('PASS cloud UI responsive interactions on '+width+'px')
-      await page.close()
-    }
-    console.log('PASS',total,'isolated Vue cloud settings Chrome assertions')
-  }finally{await browser.close();await close()}
-})().catch(e=>{console.error('FAIL',e.stack||e);process.exitCode=1;server.close()})
+ await new Promise(resolve=>srv.listen(0,'127.0.0.1',resolve))
+ const browser=await chromium.launch({headless:true,
+  executablePath:process.env.CHROME_PATH||(process.platform==='darwin'
+   ?'/Applications/Google Chrome.app/Contents/MacOS/Google Chrome':'/usr/bin/google-chrome')})
+ let count=0
+ const ok=(value,label)=>{assert.ok(value,label);count++}
+ try{
+  for(const width of [320,390,430]){
+   const page=await browser.newPage({viewport:{width,height:844}})
+   const errors=[];page.on('pageerror',e=>errors.push(e.message))
+   page.setDefaultTimeout(5000)
+   await page.goto('http://127.0.0.1:'+srv.address().port,{waitUntil:'networkidle'})
+   ok(await page.getByTestId('cloud-status').innerText()==='开始使用错事',
+     'First-time clear cloud data notice')
+   ok((await page.evaluate(()=>window.__cuoshiDemo.snapshot())).consent===false,
+     'No implicit upload before user has seen and accepted first-use notice')
+   ok(await page.getByText(/数字、可选简记以及历次修改历史/).isVisible(),
+     'First-use notice describes transferred private information')
+   ok(await page.getByTestId('accept-cloud').isVisible(),
+     'One initial informed consent button')
+   ok((await page.getByText('查看本机与云端差异').count())===0,
+     'No conflict comparison workflow in cloud-first product')
+   await page.getByTestId('accept-cloud').click()
+   await page.getByTestId('cloud-status').getByText('已同步').waitFor()
+   ok((await page.evaluate(()=>window.__cuoshiDemo.snapshot())).consent,
+     'Initial cloud setup grants server consent and shows ready')
+   ok((await page.evaluate(()=>window.__cuoshiDemo.snapshot())).submissions===0,
+     'Fresh empty account never uploads invented data')
+   await page.evaluate(()=>window.__cuoshiDemo.add())
+   ok((await page.evaluate(()=>window.__cuoshiDemo.snapshot())).cloudRevision===1,
+     'First saved count automatically reaches cloud without second confirmation')
+   ok(await page.getByTestId('cloud-status').innerText()==='已同步',
+     'UI shows verified cloud success')
+   await page.evaluate(()=>window.__cuoshiDemo.offline(true))
+   await page.evaluate(()=>window.__cuoshiDemo.add())
+   ok(await page.getByTestId('cloud-status').innerText()==='暂未同步',
+     'Offline failure produces visible unsynced status')
+   ok((await page.evaluate(()=>window.__cuoshiDemo.snapshot())).pending,
+     'Offline saved change remains pending')
+   ok(await page.getByText(/网络异常，暂未同步/).isVisible(),
+     'Offline message is clear and non-alarming')
+   if(width===390)await page.screenshot({path:'/tmp/cuoshi-cloud-first-offline-390.png',fullPage:true})
+   await page.evaluate(()=>window.__cuoshiDemo.online())
+   ok(await page.getByTestId('cloud-status').innerText()==='已同步',
+     'Reconnect automatically retries pending edits')
+   ok((await page.evaluate(()=>window.__cuoshiDemo.snapshot())).cloudRevision===2,
+     'New revision confirmed after connection restored')
+   ok((await page.getByTestId('retry-cloud').count())===0,
+     'No redundant manual sync action in healthy state')
+   if(width===390)await page.screenshot({path:'/tmp/cuoshi-cloud-first-online-390.png',fullPage:true})
+   ok(!errors.length,'No Vue runtime errors: '+errors.join(' | '))
+   ok(await page.evaluate(()=>document.documentElement.scrollWidth)<=width+1,
+     'No viewport overflow at '+width+'px')
+   await page.close()
+  }
+  console.log('PASS',count,'cloud-first mobile Chrome assertions (synthetic account only)')
+ }finally{await browser.close();await new Promise(resolve=>srv.close(resolve))}
+})().catch(e=>{console.error('FAIL',e.stack||e);process.exitCode=1;srv.close()})
