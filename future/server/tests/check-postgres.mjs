@@ -985,7 +985,7 @@ try{
   // The actual composed route must cancel only the JWT owner, using the
   // separate deletion role; no test direct function call on the success path.
   const deletionHttp=await listenCloudLoopbackForQa({
-    account:{identityDb,authConfig:wxConfig,exchange:mockExchange,
+    account:{identityDb:identityPool,authConfig:wxConfig,exchange:mockExchange,
       login:loginWithWechatCode,account:service,permitLogin:()=>true},
     backup:service
   },'SYNTHETIC_TEST_ONLY')
