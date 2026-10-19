@@ -38,10 +38,20 @@ check(params.ssl!==false&&typeof params.ssl==='object'&&
  'driver parses verify-full as TLS with server hostname verification')
 check(params.options==='-c search_path=cuoshi_prod,pg_catalog',
  'actual pg driver forwards audited private schema as startup option')
+const safeSettings=runtimeRequire('./privateConfig.js').privatePoolConnectionOptions(
+ url,'cuoshi_prod',2)
+const driverSettings=new Params(safeSettings)
+check(driverSettings.statement_timeout===15000&&
+ driverSettings.lock_timeout===4000&&
+ driverSettings.idle_in_transaction_session_timeout===10000&&
+ driverSettings.query_timeout===20000,
+ 'Real pg client receives bounded SQL, lock, idle-transaction and query timeouts')
 const noTls=new Params({connectionString:url.replace('verify-full','disable')})
 check(noTls.ssl===false,
  'TLS test can distinguish secure and insecure pg connection modes')
 const local=runtimeRequire('./privateConfig.js')
+check(typeof runtimeRequire('./privateMaintenance.js').prunePrivateLoginWindows==='function',
+ 'compiled one-shot data-retention worker loads independently')
 check(typeof local.privatePoolConnectionOptions==='function'&&
  typeof runtimeRequire('./privateReadiness.js').checkPrivateDatabaseReadiness==='function',
  'production-compiled database configuration and readiness helpers both resolve')

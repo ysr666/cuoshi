@@ -64,3 +64,7 @@
 - 正式候选（**仅在五项门槛材料已经真实具备时**）：设定 `CUOSHI_V05_RELEASE_CANDIDATE=1`、`CUOSHI_V05_WECHAT_APP_ID`、`CUOSHI_V05_CLOUD_ORIGIN`、`CUOSHI_V05_NOTICE_VERSION`、`CUOSHI_V05_FILING_NUMBER`、`CUOSHI_V05_CONTACT_EMAIL`，再执行同一构建命令。这里都是应在公众端可见的材料；**AppSecret、数据库口令只许放后端受控环境**。配置语法通过不证明账号归属和备案有效。
 - 申请审核前先用 `docs/WECHAT_REVIEW_V05_DRAFT.md` 更新名称、类目、真实截图、入口路径、备案和隐私信息；提交微信后台隐私指引并核实平台通过。
 - 固定最终 commit、三 Job CI、12 条双真机 QA、生产安全与运营者签字记录，再合并/上架；任何一个关口仍为 BLOCKED 都不得宣称上线成功。
+
+### 生产运维安全收尾（未现场启用）
+
+已有每小时执行一次的最小权限登录限流记录清理 timer 和独立服务，及 PostgreSQL 连接/语句/锁/事务超时限制。真实 PostgreSQL CI 验证过期记录清理；详见 [部署与留存限制](../future/server/deploy/README.md#每小时删除旧登录限流记录独立最小权限尚未启用)。实际个人主体云服务器**尚未安装和启用**该服务，留存时长不能无条件宣称为严格 24 小时；还须监控清理失败及解决数据库物理备份/WAL 的保留期限。

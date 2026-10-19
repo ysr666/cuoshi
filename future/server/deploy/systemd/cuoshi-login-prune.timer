@@ -1,0 +1,13 @@
+# TEMPLATE: installation does not enable the timer; an authorized operator
+# must enable it after real schema/role/TLS/retention review and monitoring.
+[Unit]
+Description=Cuoshi hourly pseudonymous login-window expiry
+
+[Timer]
+OnCalendar=hourly
+Persistent=true
+Unit=cuoshi-login-prune.service
+AccuracySec=1min
+
+[Install]
+WantedBy=timers.target

@@ -70,3 +70,17 @@
 已经编译出的 `future/server/.private-build/future/server/src/privateMain.js` **并不内置 PostgreSQL 驱动**。正式 Linux 主机必须从 `future/server/package-lock.json` 另行执行 `npm ci --prefix future/server --omit=dev --ignore-scripts --registry=https://registry.npmjs.org`，核实产物位于 `/opt/cuoshi/current/future/server/node_modules/pg`；绝对不能把根项目的前端开发依赖作为生产服务依赖安装，或只复制 `.private-build` 就启动服务。服务端 `pg` 模块由编译后的入口逐级向上解析到其独立 `future/server/node_modules`，并按后端独立锁文件固定版本。
 
 `npm run test:future:private-runtime-package` 在实际编译之后，用**真实 Node 模块解析和已安装的 pg 驱动**验证 Linux systemd 入口路径、锁文件版本、独立依赖位置、`sslmode=verify-full` 的 TLS 模式、PostgreSQL startup schema 参数以及没有部署密钥时的启动拒绝。该检查已加入真实 PostgreSQL CI，**没有联网查询微信，也没有监听生产端口**。原来仅靠 `tsc --noEmit` 与模拟 PostgreSQL 的测试不足以证明独立模块真实可加载。若这个测试失败，禁止制作正式服务器发布包。
+
+## 每小时删除旧登录限流记录（独立、最小权限、尚未启用）
+
+- `systemd/cuoshi-login-prune.timer`：`OnCalendar=hourly`，`Persistent=true`；由运营者**明确批准后**在真实 Linux 主机启用。未正式部署的当前仓库没有正在运行的维护定时任务。
+- `systemd/cuoshi-login-prune.service`：独立 `cuoshi-maint` 无特权服务身份，`Type=oneshot`，执行已经编译的 `privateMaintenance.js`；使用**与业务服务完全分离**的 `/etc/cuoshi/maintenance.env`（root 管理 0600），不加载微信 AppSecret、JWT/备份密钥或管理账号口令。
+- `maintenance.env.example`：仅列必需的 `CUOSHI_MAINTENANCE_ACK=PRUNE_LOGIN_WINDOWS_ONLY`、迁移时的 `CUOSHI_PG_SCHEMA`、**专用维护角色** TLS 验证 PostgreSQL URL。配置或 PostgreSQL 角色/权限不符合要求就拒绝执行。
+- 程序只能以维护角色执行 migration 007 的 `cloud_prune_wechat_login_windows()`，执行前验证不是 superuser、没有 DDL/复制等权力、不能直接 `SELECT` 或 `DELETE` 登录尝试表；仅输出汇总删除条数，不输出 IP、令牌或用户记录。若数据库不可用或校验失败，脚本以非零退出码失败，**不尝试以超级用户绕过**。
+- 真实 PostgreSQL CI 会插入**合成**的 24 小时以前及几分钟前记录，执行与生产完全相同的维护函数，验证只有过期数据被清掉、重复运行不会影响新限流数据，其他四类业务账号无法执行维护任务。`npm run test:future:maintenance` 与 `node tests/check-future-maintenance-static.mjs` 验证编译后的真实入口、缺配置时拒绝启动及 systemd 定时器约束。
+
+**留存期限说明**：数据库函数每次删除比执行时早于 24 小时的登录限流窗口，但每小时才运行一次，因此**健康连续运行时实际最长可能接近 25 小时，加上定时器调度误差**；如果服务器停机、PostgreSQL 故障或定时器未启用，残留会更久，不能把「24 小时严格删除保证」写进正式隐私政策。正式发布前需要监控 `systemctl --failed` / timer last-run、异常日志和数据库过期窗口数量，并明确故障后的补偿清理与可披露的上界。数据库物理备份/WAL 的保留周期是**另一套独立待审批规则**，本任务不触碰这些副本。
+
+## PostgreSQL 网络故障的资源上界
+
+所有四条私有业务连接及维护连接复用 `privatePoolConnectionOptions()`：5 秒 TCP 连接超时、15 秒 PostgreSQL 语句超时、4 秒锁等待超时、10 秒事务空闲超时和 20 秒 Node 查询超时。真数据库集成测试检查服务器实际收到的三个 `current_setting`，客户端检查 `pg` 驱动有效参数；避免数据库锁死或后端网络中断时请求无限悬挂。参数仅针对私有服务，不改变微信记录界面。

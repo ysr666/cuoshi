@@ -34,7 +34,12 @@ export function privateDatabaseSchema(value:unknown):string{
 export function privatePoolConnectionOptions(connectionString:string,schema:string,max=6){
  const verified=privateDatabaseSchema(schema)
  return {connectionString,options:'-c search_path='+verified+',pg_catalog',
-   max,connectionTimeoutMillis:5000,idleTimeoutMillis:20000}
+   max,connectionTimeoutMillis:5000,idleTimeoutMillis:20000,
+   // PostgreSQL-side guards are enforced even if Node disconnects mid-query.
+   statement_timeout:15000,lock_timeout:4000,
+   idle_in_transaction_session_timeout:10000,
+   // Driver-side upper bound includes network and read delays.
+   query_timeout:20000}
 }
 function secretHex(env:Record<string,string|undefined>,name:string):Uint8Array{
  const raw=env[name]
@@ -42,7 +47,7 @@ function secretHex(env:Record<string,string|undefined>,name:string):Uint8Array{
    throw Error('private_cloud_secret_missing_or_invalid:'+name)
  return Uint8Array.from(Buffer.from(raw,'hex'))
 }
-function databaseUrl(env:Record<string,string|undefined>,name:string){
+export function databaseUrl(env:Record<string,string|undefined>,name:string){
  const value=env[name]
  if(typeof value!=='string'||!value)throw Error('private_cloud_database_missing:'+name)
  let parsed:URL

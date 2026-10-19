@@ -58,7 +58,8 @@ try{
     resolve(root,'future/server/src/trustedEdge.ts'),
     resolve(root,'future/server/src/loginRateLimiter.ts'),
     resolve(root,'future/server/src/privateConfig.ts'),
-    resolve(root,'future/server/src/privateReadiness.ts')
+    resolve(root,'future/server/src/privateReadiness.ts'),
+    resolve(root,'future/server/src/privateMaintenance.ts')
   ],{cwd:root,stdio:'pipe'})
   const m=require(join(out,'src/core/model.js'))
   const {
@@ -71,6 +72,7 @@ try{
   const {createTrustedEdgeBoundary}=require(join(out,'future/server/src/trustedEdge.js'))
   const {privatePoolConnectionOptions}=require(join(out,'future/server/src/privateConfig.js'))
   const {checkPrivateDatabaseReadiness}=require(join(out,'future/server/src/privateReadiness.js'))
+  const {prunePrivateLoginWindows}=require(join(out,'future/server/src/privateMaintenance.js'))
   const {createPostgresWechatLoginLimiter}=require(join(out,'future/server/src/loginRateLimiter.js'))
   const repository=require(join(out,'future/server/src/repository.js'))
   const admin=require(join(out,'future/server/src/adminRepository.js'))
@@ -136,6 +138,13 @@ try{
     options:'-c search_path='+schema,max:3})
   // Real production startup preflight now executes against genuine isolated
   // PostgreSQL and all four restricted runtime login roles, not test doubles.
+  const bounded=await backupPool.query(`SELECT
+    current_setting('statement_timeout') AS statement,
+    current_setting('lock_timeout') AS lock,
+    current_setting('idle_in_transaction_session_timeout') AS idle_tx`)
+  check(bounded.rows[0].statement==='15s'&&
+    bounded.rows[0].lock==='4s'&&bounded.rows[0].idle_tx==='10s',
+    'Real PostgreSQL honors the production deadline, lock and idle transaction caps')
   const runtimeRoles={identityDb:identityPool,backupDb:backupPool,
     staffDb:adminPool,cancellationDb:deletionPool}
   await checkPrivateDatabaseReadiness(runtimeRoles,schema)
@@ -282,8 +291,36 @@ try{
     .rows[0].n==='3','Only one shared global and two keyed peer windows persisted')
   check(!JSON.stringify((await pool.query('SELECT * FROM cloud_wechat_login_rate_windows')).rows)
     .includes('192.0.2.42'),'Database never stores raw client IPs')
-  check((await maintenancePool.query('SELECT cloud_prune_wechat_login_windows() AS deleted'))
-    .rows[0].deleted===0,'Maintenance role can prune only expired windows')
+  check((await prunePrivateLoginWindows(maintenancePool,schema))===0,
+    'Production maintenance worker safely retains recent login windows')
+  const expiredMinute=Math.floor(Date.now()/60000)-1445
+  const recentMinute=Math.floor(Date.now()/60000)-5
+  await pool.query(`INSERT INTO cloud_wechat_login_rate_windows
+    (scope,peer_digest,minute_window,attempts) VALUES
+    ('peer',$1,$2,1),('peer',$3,$4,1)`,
+    ['c'.repeat(64),expiredMinute,'d'.repeat(64),recentMinute])
+  check(await prunePrivateLoginWindows(maintenancePool,schema)===1,
+    'Real restricted maintenance role deletes only stale 24h+ windows')
+  check((await pool.query(`SELECT count(*) AS n FROM cloud_wechat_login_rate_windows
+    WHERE peer_digest=$1`,['c'.repeat(64)])).rows[0].n==='0',
+    'Expired pseudonymous login metadata is no longer retained')
+  check((await pool.query(`SELECT count(*) AS n FROM cloud_wechat_login_rate_windows
+    WHERE peer_digest=$1`,['d'.repeat(64)])).rows[0].n==='1',
+    'Recent window is not erased by privacy maintenance')
+  check(await prunePrivateLoginWindows(maintenancePool,schema)===0,
+    'Repeated job is idempotent and does not corrupt active limits')
+  await assert.rejects(prunePrivateLoginWindows(identityPool,schema),
+    /private_cloud_maintenance_scope_unsafe/);checks++
+  await assert.rejects(prunePrivateLoginWindows(backupPool,schema),
+    /private_cloud_maintenance_scope_unsafe/);checks++
+  await assert.rejects(prunePrivateLoginWindows(pool,schema),
+    /private_cloud_maintenance_role_unsafe/);checks++
+  await assert.rejects(prunePrivateLoginWindows(maintenancePool,'wrong_schema'),
+    /private_cloud_maintenance_scope_unsafe/);checks++
+  // The rest of this disposable database suite assumes only actual login
+  // traffic occupies the in-progress minute windows. Remove synthetic seed.
+  await pool.query('DELETE FROM cloud_wechat_login_rate_windows WHERE peer_digest=$1',
+    ['d'.repeat(64)])
   // Real signed-login HTTP route through the separate minimal-permission
   // WeChat identity PostgreSQL role and cloud consent service.
   let httpWechatTokenForRedactionCheck

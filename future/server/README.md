@@ -186,3 +186,8 @@ SQL 的审计禁止修改触发器只是**附加防线**，拥有数据库所有
 ### 私有运行时依赖验证（2026-10-20）
 
 编译私有 Cloud 入口之后需要安装独立 `future/server` 的生产锁定依赖 `pg`（不能只拷贝 `.private-build`）。`npm run test:future:private-runtime-package` 会从**编译产物实际 Node 模块解析路径**加载 `pg`，核对生产 `package-lock.json`、PostgreSQL TLS 和 schema 参数、systemd 启动路径，以及无密钥时是否安全拒绝启动；真实 PostgreSQL CI 在独立 `npm ci --prefix future/server` 后执行，禁止缺少生产模块仍将构建成功误当为可部署。
+
+
+### 数据最小化维护与请求超时（未正式部署）
+
+已加入独立服务端入口 `src/privateMaintenance.ts`，只能以专用维护数据库角色执行过期微信登录限流窗口清理；systemd 每小时执行且故障时显式失败。数据库语句/锁/事务/客户端查询分别设有固定超时，避免数据库故障时业务资源无上界。测试和实际运行要求见 [部署文档](deploy/README.md#每小时删除旧登录限流记录独立最小权限尚未启用)，真实 PG CI 直接使用同一 worker 执行清理。此改动**不扩展小程序用户功能，也不包含生产环境实际启用、WAL 清理或用户正文删库计划**。
