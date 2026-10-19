@@ -70,7 +70,12 @@ export function verifyServerSession(
     return null
   const signature=Buffer.from(parts[2],'base64url')
   const computed=hmac(parts[1],secret)
-  if(signature.length!==computed.length||!timingSafeEqual(signature,computed))return null
+  // Node accepts noncanonical base64url aliases with different unused low
+  // bits in the last character. Reject every alternate spelling of the
+  // same signature, so a one-character token mutation cannot still validate.
+  if(signature.toString('base64url')!==parts[2]||
+     signature.length!==computed.length||
+     !timingSafeEqual(signature,computed))return null
   let claims:SessionClaims
   try{
     const decoded=Buffer.from(parts[1],'base64url')

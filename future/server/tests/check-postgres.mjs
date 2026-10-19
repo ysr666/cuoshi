@@ -717,8 +717,9 @@ try{
   check(Number((await pool.query('SELECT count(*) AS n FROM cloud_admin_audit')).rows[0].n)===afterAuditCount,
     'Revoked staff tokens cannot reach private-record SQL function')
   const revokedRows=await pool.query('SELECT * FROM cloud_revoked_backup_tokens')
-  check(revokedRows.rows.length===1&&!JSON.stringify(revokedRows.rows).includes(tokenToRevoke),
-    'Only a SHA-256 token nonce digest is stored, never a bearer token')
+  check(revokedRows.rows.length===2&&!JSON.stringify(revokedRows.rows).includes(tokenToRevoke)&&
+    !JSON.stringify(revokedRows.rows).includes(authenticated.accessToken),
+    'Current-device WeChat HTTP logout and later user logout retain only token nonce digests, never bearer credentials')
   await service.deleteBackup(tokenA)
   check(!(await service.status(tokenA)).enabled,'Deleting cloud backup turns opt-in off')
   check((await service.status(tokenA)).hasStoredBackup===false,'Deleting removes backup metadata')

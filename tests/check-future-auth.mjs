@@ -33,6 +33,15 @@ try{
   ok(verifyServerSession(token,other,'cuoshi-cloud-backup',now)===null,'Different secret invalid')
   ok(verifyServerSession(token,key,'cuoshi-cloud-backup',now+99999)===null,'Long after expiry')
   ok(check(token.slice(0,-1)+(token.at(-1)==='A'?'B':'A'))===null,'Signature tamper')
+  // Low-order unused base64url bits can decode to exactly the same 32-byte
+  // MAC, but altered token text must NOT verify.
+  const sigPart=token.split('.')[2]
+  const validLast=Buffer.from(sigPart,'base64url').toString('base64url').at(-1)
+  const alphabet='ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_'
+  const at=alphabet.indexOf(validLast)
+  const alias=alphabet[at^1]
+  ok(check(token.slice(0,-1)+alias)===null,
+    'Noncanonical base64url signature alias cannot bypass text-level tamper validation')
   const parts=token.split('.')
   const forgedSub=Buffer.from(JSON.stringify({...claims,sub:'account9999'})).toString('base64url')
   ok(check([parts[0],forgedSub,parts[2]].join('.'))===null,'Cannot forge user id without key')
