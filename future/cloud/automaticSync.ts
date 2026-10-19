@@ -14,6 +14,10 @@ import type {CloudSnapshot,UploadDecision,UploadRequest,UploadReceipt} from './s
 const id=/^[A-Za-z0-9_-]{8,128}$/
 const hash=/^[a-f0-9]{64}$/
 const digest=(records:Records)=>sha256(stableJson(records))
+// Expired/revoked tokens and a changed account must NEVER be reported as
+// ordinary connectivity failures that still permit offline use of old data.
+export const isSyncAuthenticationFailure=(error:unknown):boolean=>
+  error instanceof Error&&/^(?:sync_(?:session_owner_changed|cloud_(?:authentication_required|access_denied))|wechat_session_(?:account_changed|authorization_required|access_denied|authentication_failed|abandoned))$/.test(error.message)
 type Cursor={revision:number;digest:string}
 type Pending={request:UploadRequest;expectedDigest:string;blocked?:boolean}
 export type SyncJournal={
@@ -111,7 +115,9 @@ async function submit(port:SyncPort,state:SyncJournal,ownerId:string):Promise<Sy
   if(pending.blocked)return {kind:'manual_conflict',reason:'previous_conflict'}
   let decision:UploadDecision
   try{decision=await port.upload(cloneRequest(pending.request))}
-  catch{return {kind:'retry_later',reason:'upload_unknown'} }
+  catch(e){return isSyncAuthenticationFailure(e)?
+    {kind:'rejected',reason:'authentication'}:
+    {kind:'retry_later',reason:'upload_unknown'} }
   if(decision.kind==='conflict'){
     state.pending={...pending,blocked:true}
     durable(port,state)
@@ -126,7 +132,9 @@ async function submit(port:SyncPort,state:SyncJournal,ownerId:string):Promise<Sy
   // response can safely retry the identical payload and idempotency key.
   let cloud:CloudSnapshot|null
   try{cloud=await port.readCloud()}
-  catch{return {kind:'retry_later',reason:'readback_unavailable'} }
+  catch(e){return isSyncAuthenticationFailure(e)?
+    {kind:'rejected',reason:'authentication'}:
+    {kind:'retry_later',reason:'readback_unavailable'} }
   let verified=false
   try{verified=verifyCloud(cloud,ownerId)}
   catch{verified=false}
@@ -180,7 +188,9 @@ export async function runAutomaticSyncOnce(port:SyncPort,args:{
   if(state.pending)return await submit(port,copy(state),ownerId)
   let cloud:CloudSnapshot|null
   try{cloud=await port.readCloud()}
-  catch{return {kind:'retry_later',reason:'cloud_unavailable'} }
+  catch(e){return isSyncAuthenticationFailure(e)?
+    {kind:'rejected',reason:'authentication'}:
+    {kind:'retry_later',reason:'cloud_unavailable'} }
   let cloudVerified=false
   try{cloudVerified=verifyCloud(cloud,ownerId)}
   catch{return {kind:'manual_conflict',reason:'cloud_integrity_invalid'}}

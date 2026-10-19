@@ -33,6 +33,7 @@ try{
  const cloud=new CloudContractSimulator()
  const storage=new Map(),tokens=new Map(),networkListeners=new Set()
  let ignoreNextOwnerRemoval=false,rejectNextLogin=false
+ let rejectSnapshotRead=false,rejectSnapshotUpload=false
  let owner='account0001',online=true,serverConsent=false,loginCalls=0,
    httpCalls=0,uploads=0,wxCSPRNG=0,uniCSPRNG=0
  const device=()=>String(storage.get('cuoshi-future-v05-miniapp-device-id')||'')
@@ -88,10 +89,12 @@ try{
     return
    }
    if(url.endsWith('/v1/backup/snapshot')&&method==='GET'){
+    if(rejectSnapshotRead){rejectSnapshotRead=false;success({statusCode:401,data:{}});return}
     success({statusCode:snapshot?200:204,data:snapshot})
     return
    }
    if(url.endsWith('/v1/backup/snapshot')&&method==='PUT'){
+    if(rejectSnapshotUpload){rejectSnapshotUpload=false;success({statusCode:403,data:{}});return}
     uploads++
     const decision=cloud.propose(principal(),data)
     success({statusCode:decision.kind==='conflict'?409:200,data:decision})
@@ -224,5 +227,57 @@ try{
  await app.start()
  ok(app.state.stage==='blocked'&&app.getActions()===null,
    'Offline cold reboot cannot resurrect account B after preflight rejection')
+ // Fresh login/status can succeed while only the backup GET endpoint rejects
+ // an old token. This must be an identity failure, never normal offline mode.
+ online=true
+ await app.start()
+ await until(()=>app.state.stage==='ready'&&app.state.sync==='已同步')
+ app.getActions().changeCount(records.localDate(),1,true)
+ await until(()=>cloud.readForOwner(principal(),owner)?.records.days[records.localDate()]?.count===1)
+ const beforeGetRevocation=uploads
+ rejectSnapshotRead=true
+ app.onForeground()
+ await until(()=>app.state.stage==='blocked')
+ ok(app.getActions()===null&&app.state.sync==='账号需要重新验证',
+   'Backup GET 401 quarantines live native account despite successful status')
+ ok(uploads===beforeGetRevocation,
+   'GET authorization failure never triggers extra uploads')
+ ok(storage.get('cuoshi-future-v05-miniapp-offline-reverification-required')===true,
+   'GET 401 revokes cold offline owner access durably')
+ online=false
+ networkListeners.clear()
+ delete require.cache[require.resolve(runtimeModule)]
+ app=require(runtimeModule)
+ await app.start()
+ ok(app.state.stage==='blocked'&&app.getActions()===null,
+   'Backup GET 401 remains quarantined across cold offline restart')
+ // Reverification restores the original account and leaves its history intact.
+ online=true
+ await app.start()
+ await until(()=>app.state.stage==='ready'&&app.state.sync==='已同步')
+ ok(app.getActions().day().count===1,
+   'Fresh verified B restores full existing record after GET revocation')
+ rejectSnapshotUpload=true
+ app.getActions().adjustCount(records.localDate(),1,true)
+ await until(()=>app.state.stage==='blocked')
+ ok(app.getActions()===null&&app.state.sync==='账号需要重新验证',
+   'Backup PUT 403 cannot be mistaken for ordinary offline upload failure')
+ ok(cloud.readForOwner({...principal(),cloudBackupEnabled:true},owner).records.days[records.localDate()].count===1,
+   'Rejected backup PUT never changes the authoritative cloud snapshot')
+ ok(storage.get('cuoshi-future-v05-miniapp-offline-reverification-required')===true,
+   'Backup PUT 403 also revokes cold offline access')
+ online=false
+ networkListeners.clear()
+ delete require.cache[require.resolve(runtimeModule)]
+ app=require(runtimeModule)
+ await app.start()
+ ok(app.state.stage==='blocked'&&app.getActions()===null,
+   'Rejected PUT leaves unsynced private edits inaccessible under stale offline session')
+ online=true
+ await app.start()
+ await until(()=>app.state.stage==='ready'&&app.state.sync==='已同步')
+ ok(app.getActions().day().count===2&&
+   cloud.readForOwner(principal(),owner)?.records.days[records.localDate()].count===2,
+   'Fresh verified session replays pending full local edit without losing events')
  console.log('PASS',n,'native wx crypto, cold offline restart and reconnect tests')
 }finally{rmSync(temp,{recursive:true,force:true})}

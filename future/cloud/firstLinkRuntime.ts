@@ -15,7 +15,7 @@ import {
   type InitialMigrationPreview,type PreparedInitialMigration
 } from './initialMigration'
 import {
-  createLinkedJournal,type SyncPort,type SyncJournal,type SyncResult
+  createLinkedJournal,isSyncAuthenticationFailure,type SyncPort,type SyncJournal,type SyncResult
 } from './automaticSync'
 import {localSyncKey,type LocalSyncStorage} from './clientAdapters'
 import type {CloudSnapshot,UploadDecision} from './snapshotContract'
@@ -182,7 +182,9 @@ export function createFirstLinkRuntime(args:LinkArgs){
         const local=port.readLocal()
         let cloud:CloudSnapshot|null
         try{cloud=await port.readCloud()}
-        catch{return {kind:'retry_later',reason:'first_link_preflight_unavailable'}}
+        catch(e){return isSyncAuthenticationFailure(e)?
+          {kind:'rejected',reason:'authentication'}:
+          {kind:'retry_later',reason:'first_link_preflight_unavailable'}}
         // Identical snapshots from another device: no network PUT needed,
         // but require a fresh explicit review before linking this device.
         const latest=previewInitialMigration(local,cloud,ownerId)
@@ -219,7 +221,9 @@ export function createFirstLinkRuntime(args:LinkArgs){
       const expected=staged.prepared
       let decision:UploadDecision
       try{decision=await port.upload(copy(expected.request))}
-      catch{return {kind:'retry_later',reason:'first_link_network_unknown'}}
+      catch(e){return isSyncAuthenticationFailure(e)?
+        {kind:'rejected',reason:'authentication'}:
+        {kind:'retry_later',reason:'first_link_network_unknown'}}
       if(decision.kind==='conflict'){
         writeStage({...staged,blocked:true})
         return {kind:'manual_conflict',reason:decision.reason}
@@ -229,7 +233,9 @@ export function createFirstLinkRuntime(args:LinkArgs){
       }
       let cloud:CloudSnapshot|null
       try{cloud=await port.readCloud()}
-      catch{return {kind:'retry_later',reason:'first_link_readback_unavailable'}}
+      catch(e){return isSyncAuthenticationFailure(e)?
+        {kind:'rejected',reason:'authentication'}:
+        {kind:'retry_later',reason:'first_link_readback_unavailable'}}
       if(!cloud){
         writeStage({...staged,blocked:true})
         return {kind:'manual_conflict',reason:'first_link_missing_readback'}

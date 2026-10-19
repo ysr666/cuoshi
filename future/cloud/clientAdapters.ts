@@ -154,6 +154,8 @@ export function createAuthenticatedBackupHttpBridge(config:SyncHttpBridgeConfig)
     ownerId:config.ownerId,
     async readCloud():Promise<CloudSnapshot|null>{
       const response=await send('GET')
+      if(response.statusCode===401)throw Error('sync_cloud_authentication_required')
+      if(response.statusCode===403)throw Error('sync_cloud_access_denied')
       if(response.statusCode===204||response.statusCode===404)return null
       if(response.statusCode!==200)throw Error('sync_cloud_read_unavailable')
       if(response.data===null)return null

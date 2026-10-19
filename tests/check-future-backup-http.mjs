@@ -138,7 +138,8 @@ try{
   m.appendNote(local,today,'账号切换后不应上传')
   authenticatedOwner='account0002';token=tokenB
   const attempts=await runAutomaticSyncOnce(port,{ownerId:owner,deviceId:device,consentEnabled:true})
-  check(attempts.kind==='retry_later'&&store.load().pending===null,
+  check(attempts.kind==='rejected'&&attempts.reason==='authentication'&&
+    store.load().pending===null,
     'Switching authenticated owner blocks further writes without staging pending data')
   check(sim.readForOwner(p,owner).revision===2,'Other user token cannot write to old cloud account')
   authenticatedOwner=owner;token=tokenA
