@@ -110,3 +110,11 @@ SQL 的审计禁止修改触发器只是**附加防线**，拥有数据库所有
 ### 可交互 v0.5 页面研发
 
 `../ui/CloudTodayPanel.vue` 和 `../cloud/cloudRecordActions.ts` 直接使用账号专属持久存储，覆盖日计数、显式 0、编辑过去日期、简记增删改及历史事件。独立 H5 预览与 Chrome 回归是用户界面的真实互动验证，不等于已挂载到微信小程序正式页面。所有生产云端资质和真实用户数据仍不触及。
+
+
+## 2026-10-19 · 单入口 HTTP 联调层（仍不对公网开放）
+
+- `src/cloudHttpHost.ts` 将现有可信微信登录、云端授权、退出与完整快照 HTTP 处理器组合到**同一个严格匹配路由**。只开放 `/v1/auth/wechat`、`/v1/auth/logout`、`/v1/backup/status`、`/v1/backup/consent`、`/v1/backup/snapshot` 和无私有数据的 `/healthz`；未知路径、路径变体、含查询字符串的伪装请求和员工内部 API 均返回 404。真实 JWT 权限和幂等判断仍由原服务端实现。
+- `listenCloudLoopbackForQa` 仅供已明确声明 `SYNTHETIC_TEST_ONLY` 的隔离测试：Node HTTP 强制监听随机端口 `127.0.0.1`，不允许指定公网监听地址，限制 HTTP Header 和请求时间，关闭时释放监听器。**本地明文 HTTP 只可用于合成数据联调，绝不能当作正式微信小程序的线上 `request` 域名**。
+- `npm run test:future:http-host` 目前覆盖 19 项合成 HTTP 请求；`future/server/tests/check-postgres.mjs` 扩展为通过同一个真实本地监听器及受限数据库角色进行微信登录 → 确认云端授权 → 写入显式 0/简记 → 第二设备登录并读取相同完整快照 → 关闭授权的端到端集成验收。CI 自动安装一次性 PostgreSQL；所有微信登录值均来自假交换器，未向微信平台发请求。
+- **这只是服务器路由与本地实际连接的工程闭环，不代表已经获得微信生产 AppID、正式密钥、HTTPS 域名、分布式登录限流、监控及合规审批。生产服务器的真实启动程序尚未创建，也不得把这些测试用的假身份源用到公网。**

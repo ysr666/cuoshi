@@ -42,7 +42,8 @@ try{
     resolve(root,'future/cloud/initialMigration.ts'),
     resolve(root,'future/cloud/automaticSync.ts'),
     resolve(root,'future/server/src/backupHttp.ts'),
-    resolve(root,'future/server/src/accountHttp.ts')
+    resolve(root,'future/server/src/accountHttp.ts'),
+    resolve(root,'future/server/src/cloudHttpHost.ts')
   ],{cwd:root,stdio:'pipe'})
   const m=require(join(out,'src/core/model.js'))
   const {
@@ -51,7 +52,7 @@ try{
   }=require(join(out,'future/cloud/initialMigration.js'))
   const {createLinkedJournal,runAutomaticSyncOnce}=require(join(out,'future/cloud/automaticSync.js'))
   const {createBackupHttpHandler}=require(join(out,'future/server/src/backupHttp.js'))
-  const {createAccountHttpHandler}=require(join(out,'future/server/src/accountHttp.js'))
+  const {listenCloudLoopbackForQa}=require(join(out,'future/server/src/cloudHttpHost.js'))
   const repository=require(join(out,'future/server/src/repository.js'))
   const admin=require(join(out,'future/server/src/adminRepository.js'))
   const {AuthenticatedCloudService}=require(join(out,'future/server/src/authenticatedService.js'))
@@ -218,19 +219,17 @@ try{
   // Real signed-login HTTP route through the separate minimal-permission
   // WeChat identity PostgreSQL role and cloud consent service.
   let httpWechatTokenForRedactionCheck
-  const testAuthHttp=createAccountHttpHandler({
-    identityDb:identityPool,authConfig:wxConfig,exchange:mockExchange,
-    login:loginWithWechatCode,account:service,
-    permitLogin:()=>true // localhost-only fixture; production MUST rate limit
-  })
-  const authServer=createServer(testAuthHttp)
-  await new Promise((resolve,reject)=>{
-    authServer.once('error',reject)
-    authServer.listen(0,'127.0.0.1',resolve)
-  })
+  const qa=await listenCloudLoopbackForQa({
+    account:{identityDb:identityPool,authConfig:wxConfig,exchange:mockExchange,
+      login:loginWithWechatCode,account:service,
+      permitLogin:()=>true // localhost-only fixture; production MUST rate limit
+    },
+    backup:service
+  },'SYNTHETIC_TEST_ONLY')
   try{
-    const addr=authServer.address()
-    const target='http://127.0.0.1:'+addr.port
+    const target=qa.origin
+    check(qa.server.address()?.address==='127.0.0.1',
+      'Composed WeChat/backup HTTP QA listener binds loopback only')
     const body=JSON.stringify({code:'wxhttpcode0001',deviceId:'device0099'})
     const authReply=await fetch(target+'/v1/auth/wechat',{
       method:'POST',headers:{'Content-Type':'application/json'},body
@@ -255,12 +254,51 @@ try{
     })
     check(consentReply.status===200&&(await consentReply.json()).enabled===true,
       'Explicit HTTP consent updates real PostgreSQL account under trusted token')
+    // One actual HTTP listener now serves authenticated login, consent and
+    // snapshot backed by separate, least-privileged PostgreSQL pools.
+    const day=m.localDate(),records=m.fresh()
+    m.setCount(records,day,0)
+    m.appendNote(records,day,'隔离端到端云记录📝')
+    const firstUpload={baseRevision:0,baseDigest:null,
+      idempotencyKey:'qahttpcreate001',records}
+    const uploadHeaders={...headers,'Content-Type':'application/json'}
+    const firstReply=await fetch(target+'/v1/backup/snapshot',{
+      method:'PUT',headers:uploadHeaders,body:JSON.stringify(firstUpload)
+    })
+    const decision=await firstReply.json()
+    check(firstReply.status===200&&decision.kind==='accepted'&&decision.receipt.revision===1,
+      'One listener runs real WeChat login → consent → PostgreSQL snapshot upload')
+    const secondReply=await fetch(target+'/v1/auth/wechat',{
+      method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({code:'wxhttpcode0002',deviceId:'device0100'})
+    })
+    const second=await secondReply.json()
+    check(secondReply.status===200&&second.ownerId===authenticated.ownerId&&
+      second.deviceId==='device0100'&&second.isNewAccount===false,
+      'Second device resolves original WeChat owner via DB identity mapping')
+    const readReply=await fetch(target+'/v1/backup/snapshot',{
+      headers:{Authorization:'Bearer '+second.accessToken}
+    })
+    const readback=await readReply.json()
+    check(readReply.status===200&&readback.digest===decision.receipt.digest&&
+      readback.records.days[day].count===0&&readback.records.days[day].notes.length===1,
+      'Device B retrieves explicit zero, note and full history through same listener')
+    check((await fetch(target+'/v1/backup/snapshot?ownerId='+authenticated.ownerId,
+      {headers})).status===404,
+      'Query-string owner injection cannot select the private backup route')
+    check((await fetch(target+'/v1/admin/read',{headers})).status===404,
+      'Admin/private interfaces remain unexposed by composed public router')
+    check((await fetch(target+'/healthz')).status===204,
+      'Unauthenticated QA liveness response carries no personal information')
     const offReply=await fetch(target+'/v1/backup/consent',{
       method:'PUT',headers:{...headers,'Content-Type':'application/json'},
       body:JSON.stringify({enabled:false,noticeVersion:'privacy-v1'})
     })
     check(offReply.status===200&&(await offReply.json()).enabled===false,
       'HTTP opt-out reverts database consent without deleting records')
+    check((await pool.query('SELECT revision FROM cloud_snapshots WHERE user_id=$1',
+      [authenticated.ownerId])).rows[0].revision==='1',
+      'Consent opt-out preserves test snapshot in PostgreSQL until explicit erasure')
     check((await fetch(target+'/v1/auth/wechat',{
       method:'POST',headers:{'Content-Type':'application/json'},body
     })).status===401,'Replay of WeChat one-time code fails under actual SQL uniqueness')
@@ -274,7 +312,14 @@ try{
       'Real restricted PostgreSQL token revocation confirms current-device logout')
     check((await fetch(target+'/v1/backup/status',{headers})).status===401,
       'Revoked WeChat HTTP session cannot resume cloud access')
-  }finally{await new Promise(resolve=>authServer.close(resolve))}
+    // A separate explicit erasure clears this synthetic fixture before the
+    // downstream cancellation tests create their own first cloud revision.
+    // A simple consent opt-out above did not erase anything.
+    await service.deleteBackup(second.accessToken)
+    check((await pool.query('SELECT 1 FROM cloud_snapshots WHERE user_id=$1',
+      [authenticated.ownerId])).rows.length===0,
+      'Explicit test-only backup erasure resets fixture without cross-account deletion')
+  }finally{await qa.close()}
 
   await assert.rejects(loginWithWechatCode(identityPool,'wecode0001','device0001',
     wxConfig,mockExchange),/wechat_code_already_used/);checks++
