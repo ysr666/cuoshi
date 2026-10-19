@@ -12,14 +12,26 @@ const src=join(staging,'src'),future=join(staging,'future')
 if(!existsSync(join(root,'src','pages.json')))throw Error('wrong build root')
 rmSync(staging,{recursive:true,force:true})
 mkdirSync(src,{recursive:true})
-cpSync(join(root,'src'),src,{recursive:true})
-// The v0.5 two-page package does not require legacy tab-bar artwork.
-rmSync(join(src,'static','tab'),{recursive:true,force:true})
+// Release-scope allowlist. Never stage v0.4 stats, calendar, file IO,
+// export/import pages or unrelated prototype UI: only the minimum needed
+// for v0.5 daily records and authenticated automatic cloud persistence.
+const copySource=(relative,from,to)=>{
+ const target=join(to,relative)
+ mkdirSync(dirname(target),{recursive:true})
+ cpSync(join(from,relative),target)
+}
+for(const file of ['App.vue','main.ts','manifest.json',
+ 'core/model.ts','core/backup.ts'])copySource(file,join(root,'src'),src)
 mkdirSync(future,{recursive:true})
-cpSync(join(root,'future','cloud'),join(future,'cloud'),{recursive:true})
-cpSync(join(root,'future','miniapp'),join(future,'miniapp'),{
-  recursive:true,filter:path=>!path.includes('.generated-mp')
-})
+mkdirSync(join(future,'cloud'),{recursive:true})
+for(const file of [
+ 'automaticSync.ts','clientAdapters.ts','cloudFirst.ts',
+ 'cloudFirstLifecycle.ts','cloudRecordActions.ts','firstLinkRuntime.ts',
+ 'initialMigration.ts','snapshotContract.ts','stableJson.ts',
+ 'uniAccountRecords.ts','uniCloudHost.ts','wechatSession.ts'
+])copySource(file,join(root,'future','cloud'),join(future,'cloud'))
+for(const file of ['runtime.ts','historyView.ts'])
+ copySource(file,join(root,'future','miniapp'),join(future,'miniapp'))
 for(const page of ['today','settings']){
  const target=join(src,'pages',page,'index.vue')
  cpSync(join(root,'future','miniapp','pages',page,'index.vue'),target)

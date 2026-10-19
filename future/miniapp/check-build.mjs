@@ -66,6 +66,38 @@ if(noServer){
  check(generated.includes('cloudOrigin=""'),
    'Without a configured cloud origin, miniapp cannot authenticate/upload')
 }
+// Treat the actual compiled package as the release-scope boundary. A stray
+// page, legacy file-sharing bridge or subscription API is a regression even
+// if its UI is hidden behind a flag. Keep this list deliberately small.
+const allowedRuntimeFiles=[
+ 'app.js','app.json','app.wxss','common/vendor.js',
+ 'core/backup.js','core/model.js',
+ 'pages/today/index.js','pages/today/index.json',
+ 'pages/today/index.wxml','pages/today/index.wxss',
+ 'pages/settings/index.js','pages/settings/index.json',
+ 'pages/settings/index.wxml','pages/settings/index.wxss',
+ 'project.config.json'
+]
+const runtimeFiles=readdirSync(app,{recursive:true,withFileTypes:true})
+ .filter(entry=>entry.isFile())
+ .map(entry=>join(entry.parentPath,entry.name).slice(app.length+1)
+   .split('\\').join('/')).sort()
+check(JSON.stringify(runtimeFiles)===JSON.stringify(allowedRuntimeFiles.slice().sort()),
+ 'v0.5 output includes only its two pages, account model and runtime core')
+const stagedSourceFiles=readdirSync(join(base,'src'),{recursive:true})
+ .map(String)
+check(!stagedSourceFiles.some(name=>
+ /^(components|platform|static)(\/|$)/.test(name)||
+ /^(pages\/(calendar|detail|stats))(\/|$)/.test(name)),
+ 'No v0.4 stats, calendar, import/export bridge or nonessential source staged')
+const deliveredJavaScript=runtimeFiles.filter(x=>x.endsWith('.js'))
+ .map(read).join('\n')
+for(const api of ['chooseMessageFile','shareFileMessage','getFileSystemManager',
+ 'requestSubscribeMessage','getPhoneNumber'])
+ check(!deliveredJavaScript.includes(api),'No optional file/subscription/phone API: '+api)
+for(const obsolete of ['导出完整备份','导入备份','累计排行','连续打卡','AI 判断错误'])
+ check(!today.includes(obsolete)&&!settings.includes(obsolete),
+   'No optional feature surface: '+obsolete)
 const all=readdirSync(app,{recursive:true})
 check(!all.some(name=>String(name).includes('test-fixtures')),
  'No test fixture copied into the miniapp')
