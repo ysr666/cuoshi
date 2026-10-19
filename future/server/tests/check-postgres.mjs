@@ -217,6 +217,7 @@ try{
     'Same WeChat identity maps to existing account')
   // Real signed-login HTTP route through the separate minimal-permission
   // WeChat identity PostgreSQL role and cloud consent service.
+  let httpWechatTokenForRedactionCheck
   const testAuthHttp=createAccountHttpHandler({
     identityDb:identityPool,authConfig:wxConfig,exchange:mockExchange,
     login:loginWithWechatCode,account:service,
@@ -237,6 +238,7 @@ try{
     check(authReply.status===200,
       'WeChat HTTP route completes trusted exchange with restricted identity DB')
     const authenticated=await authReply.json()
+    httpWechatTokenForRedactionCheck=authenticated.accessToken
     check(authenticated.ownerId===wxLogin.userId&&
       authenticated.isNewAccount===false&&authenticated.deviceId==='device0099',
       'Existing WeChat account resolved from provider identity, not caller owner')
@@ -718,7 +720,7 @@ try{
     'Revoked staff tokens cannot reach private-record SQL function')
   const revokedRows=await pool.query('SELECT * FROM cloud_revoked_backup_tokens')
   check(revokedRows.rows.length===2&&!JSON.stringify(revokedRows.rows).includes(tokenToRevoke)&&
-    !JSON.stringify(revokedRows.rows).includes(authenticated.accessToken),
+    !JSON.stringify(revokedRows.rows).includes(httpWechatTokenForRedactionCheck),
     'Current-device WeChat HTTP logout and later user logout retain only token nonce digests, never bearer credentials')
   await service.deleteBackup(tokenA)
   check(!(await service.status(tokenA)).enabled,'Deleting cloud backup turns opt-in off')
