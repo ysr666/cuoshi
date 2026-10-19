@@ -37,6 +37,13 @@
 
 `npm run test:future:migration-render` 用 **62 项**静态与临时文件合同验证固定顺序、SQL 角色名、注入防护、只写仓库外权限隔离目录及 checksum；独立的真实 PostgreSQL CI 则直接调用相同渲染器执行 7 份迁移并验证角色权限与注销业务。这两类测试均不能代替生产实例上的审查和演练。
 
+
+### 必须配置的 PostgreSQL schema（已修复生产启动阻断）
+
+服务端的四个运行时连接现在统一使用 `CUOSHI_PG_SCHEMA`（例如 `cuoshi_prod`），必须与七份迁移脚本中的 `CUOSHI_PG_SCHEMA` **完全一致**。这是服务端独立必需环境变量，值只允许小写英文/数字/下划线且不能是 `public`、PostgreSQL 内部 schema 或危险标识符。Node 的 `pg.Pool` 明确发送 `-c search_path=<schema>,pg_catalog` 并验证 `current_schema()` 与 `to_regclass('cloud_users')`，不再依赖 PostgreSQL 默认的 `public`，也不允许 DSN 中用 `options=` 绕过。
+
+新建空 schema 后必须由独立迁移账号在此 schema 执行 SQL；**不能**为了让服务启动而把表建到 `public`，也不能给业务账号 schema 所有权。真实 PostgreSQL CI 有反例证明「没有 search_path 的业务连接看不到表」，并对四个生产同款连接配置逐一验证 schema 可见性。
+
 ## 真实 Linux 主机 systemd 服务模板（此处只提供文件，不启动）
 
 - `systemd/cuoshi-cloud.service`：云服务以**专用系统用户 `cuoshi`** 启动，固定入口 `/opt/cuoshi/current/future/server/.private-build/future/server/src/privateMain.js`（与构建实际产物一致），配置由 `/etc/cuoshi/cloud.env` 按 0600 文件权限注入；使用 `NoNewPrivileges`、只读系统目录、禁用内核/设备/提权能力、私有临时目录。**此服务绝不能以 root 启动。**

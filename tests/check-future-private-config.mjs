@@ -16,11 +16,12 @@ try{
   '--skipLibCheck','--rootDir',root,'--outDir',out,
   'future/server/src/privateConfig.ts'
  ],{cwd:root,stdio:'inherit'})
- const {parsePrivateCloudConfig:parse}=require(join(out,'future/server/src/privateConfig.js'))
+ const {parsePrivateCloudConfig:parse,privatePoolConnectionOptions}=require(join(out,'future/server/src/privateConfig.js'))
  const keys=['CUOSHI_BACKUP_SIGNING_KEY_HEX','CUOSHI_STAFF_SIGNING_KEY_HEX',
   'CUOSHI_WECHAT_SUBJECT_PEPPER_HEX','CUOSHI_WECHAT_CODE_PEPPER_HEX',
   'CUOSHI_LOGIN_PEER_HMAC_KEY_HEX','CUOSHI_EDGE_SHARED_SECRET_HEX']
  const env={CUOSHI_PRIVATE_EDGE_ACK:'PRIVATE_EDGE_LOOPBACK_ONLY',CUOSHI_PRIVATE_PORT:'18765',
+  CUOSHI_PG_SCHEMA:'cuoshi_prod',
   CUOSHI_WECHAT_APP_ID:'wx0123456789abcdef',CUOSHI_WECHAT_APP_SECRET:'a'.repeat(32),
   CUOSHI_PG_BACKUP_URL:'postgresql://backup_private:password@pg.example.net:5432/cuoshi?sslmode=verify-full',
   CUOSHI_PG_IDENTITY_URL:'postgresql://identity_private:password@pg.example.net:5432/cuoshi?sslmode=verify-full',
@@ -30,11 +31,23 @@ try{
  const config=parse(env)
  check(config.port===18765&&config.appId===env.CUOSHI_WECHAT_APP_ID,
   'Valid separated private service config parses to typed output')
+ check(config.dbSchema==='cuoshi_prod'&&
+  privatePoolConnectionOptions(config.backupDbUrl,config.dbSchema).options===
+   '-c search_path=cuoshi_prod,pg_catalog',
+  'Production connection pins intended private schema, not public by default')
  check(config.backupSigningKey.length===32&&config.edgeSecret.length===32,
   '32-byte secrets decode into memory, not the client package')
  const reject=(delta,pattern,label)=>{
   assert.throws(()=>parse({...env,...delta}),pattern,label);n++
  }
+ for(const invalid of [undefined,'','public','pg_temp','pg_catalog',
+  'Cuoshi_Prod','cuoshi-prod','cuoshi prod','cuoshi;DROP SCHEMA public',
+  'information_schema','a'.repeat(64)]){
+  reject({CUOSHI_PG_SCHEMA:invalid},/database_schema_invalid/,
+   'Invalid/missing runtime schema cannot fall back to public: '+invalid)
+ }
+ reject({CUOSHI_PG_BACKUP_URL:env.CUOSHI_PG_BACKUP_URL+'&options=-c%20search_path%3Dpublic'},
+  /database_invalid/,'DSN cannot override audited runtime schema via PG options')
  reject({CUOSHI_PRIVATE_EDGE_ACK:'EXPOSE_PUBLIC'},/ack_required/,'No public-listener acknowledgement')
  reject({CUOSHI_PRIVATE_EDGE_ACK:undefined},/ack_required/,'No startup without deliberate acknowledgement')
  reject({CUOSHI_PRIVATE_PORT:'0'},/port_invalid/,'No random production bind port')

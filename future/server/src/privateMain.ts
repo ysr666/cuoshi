@@ -5,7 +5,7 @@
  * explicit loopback-only acknowledgement. No public listener is possible.
  */
 import {createRequire} from 'node:module'
-import {parsePrivateCloudConfig} from './privateConfig'
+import {parsePrivateCloudConfig,privatePoolConnectionOptions} from './privateConfig'
 import {createTrustedEdgeBoundary} from './trustedEdge'
 import {listenPrivateEdgeLoopback} from './cloudHttpHost'
 import {createPostgresWechatLoginLimiter} from './loginRateLimiter'
@@ -20,8 +20,7 @@ async function main(){
  const {Pool}=localRequire('pg') as {Pool:new(opts:Record<string,unknown>)=>DbPool&{
    query(sql:string):Promise<{rows:Record<string,unknown>[]}>;end():Promise<void>
  }}
- const connect=(url:string)=>new Pool({connectionString:url,max:6,
-   connectionTimeoutMillis:5000,idleTimeoutMillis:20000})
+ const connect=(url:string)=>new Pool(privatePoolConnectionOptions(url,config.dbSchema))
  const identityDb=connect(config.identityDbUrl),backupDb=connect(config.backupDbUrl),
    staffDb=connect(config.staffDbUrl),cancellationDb=connect(config.cancellationDbUrl)
  const pools=[identityDb,backupDb,staffDb,cancellationDb]
@@ -47,8 +46,9 @@ async function main(){
      ) AS owns_sensitive_tables`)
      if(ownership.rows[0]?.owns_sensitive_tables!==false)
        throw Error('private_cloud_database_role_unsafe')
-     const schema=await pool.query("SELECT to_regclass('cloud_users') AS users")
-     if(!schema.rows[0]?.users)
+     const schema=await pool.query(
+       "SELECT current_schema() AS active_schema,to_regclass('cloud_users') AS users")
+     if(schema.rows[0]?.active_schema!==config.dbSchema||!schema.rows[0]?.users)
        throw Error('private_cloud_database_schema_missing')
      roles.push(role.name)
    }

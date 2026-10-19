@@ -56,7 +56,8 @@ try{
     resolve(root,'future/server/src/accountHttp.ts'),
     resolve(root,'future/server/src/cloudHttpHost.ts'),
     resolve(root,'future/server/src/trustedEdge.ts'),
-    resolve(root,'future/server/src/loginRateLimiter.ts')
+    resolve(root,'future/server/src/loginRateLimiter.ts'),
+    resolve(root,'future/server/src/privateConfig.ts')
   ],{cwd:root,stdio:'pipe'})
   const m=require(join(out,'src/core/model.js'))
   const {
@@ -67,6 +68,7 @@ try{
   const {createBackupHttpHandler}=require(join(out,'future/server/src/backupHttp.js'))
   const {listenCloudLoopbackForQa,listenPrivateEdgeLoopback}=require(join(out,'future/server/src/cloudHttpHost.js'))
   const {createTrustedEdgeBoundary}=require(join(out,'future/server/src/trustedEdge.js'))
+  const {privatePoolConnectionOptions}=require(join(out,'future/server/src/privateConfig.js'))
   const {createPostgresWechatLoginLimiter}=require(join(out,'future/server/src/loginRateLimiter.js'))
   const repository=require(join(out,'future/server/src/repository.js'))
   const admin=require(join(out,'future/server/src/adminRepository.js'))
@@ -108,14 +110,24 @@ try{
     url.password=secret
     return url.toString()
   }
-  backupPool=new Pool({connectionString:roleUrl(backupRole,backupSecret),
-    options:'-c search_path='+schema,max:14})
-  adminPool=new Pool({connectionString:roleUrl(adminRole,adminSecret),
-    options:'-c search_path='+schema,max:6})
-  identityPool=new Pool({connectionString:roleUrl(identityRole,identitySecret),
-    options:'-c search_path='+schema,max:10})
-  deletionPool=new Pool({connectionString:roleUrl(deletionRole,deletionSecret),
-    options:'-c search_path='+schema,max:5})
+  // Crucial production-startup regression: schemas are isolated, so a
+  // runtime pool without an explicit schema cannot see private tables.
+  const noSchemaPool=new Pool({connectionString:roleUrl(backupRole,backupSecret),max:1})
+  try{
+    const plain=await noSchemaPool.query("SELECT to_regclass('cloud_users') AS users")
+    check(plain.rows[0]?.users===null,
+      'Default PostgreSQL public search_path CANNOT find deployed cloud tables')
+  }finally{await noSchemaPool.end()}
+  backupPool=new Pool(privatePoolConnectionOptions(roleUrl(backupRole,backupSecret),schema,14))
+  adminPool=new Pool(privatePoolConnectionOptions(roleUrl(adminRole,adminSecret),schema,6))
+  identityPool=new Pool(privatePoolConnectionOptions(roleUrl(identityRole,identitySecret),schema,10))
+  deletionPool=new Pool(privatePoolConnectionOptions(roleUrl(deletionRole,deletionSecret),schema,5))
+  for(const selected of [backupPool,adminPool,identityPool,deletionPool]){
+    const resolved=await selected.query(
+      "SELECT current_schema() AS selected,to_regclass('cloud_users') AS users")
+    check(resolved.rows[0]?.selected===schema&&resolved.rows[0]?.users,
+      'Actual four production-pattern pools see expected private schema only')
+  }
   maintenancePool=new Pool({connectionString:roleUrl(maintenanceRole,maintenanceSecret),
     options:'-c search_path='+schema,max:3})
   reportingPool=new Pool({connectionString:roleUrl(reportingRole,reportingSecret),
