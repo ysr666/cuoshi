@@ -36,3 +36,18 @@
 5. 由经过授权的**独立迁移账号**按文件名顺序执行，严格核对每步的 DB 返回、对象/权限和失败日志；严禁使用运行时备份、微信身份、注销或管理员账户执行 DDL。迁移成功后才能启动私有 Node 服务，验证 4 个最小权限登录，随后再通过可信代理连接真实微信服务。
 
 `npm run test:future:migration-render` 用 **62 项**静态与临时文件合同验证固定顺序、SQL 角色名、注入防护、只写仓库外权限隔离目录及 checksum；独立的真实 PostgreSQL CI 则直接调用相同渲染器执行 7 份迁移并验证角色权限与注销业务。这两类测试均不能代替生产实例上的审查和演练。
+
+## 真实 Linux 主机 systemd 服务模板（此处只提供文件，不启动）
+
+- `systemd/cuoshi-cloud.service`：云服务以**专用系统用户 `cuoshi`** 启动，固定入口 `/opt/cuoshi/current/future/server/.private-build/future/server/src/privateMain.js`（与构建实际产物一致），配置由 `/etc/cuoshi/cloud.env` 按 0600 文件权限注入；使用 `NoNewPrivileges`、只读系统目录、禁用内核/设备/提权能力、私有临时目录。**此服务绝不能以 root 启动。**
+- `systemd/caddy.service.d/cuoshi.conf`：仅给服务商安装的 Caddy 服务注入独立的 `/etc/cuoshi/caddy.env`，不重写 Caddy 官方启动命令或服务用户/绑定 443 所需能力；文件中是**派生边缘凭据**而非 Node 根密钥。
+
+只有运营者实际具有**备案域名、合法云资源、受控迁移与六组真实独立密钥**，并完成对实例的直接授权后，部署人员才可以：
+
+1. 在真实 Linux 主机安装符合安全基线的 Node 22+ 与 Caddy，并核实 `command -v node` 对应模板中的 `/usr/bin/node`；不同发行版安装路径不同，不应复制模板就盲目启动。以无 shell 登录权的低权限 `cuoshi` 系统用户部署应用，只授予已编译代码读取权限。禁用普通用户对部署目录的写入权限；对单机数据库或云厂商托管数据库另行审计网络出站权限。
+2. 使用受保护的秘密管理流程生成 **`/etc/cuoshi/cloud.env`**。此文件仅含服务端 `future/server/.env.example` 定义的真实环境变量，目录仅管理员可访问，文件必须是 root 管理的 0600 权限，不允许放入 Git/备份公开桶、聊天记录或常规 CI 日志。按上文说明生成另外一份仅供 Caddy 使用的 `/etc/cuoshi/caddy.env`，不允许把 AppSecret/JWT 根签名密钥放进去。
+3. 将 Caddyfile 审核后安装到 `/etc/caddy/Caddyfile`，再安装 `cuoshi-cloud.service` 到 systemd 的服务目录及 Caddy 的相应 drop-in。由授权系统管理员运行 `systemd-analyze verify`、`caddy validate`、`systemctl daemon-reload` 等真实宿主环境命令，核对 systemd 读入的 `EnvironmentFile`、服务文件完整性及 Caddy TLS、DNS 和证书路径。**本地 Mac CI 只会做静态检查，并没有 systemd 或 Caddy 二进制可用**。
+4. 首次启动服务前检查数据库的 7 份迁移已在独立数据库迁移身份下完成、角色分离、实例 SSL 证书链、域名备案和业务允许路径，确保后端端口只监听 loopback 且防火墙不允许公网入站。启动 Caddy 前必须核对其派生代理凭据与 Node 端根密钥来自同一受控秘密材料，且对外不能直接发起针对私有业务端口的请求。
+5. 真实上电后只用无私人数据的 GET 探针及虚构测试记录做联调；验证 401 未认证拒绝、404 未知路径、防伪造请求头、限流、连接断开、被暂停的自动云授权、双机同步与注销。服务启动和操作事件日志必须屏蔽 AppSecret、用户简记、原始 openid 与 JWT。运行 `systemctl enable/start` 是**单独的实际授权操作**，当前仓库工具从未执行。
+
+`npm run test:future:systemd-deploy` 有 **22 项**纯静态检查，用于阻止任何修改把 root 运行、嵌入密钥、绕过编译入口或宽松 systemd 权限重新引入；**不能代替**目标 Linux 上的 systemd 原生命令验证和人工网络/防火墙评审。

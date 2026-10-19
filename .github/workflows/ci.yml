@@ -83,6 +83,8 @@ jobs:
         run: npm run test:future:proxy-deploy
       - name: Validate seven SQL migration renders and locked-down operator output
         run: npm run test:future:migration-render
+      - name: Validate private backend systemd service and restricted Caddy startup template
+        run: npm run test:future:systemd-deploy
       - name: Compile isolated v0.5 native WeChat package (no production AppID)
         run: npm run build:future:mp-weixin
       - name: Verify native pages, privacy gate, package hygiene and typecheck

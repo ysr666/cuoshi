@@ -166,3 +166,8 @@ SQL 的审计禁止修改触发器只是**附加防线**，拥有数据库所有
 ### 七份数据库迁移的可复用生成方式
 
 已提供 [数据库生产首建 SQL 离线渲染器](deploy/README.md#数据库的七步迁移交付离线生成不直接写数据库) 及 `npm run test:future:migration-render`；生成器固定脚本顺序、显式选定 PostgreSQL schema、严格拒绝危险角色名，输出权限 0700/0600 和 SHA-256 清单；**只生成，不连接、不执行数据库 SQL**。真实 PostgreSQL CI 使用同一渲染器，部署仍需运营者提供受控数据库、独立迁移身份、合法备份与人工复核。
+
+
+### 独立服务的 Linux 启动模板
+
+增加 [systemd 后端与 Caddy 服务模板](deploy/README.md#真实-linux-主机-systemd-服务模板此处只提供文件不启动) 及 `npm run test:future:systemd-deploy`：后端使用专用低权限账号和受限文件读取，Caddy 用独立派生密钥；这不是已注册云实例或真实 Linux 部署。
