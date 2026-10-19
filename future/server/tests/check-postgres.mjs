@@ -44,6 +44,7 @@ try{
     resolve(root,'future/server/src/backupHttp.ts'),
     resolve(root,'future/server/src/accountHttp.ts'),
     resolve(root,'future/server/src/cloudHttpHost.ts'),
+    resolve(root,'future/server/src/trustedEdge.ts'),
     resolve(root,'future/server/src/loginRateLimiter.ts')
   ],{cwd:root,stdio:'pipe'})
   const m=require(join(out,'src/core/model.js'))
@@ -53,7 +54,8 @@ try{
   }=require(join(out,'future/cloud/initialMigration.js'))
   const {createLinkedJournal,runAutomaticSyncOnce}=require(join(out,'future/cloud/automaticSync.js'))
   const {createBackupHttpHandler}=require(join(out,'future/server/src/backupHttp.js'))
-  const {listenCloudLoopbackForQa}=require(join(out,'future/server/src/cloudHttpHost.js'))
+  const {listenCloudLoopbackForQa,listenPrivateEdgeLoopback}=require(join(out,'future/server/src/cloudHttpHost.js'))
+  const {createTrustedEdgeBoundary}=require(join(out,'future/server/src/trustedEdge.js'))
   const {createPostgresWechatLoginLimiter}=require(join(out,'future/server/src/loginRateLimiter.js'))
   const repository=require(join(out,'future/server/src/repository.js'))
   const admin=require(join(out,'future/server/src/adminRepository.js'))
@@ -375,6 +377,63 @@ try{
       [authenticated.ownerId])).rows.length===0,
       'Explicit test-only backup erasure resets fixture without cross-account deletion')
   }finally{await qa.close()}
+
+  // Authenticated private reverse-proxy edge + REAL PostgreSQL limiter.
+  // The transport is localhost HTTP only, but no path is accessible until
+  // the separately configured proxy secret and source-IP proof are verified.
+  const edgeSecret=crypto.randomBytes(32)
+  const edge=createTrustedEdgeBoundary({sharedSecret:edgeSecret})
+  const edgeLimit=createPostgresWechatLoginLimiter({
+    db:identityPool,peerHmacKey:limitKey,verifiedPeer:edge.clientIp
+  })
+  const edgeHost=await listenPrivateEdgeLoopback({
+    account:{identityDb:identityPool,authConfig:wxConfig,exchange:mockExchange,
+      login:loginWithWechatCode,account:service,permitLogin:edgeLimit},
+    backup:service
+  },edge,0)
+  try{
+    const base=edgeHost.origin
+    const loginBody=(code)=>JSON.stringify({code,deviceId:'device0099'})
+    const metadata={
+      'X-Cuoshi-Edge-Proof':edgeSecret.toString('hex'),
+      'X-Cuoshi-Client-Ip':'192.0.2.120',
+      'X-Forwarded-For':'192.0.2.42'
+    }
+    const request=(code,headers)=>fetch(base+'/v1/auth/wechat',{
+      method:'POST',headers:{'Content-Type':'application/json',...headers},
+      body:loginBody(code)
+    })
+    const countBefore=(await pool.query(`SELECT sum(attempts) AS n FROM
+      cloud_wechat_login_rate_windows WHERE scope='global'`)).rows[0].n
+    check((await request('edgecode0001',{})).status===403,
+      'Unprotected direct local request cannot use trusted edge login')
+    check((await request('edgecode0001',{...metadata,
+      'X-Cuoshi-Edge-Proof':'a'.repeat(64)})).status===403,
+      'Wrong local proxy credential fails before WeChat code is consumed')
+    check((await pool.query(`SELECT sum(attempts) AS n FROM
+      cloud_wechat_login_rate_windows WHERE scope='global'`)).rows[0].n===countBefore,
+      'Unauthenticated private-edge calls cannot consume PostgreSQL login quota')
+    const first=await request('edgecode0001',metadata)
+    const firstJson=await first.json()
+    check(first.status===200&&firstJson.ownerId===wxLogin.userId,
+      'Verified reverse proxy forwards real signed WeChat login to PostgreSQL')
+    const second=await request('edgecode0002',{...metadata,
+      'X-Cuoshi-Client-Ip':'192.0.2.121',
+      'X-Forwarded-For':'192.0.2.120'})
+    check(second.status===200&&(await second.json()).ownerId===wxLogin.userId,
+      'Independent verified client IP avoids another proxy client rate quota')
+    check((await pool.query(`SELECT count(DISTINCT peer_digest) AS n FROM
+      cloud_wechat_login_rate_windows WHERE scope='peer'`)).rows[0].n==='5',
+      'Real DB stores separate peer buckets for two trusted proxy addresses')
+    check((await fetch(base+'/v1/backup/status',{
+      headers:{...metadata,Authorization:'Bearer '+firstJson.accessToken}
+    })).status===200,
+      'Trusted proxy can reach authenticated backup metadata')
+    check((await fetch(base+'/v1/backup/status',{
+      headers:{Authorization:'Bearer '+firstJson.accessToken}
+    })).status===403,
+      'Valid user bearer is NOT sufficient to bypass private edge authentication')
+  }finally{await edgeHost.close()}
 
   await assert.rejects(loginWithWechatCode(identityPool,'wecode0001','device0001',
     wxConfig,mockExchange),/wechat_code_already_used/);checks++

@@ -127,3 +127,13 @@ SQL 的审计禁止修改触发器只是**附加防线**，拥有数据库所有
 - 身份数据库角色只获得限流函数 `EXECUTE` 权限，不能查看或清除限流表；受限维护角色仅能调用独立函数清理超过 24 小时的桶。正式运维仍须按固定周期执行清理，不得将此功能视为现成的自动任务或免运维限流服务。
 - 注意：本机测试 HTTP 使用 127.0.0.1；公网反向代理若仅向应用传递代理自己的 socket IP，则**所有用户共享一个保守的代理 IP 配额**。正式上线前必须落实可信代理身份边界、上游 CDN/WAF 的频率限制和多代理来源验证，不能直接把不可信请求头当用户 IP。阈值需结合网关和真实业务流量审核。
 - 新增 13 项合成安全断言；隔离 PostgreSQL CI 增加最小 SQL 权限、跨实例并发、额度耗尽、真实 HTTP 429、来源 HMAC 保护等联调。未使用真实微信账号及生产服务器。
+
+
+## 2026-10-19 · 可编译的私有监听进程与代理信任边界（待正式部署审核）
+
+- `src/privateMain.ts`：已编写实际 Node 启动入口，整合 `AuthenticatedCloudService`、受限 PostgreSQL 角色连接池、微信 `jscode2session` 交换器、跨实例 SQL 登录限流和统一云端 HTTP 路由，且**只能监听 `127.0.0.1`**。启动前检查数据库服务账号非超级用户/不能建库建角色、不同角色独立、限流迁移函数就绪；启动异常或中断将关闭连接池和本机监听。
+- `src/privateConfig.ts`：必须提交明确 `CUOSHI_PRIVATE_EDGE_ACK=PRIVATE_EDGE_LOOPBACK_ONLY`、固定非特权端口、正式形态的微信 AppID/AppSecret、三条不同最小权限的 PostgreSQL URL（要求 `sslmode=verify-full`）、六组互不相同的 32 字节强随机十六进制密钥。不符合任何条件都不能进入监听。**有效的配置检查不代表微信主体资格、云供应商资质或法律审核已经通过。**
+- `src/trustedEdge.ts`：仅接受来自本机套接字的代理请求；反向代理需要用内部独立密钥设置 `X-Cuoshi-Edge-Proof`，并**覆写而不是保留外部客户端传入的** `X-Cuoshi-Client-Ip`。服务端在验证本地套接字、密钥及单一合法 IP 后，才把该 IP 交给 `loginRateLimiter.ts` 生成 HMAC。原样读取任意 `X-Forwarded-For` 仍然禁止。除非可靠的反向代理已配置，否则请不要运行带真密钥的服务。
+- 注意：这个设计依赖 **TLS 终止网关正确隔离并重写私有请求头**。反向代理必须禁止客户端直接访问 HTTP 回环服务、不能透传外部提供的代理密钥/IP 头，网关私有密钥必须从秘密管理器注入并受最小权限保护。若 CDN 在网关之前，必须配置严格可信的 CDN IP 列表，否则 IP 限流依据应是网关接收到的 CDN 地址。入口可另外由 WAF 预先限流；勿把静态边缘密钥当成终端用户认证。
+- 服务编译：先在仓库根目录 `npm ci`，再 `npm ci --prefix future/server`；执行 `npm run build:private --prefix future/server`，产物仅出现在被 Git 忽略的 `future/server/.private-build`；设置经过安全审核的环境变量后再运行 `npm run start:private --prefix future/server`。仓库中的 `.env.example` 只是**无效占位模板**，绝不存放真实值。不得将此服务打包进微信小程序。
+- CI 测试：`npm run test:future:trusted-edge`（26 项实际本机 HTTP 请求检查）、`npm run test:future:private-config`（23 项配置拒绝和编译产物启动检查），加上隔离 PostgreSQL 对可信代理 → 微信登录 → SQL 登录限流 → 云端账号的联动检查。**仍未接真实微信平台，也未设置正式 TLS 网关、服务器运维或上线。**

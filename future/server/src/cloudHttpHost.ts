@@ -8,6 +8,7 @@ import {createServer,type IncomingMessage,type ServerResponse,type Server} from 
 import {type AddressInfo} from 'node:net'
 import {createAccountHttpHandler,type AccountHttpDependencies} from './accountHttp'
 import {createBackupHttpHandler,answer} from './backupHttp'
+import type {CloudRequestHandler,createTrustedEdgeBoundary} from './trustedEdge'
 import type {AuthenticatedCloudService} from './authenticatedService'
 
 type BackupService=Pick<AuthenticatedCloudService,'readBackup'|'upload'>
@@ -67,6 +68,47 @@ export async function listenCloudLoopbackForQa(
   if(!address||typeof address==='string'||address.address!=='127.0.0.1'){
     await new Promise<void>(resolve=>server.close(()=>resolve()))
     throw Error('cloud_http_loopback_bind_failed')
+  }
+  return {server,origin:'http://127.0.0.1:'+(address as AddressInfo).port,
+    close:()=>new Promise<void>((resolve,reject)=>{
+      server.close(error=>error?reject(error):resolve())
+      server.closeIdleConnections()
+    })}
+}
+
+/**
+ * Explicit, loopback-only service listener for a separately authenticated
+ * local reverse proxy. Unlike the synthetic QA listener, requests without
+ * a configured trusted-edge proof are rejected BEFORE any cloud route.
+ * This does not set up TLS, WeChat credentials, distributed storage or a
+ * production proxy: those remain external deployment requirements.
+ */
+export async function listenPrivateEdgeLoopback(
+  deps:CloudHttpDependencies,
+  edge:ReturnType<typeof createTrustedEdgeBoundary>,
+  port:number
+):Promise<{server:Server;origin:string;close:()=>Promise<void>}>{
+  if(!edge||typeof edge.protect!=='function'||typeof edge.clientIp!=='function'||
+     !Number.isSafeInteger(port)||port<0||port>65535)
+    throw Error('cloud_private_edge_required')
+  const protectedRoute:CloudRequestHandler=edge.protect(createCloudHttpRouter(deps))
+  const server=createServer({maxHeaderSize:8192,requestTimeout:15000,
+    headersTimeout:10000,keepAliveTimeout:3000},(req,res)=>{
+    void protectedRoute(req,res).catch(()=>{
+      if(!res.headersSent)answer(res,503,{error:'cloud_temporarily_unavailable'})
+      else res.end()
+    })
+  })
+  try{
+    await new Promise<void>((resolve,reject)=>{
+      server.once('error',reject)
+      server.listen(port,'127.0.0.1',resolve)
+    })
+  }catch(error){server.close();throw error}
+  const address=server.address()
+  if(!address||typeof address==='string'||address.address!=='127.0.0.1'){
+    await new Promise<void>(resolve=>server.close(()=>resolve()))
+    throw Error('cloud_private_edge_bind_failed')
   }
   return {server,origin:'http://127.0.0.1:'+(address as AddressInfo).port,
     close:()=>new Promise<void>((resolve,reject)=>{

@@ -60,6 +60,10 @@ jobs:
         run: npm run test:future:http-host
       - name: Persistent SQL login limiter HMAC, socket IP and fail-closed contracts
         run: npm run test:future:login-rate
+      - name: Trusted local reverse proxy authentication and verified client quotas
+        run: npm run test:future:trusted-edge
+      - name: Private cloud deployment config and secure startup preflight
+        run: npm run test:future:private-config
       - name: WeChat session refresh, account switch and consent client contracts
         run: npm run test:future:wechat-session
       - name: Future cloud settings Vue typecheck
@@ -193,6 +197,8 @@ jobs:
         run: npm ci --prefix future/server --ignore-scripts --no-audit
       - name: Typecheck isolated backend
         run: npm run check:types --prefix future/server
+      - name: Compile private-loopback cloud executable (no credentials)
+        run: npm run build:private --prefix future/server
       - name: Migrate and test disposable PostgreSQL schema
         env:
           CUOSHI_TEST_POSTGRES_URL: postgresql://postgres:ci_only_disposable@127.0.0.1:5432/postgres

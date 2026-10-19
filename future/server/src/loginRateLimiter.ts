@@ -10,19 +10,23 @@ import type {DbPool} from './repository'
  * 12 calls per remote socket IP and 200 globally, per fixed minute.
  *
  * Never read X-Forwarded-For, X-Real-IP or other untrusted HTTP headers.
- * Behind a reverse proxy, remoteAddress represents the proxy, making this a
- * conservative shared quota until verified edge identity is implemented.
+ * The optional verifiedPeer must come from a separately authenticated,
+ * loopback-bound edge; no raw proxy header should ever be passed to it.
+ * Without one, remoteAddress represents the proxy (conservative shared quota).
  */
 export function createPostgresWechatLoginLimiter(args:{
   db:DbPool
   peerHmacKey:Uint8Array
+  /** Optional authenticated edge-supplied address; null denies login. */
+  verifiedPeer?:(req:IncomingMessage)=>string|null
 }){
   if(typeof args?.db?.connect!=='function'||
-     !(args.peerHmacKey instanceof Uint8Array)||args.peerHmacKey.byteLength<32)
+     !(args.peerHmacKey instanceof Uint8Array)||args.peerHmacKey.byteLength<32||
+     (args.verifiedPeer!==undefined&&typeof args.verifiedPeer!=='function'))
     throw Error('wechat_login_limiter_not_configured')
   const key=Uint8Array.from(args.peerHmacKey)
   return async (req:IncomingMessage):Promise<boolean>=>{
-    const peer=req?.socket?.remoteAddress
+    const peer=args.verifiedPeer?args.verifiedPeer(req):req?.socket?.remoteAddress
     if(typeof peer!=='string'||!isIP(peer))return false
     const digest=createHmac('sha256',key)
       .update('cuoshi-v05-login-peer-v1:').update(peer.toLowerCase()).digest('hex')
