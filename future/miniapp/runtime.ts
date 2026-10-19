@@ -224,7 +224,7 @@ async function connect(){
  state.stage='ready'
  update()
 }
-function offlineAfterVerifiedLoginFailure():boolean{
+function offlineAfterVerifiedLoginFailure(rateLimited=false):boolean{
  // Offline editing is available only for the previously verified account
  // and only when local consent matches this exact privacy notice version.
  if(!accepted()||!cloudOrigin)return false
@@ -248,7 +248,9 @@ function offlineAfterVerifiedLoginFailure():boolean{
  offlineLocal=true
  state.stage='ready'
  state.sync='暂未同步'
- state.message='网络异常，本机记录可继续填写；联网后会验证账号并自动补传。'
+ state.message=rateLimited?
+  '登录请求较频繁，请稍后重新检查；本机记录可继续填写，尚未同步。':
+  '网络异常，本机记录可继续填写；联网后会验证账号并自动补传。'
  state.revision++
  installOfflineNetworkWatch()
  return true
@@ -262,9 +264,10 @@ export function start():Promise<void>{
   const reason=e instanceof Error?e.message:String(e)
   // Do NOT expose cached identity when server returned an authentication
   // or mismatched-owner error; only connectivity failures permit fallback.
-  const network=/network|网络|unavailable|超时|wechat_login_unavailable|timeout/i.test(reason)
+  const rateLimited=reason==='wechat_session_rate_limited'
+  const network=rateLimited||/network|网络|unavailable|超时|wechat_login_unavailable|timeout/i.test(reason)
   if(network){
-   try{if(offlineAfterVerifiedLoginFailure())return}
+   try{if(offlineAfterVerifiedLoginFailure(rateLimited))return}
    catch(error){
     state.message=error instanceof Error?error.message:String(error)
     state.stage='blocked'
@@ -281,7 +284,8 @@ export function start():Promise<void>{
   const rejected=/^(?:wechat_session_(?:account_changed|authorization_required|access_denied|authentication_failed|invalid_response|status_invalid)|cloud_first_account_changed|微信账号在登录期间发生变化)$/.test(reason)
   const quarantined=rejected?quarantineOfflineEntitlement():true
   state.message=rejected&&!quarantined?
-   '微信账号验证被拒绝，本机安全锁写入失败；请勿退出程序，先修复本机存储。':reason
+   '微信账号验证被拒绝，本机安全锁写入失败；请勿退出程序，先修复本机存储。':
+   rateLimited?'登录请求较频繁，请稍后重试；本机记录已保留。':reason
   state.stage=network?'offline':'blocked'
  }).finally(()=>{task=null})
  return task

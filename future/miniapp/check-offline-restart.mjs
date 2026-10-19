@@ -32,7 +32,7 @@ try{
  const records=require(join(out,'src','core','model.js'))
  const cloud=new CloudContractSimulator()
  const storage=new Map(),tokens=new Map(),networkListeners=new Set()
- let ignoreNextOwnerRemoval=false,rejectNextLogin=false
+ let ignoreNextOwnerRemoval=false,rejectNextLogin=false,nextLoginHttpStatus=0
  let rejectSnapshotRead=false,rejectSnapshotUpload=false
  let owner='account0001',online=true,serverConsent=false,loginCalls=0,
    httpCalls=0,uploads=0,wxCSPRNG=0,uniCSPRNG=0
@@ -66,6 +66,11 @@ try{
    if(!online){fail({message:'offline'});return}
    if(url.endsWith('/v1/auth/wechat')){
     if(rejectNextLogin){rejectNextLogin=false;success({statusCode:401,data:{}});return}
+    if(nextLoginHttpStatus){
+     const status=nextLoginHttpStatus;nextLoginHttpStatus=0
+     success({statusCode:status,data:{error:status===429?'too_many_requests':'cloud_temporarily_unavailable'}})
+     return
+    }
     const token='a'.repeat(110)+String(loginCalls).padStart(5,'0')
     tokens.set(token,owner)
     success({statusCode:200,data:{
@@ -279,5 +284,50 @@ try{
  ok(app.getActions().day().count===2&&
    cloud.readForOwner(principal(),owner)?.records.days[records.localDate()].count===2,
    'Fresh verified session replays pending full local edit without losing events')
+ // A legitimate backend anti-abuse 429 is not a revoked identity. In
+ // particular it must not persist a quarantine or destroy the cached owner.
+ networkListeners.clear()
+ delete require.cache[require.resolve(runtimeModule)]
+ app=require(runtimeModule)
+ nextLoginHttpStatus=429
+ const originalOwner=storage.get('cuoshi-future-v05-miniapp-last-verified-owner')?.ownerId
+ await app.start()
+ ok(app.state.stage==='ready'&&app.state.sync==='暂未同步',
+   'Cold startup HTTP 429 safely opens only the already verified offline owner')
+ ok(app.getActions().day().count===2&&
+   storage.get('cuoshi-future-v05-miniapp-last-verified-owner')?.ownerId===originalOwner,
+   'Rate limiting preserves the exact owner records and verified offline binding')
+ ok(!storage.has('cuoshi-future-v05-miniapp-offline-reverification-required'),
+   'HTTP 429 cannot create a false durable account-revocation quarantine')
+ ok(app.state.message.includes('登录请求较频繁'),
+   'Native screen explains rate limiting instead of falsely claiming account ban')
+ app.getActions().adjustCount(records.localDate(),1,true)
+ ok(app.getActions().day().count===3,
+   'Local count remains editable while cloud login is rate limited')
+ // The provider may also temporarily return 503 on the following attempt;
+ // the app still owes the user a durable local journal and another retry.
+ nextLoginHttpStatus=503
+ await app.start()
+ ok(app.state.stage==='ready'&&app.state.sync==='暂未同步'&&
+   app.getActions().day().count===3,
+   'HTTP 503 on retry is transient and retains local pending edits')
+ ok(!storage.has('cuoshi-future-v05-miniapp-offline-reverification-required'),
+   'HTTP 503 never marks the owner revoked')
+ await app.start()
+ await until(()=>app.state.sync==='已同步'&&
+   cloud.readForOwner(principal(),owner)?.records.days[records.localDate()]?.count===3)
+ ok(app.getActions().day().count===3,
+   'Verified login after 429 and 503 uploads all pending local count changes')
+ ok(storage.get('cuoshi-future-v05-miniapp-last-verified-owner')?.ownerId===originalOwner,
+   'Recovering from rate limiting keeps the same verified owner')
+ // No previous binding: rate limiting must NEVER grant a new offline account.
+ storage.delete('cuoshi-future-v05-miniapp-last-verified-owner')
+ networkListeners.clear()
+ delete require.cache[require.resolve(runtimeModule)]
+ app=require(runtimeModule)
+ nextLoginHttpStatus=429
+ await app.start()
+ ok(app.state.stage==='offline'&&app.getActions()===null,
+   '429 without previous identity grant cannot reveal even existing private data')
  console.log('PASS',n,'native wx crypto, cold offline restart and reconnect tests')
 }finally{rmSync(temp,{recursive:true,force:true})}

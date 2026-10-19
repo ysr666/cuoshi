@@ -33,10 +33,11 @@ try{
  const storage={getStorageSync:key=>storageMap.get(key)??'',
    setStorageSync:(key,value)=>storageMap.set(key,value)}
  const journal=createDurableJournalStore({storage,ownerId,deviceId})
- let current=m.fresh(),online=true,consent=false,account=ownerId
+ let current=m.fresh(),online=true,consent=false,account=ownerId,loginLimited=false
  let uploaded=0,pullCount=0,requestNo=0,lost=false,failLocal=false
  const auth={
-   getVerifiedSession:async()=>{if(!online)throw Error('network_unavailable')
+   getVerifiedSession:async()=>{if(loginLimited)throw Error('wechat_session_rate_limited')
+     if(!online)throw Error('network_unavailable')
      return {ownerId:account,accessToken:'synthetic_valid_token'}},
    getStatus:async()=>{if(!online)throw Error('network_unavailable')
      return {enabled:consent,hasStoredBackup:!!sim.readForOwner(who,ownerId)}},
@@ -106,6 +107,16 @@ try{
  ok(state.phase==='synced','Idempotent retry after lost receipt confirms remote')
  ok(sim.readForOwner(who,ownerId).revision===afterLost,
    'Retried request never duplicates cloud revision')
+ loginLimited=true
+ state=await ctl.onForeground()
+ ok(state.phase==='offline'&&!state.identityInvalid&&state.pendingLocal,
+   '429 while cloud foreground refresh is temporary, never identity revocation')
+ ok(/登录请求较频繁/.test(state.message),
+   'Foreground rate limiting explains the wait in clear user language')
+ loginLimited=false
+ state=await ctl.onNetworkRestored()
+ ok(state.phase==='synced'&&!state.identityInvalid,
+   'A later verified retry restores synced status without identity quarantine')
  const cloudBefore=sim.readForOwner(who,ownerId)
  const remoteChanged=copy(cloudBefore.records)
  m.setCount(remoteChanged,day,8)

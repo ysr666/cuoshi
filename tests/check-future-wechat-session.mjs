@@ -22,7 +22,7 @@ try{
   const origin='https://backup.example.invalid',deviceId='device0001'
   let account='account0001',time=1800000000,codes=0,authCalls=0,allowed=true
   let enabled=false,hasStoredBackup=false,permitLogin=true
-  let throwRequest=false,malformed=false,changeOwner=false
+  let throwRequest=false,malformed=false,changeOwner=false,loginHttpStatus=0
   const received=[]
   const tokens=new Set()
   const platform={
@@ -39,6 +39,7 @@ try{
       if(req.url===origin+'/v1/auth/wechat'){
         authCalls++
         if(!permitLogin)return {statusCode:429,data:{error:'too_many_requests'}}
+        if(loginHttpStatus)return {statusCode:loginHttpStatus,data:{error:'cloud_temporarily_unavailable'}}
         if(malformed)return {statusCode:200,data:{wrong:'result'}}
         if(req.data?.deviceId!==deviceId)return {statusCode:400,data:{}}
         const token='z'.repeat(100)+String(authCalls).padStart(4,'0')
@@ -153,8 +154,18 @@ try{
   ok(authCalls===beforeInvalid+1,'Malformed server response rejected')
   malformed=false
   permitLogin=false
-  await rejects(()=>manager.getVerifiedSession(),/authentication_failed/)
+  await rejects(()=>manager.getVerifiedSession(),/rate_limited/)
   permitLogin=true
+  time+=250
+  loginHttpStatus=503
+  await rejects(()=>manager.getVerifiedSession(),/cloud_unavailable/)
+  loginHttpStatus=429
+  await rejects(()=>manager.getVerifiedSession(),/rate_limited/)
+  loginHttpStatus=401
+  await rejects(()=>manager.getVerifiedSession(),/authentication_failed/)
+  loginHttpStatus=403
+  await rejects(()=>manager.getVerifiedSession(),/authentication_failed/)
+  loginHttpStatus=0
   ok((await manager.getVerifiedSession()).ownerId===account,
     'Rate-limited login can retry with a new code later')
   // A stale in-flight login must not resurrect bearer credentials after logout.

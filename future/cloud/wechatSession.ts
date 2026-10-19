@@ -56,6 +56,12 @@ export function createWeChatSessionManager(args:{
       header:{Accept:'application/json','Content-Type':'application/json'},
       data:{code:codeValue,deviceId}
     })
+    // Authentication errors revoke the right to reuse prior verified access.
+    // 429 and 5xx are NOT account rejection: fail temporarily without
+    // clearing the previously verified offline account entitlement.
+    if(resp.statusCode===429)throw Error('wechat_session_rate_limited')
+    if(resp.statusCode>=500&&resp.statusCode<=599)
+      throw Error('wechat_session_cloud_unavailable')
     if(resp.statusCode!==200)throw Error('wechat_session_authentication_failed')
     const body=resp.data as Record<string,unknown>|null
     if(!body||typeof body!=='object'||typeof body.ownerId!=='string'||!id.test(body.ownerId)||

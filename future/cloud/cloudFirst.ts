@@ -158,9 +158,11 @@ export function createCloudFirst(args:{
          // A remote 401/403 or a changed account is NOT offline. Quarantine
          // the old account until a newly verified login explicitly unlocks it.
          const invalid=/^(?:wechat_session_(?:account_changed|authorization_required|access_denied|authentication_failed|abandoned|invalid_response)|cloud_first_account_changed|sync_(?:owner_mismatch|session_owner_changed|cloud_(?:authentication_required|access_denied))|cloud_first_wrong_account)$/.test(reason)
-         const network=!invalid&&/network|offline|timeout|unavailable|http/i.test(reason)
+         const rateLimited=reason==='wechat_session_rate_limited'
+         const network=!invalid&&(rateLimited||/network|offline|timeout|unavailable|http/i.test(reason))
          set({phase:network?'offline':'attention',identityInvalid:invalid||state.identityInvalid,
            message:invalid?'微信账号验证已失效，已锁定原账号记录；请重新验证。':
+             rateLimited?'登录请求较频繁，请稍后再试；本机记录已保留，暂未同步。':
              network?'网络异常，暂未同步；联网后将自动重试，本机记录已保留。':
              '同步暂未完成，本机记录已保留。',
            pendingLocal:true})
