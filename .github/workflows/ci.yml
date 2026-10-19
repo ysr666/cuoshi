@@ -198,7 +198,7 @@ jobs:
             -e CUOSHI_PRIVATE_PORT=18765 \
             -e CUOSHI_EDGE_PROOF_HEX=$(printf 'a%.0s' {1..64}) \
             -v "$PWD/future/server/deploy/Caddyfile:/etc/caddy/Caddyfile:ro" \
-            caddy:2.11.7-alpine adapt --config /etc/caddy/Caddyfile --adapter caddyfile --pretty \
+            caddy:2.11.7-alpine caddy adapt --config /etc/caddy/Caddyfile --adapter caddyfile --pretty \
             > "$RUNNER_TEMP/cuoshi-caddy-adapt.json"
           node tests/check-future-caddy-adapt.mjs "$RUNNER_TEMP/cuoshi-caddy-adapt.json"
 
