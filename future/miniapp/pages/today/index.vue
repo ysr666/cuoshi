@@ -11,7 +11,8 @@ onShow(()=>{
  void start().then(()=>{onForeground();reloadDraft()})
 })
 const actions=computed(()=>{void state.revision;return getActions()})
-const canEdit=computed(()=>state.stage==='ready'&&state.sync!=='需要确认云端存储')
+const canEdit=computed(()=>state.stage==='ready'&&
+ !['需要确认云端存储','需要重新确认云端存储'].includes(state.sync))
 const day=computed(()=>{void state.revision;return actions.value?.day(selected.value)??{count:null,notes:[]}})
 const history=computed(()=>{void state.revision
  return actions.value?.read().events.filter(e=>e.targetDate===selected.value).slice().reverse()??[]
@@ -45,6 +46,7 @@ function editCount(){
  numberOpen.value=true
 }
 function saveCount(){
+ if(!canEdit.value){numberOpen.value=false;return}
  if(!/^\d+$/.test(numberInput.value)){feedback.value='请输入 0 至 9999';return}
  try{
   const result=actions.value!.changeCount(selected.value,Number(numberInput.value),selected.value===localDate())
@@ -58,6 +60,7 @@ function inputValue(e:Event):string{
    (evt.target as HTMLInputElement|null)?.value??''
 }
 function draftInput(e:Event){
+ if(!canEdit.value)return
  const text=inputValue(e)
  try{actions.value!.saveDraft(selected.value,text);draft.value=text}
  catch(err){feedback.value=err instanceof Error?err.message:String(err)}
@@ -67,6 +70,7 @@ function leave(){
  reloadDraft()
 }
 function saveNote(){
+ if(!canEdit.value)return
  try{
   const changedNow=actions.value!.updateNote(selected.value,editing.value,editBody.value)
   if(changedNow)changed()
@@ -113,9 +117,11 @@ const dateLabel=computed(()=>selected.value.split('-').slice(1).join('月')+'日
   <view class="status" :class="{warning:state.sync!=='已同步'}">
    <text>{{state.sync}}</text><text v-if="state.sync!=='已同步'">{{state.message}}</text>
   </view>
-  <view v-if="state.sync==='需要确认云端存储'" class="notice">
-   <text class="detail">此微信账号首次开启云端记录，请确认数据存储说明。</text>
-   <button class="action" @click="accept">确认自动云端保存</button>
+  <view v-if="state.sync==='需要确认云端存储'||state.consentRequired" class="notice">
+   <text class="detail" v-if="state.consentRequired">此微信账号的云端保存授权已关闭。原有数字、简记和每次修改历史仍保留，只有你再次主动确认才会恢复上传。</text>
+   <text class="detail" v-else>此微信账号首次开启云端记录，请确认数据存储说明。</text>
+   <text class="detail">恢复后将自动同步该账号的每日数量、可选简记及完整修改历史。</text>
+   <button class="action" @click="accept">{{state.consentRequired?'重新确认自动云端保存':'确认自动云端保存'}}</button>
   </view>
   <view v-else>
    <view class="date-nav"><text @click="shift(-1)">‹</text>

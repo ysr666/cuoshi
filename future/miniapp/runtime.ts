@@ -11,7 +11,7 @@ type Actions=ReturnType<typeof createCloudRecordActions>
 export const state=reactive({
  stage:'notice' as 'notice'|'connecting'|'ready'|'blocked'|'offline',
  message:'数字、选填简记和历次修改历史默认自动存入云端。首次使用请确认。',
- sync:'',date:localDate(),revision:0
+ sync:'',consentRequired:false,date:localDate(),revision:0
 })
 const NOTICE='cuoshi-future-v05-miniapp-disclosure'
 const DEVICE='cuoshi-future-v05-miniapp-device-id'
@@ -165,11 +165,14 @@ function update(){
    '微信账号验证已失效，请重新检查连接；本机记录已保留。':
    '微信账号验证已失效，本机安全锁写入失败；请勿退出程序，先修复本机存储。'
   state.stage='blocked'
+  state.consentRequired=false
   state.sync='账号需要重新验证'
   state.revision++
   return
  }
- state.sync=data.phase==='synced'?'已同步':data.phase==='offline'?'暂未同步':
+ state.consentRequired=data.consentRequired===true
+ state.sync=data.consentRequired?'需要重新确认云端存储':
+  data.phase==='synced'?'已同步':data.phase==='offline'?'暂未同步':
   data.phase==='checking'?'正在同步':data.phase==='notice'?'需要确认云端存储':
   data.phase==='attention'?'部分记录暂未同步':'等待同步'
  state.message=data.message
@@ -291,7 +294,10 @@ export function start():Promise<void>{
  return task
 }
 export async function consent(){
- if(host&&host.cloud.state().phase==='notice'){
+ // Explicit user gesture only. Revoked server consent is NEVER restored by
+ // auto-reconnect, foreground refresh, or remembered global notice.
+ if(host&&(host.cloud.state().phase==='notice'||
+    host.cloud.state().consentRequired===true)){
   await host.acceptNotice();update();return
  }
  const isFirst=!accepted()

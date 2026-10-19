@@ -15,7 +15,7 @@ const digest=(r:Records)=>sha256(stableJson(r))
 const empty=(r:Records)=>r.theme==='paper'&&Object.keys(r.days).length===0&&r.events.length===0
 const clone=<T>(v:T):T=>JSON.parse(JSON.stringify(v))
 export type CloudPhase='notice'|'checking'|'synced'|'pending'|'offline'|'attention'
-export type CloudState={phase:CloudPhase;message:string;pendingLocal:boolean;hasCloudBackup:boolean;identityInvalid?:boolean}
+export type CloudState={phase:CloudPhase;message:string;pendingLocal:boolean;hasCloudBackup:boolean;identityInvalid?:boolean;consentRequired?:boolean}
 export type CloudFirstAuth={
  getVerifiedSession():Promise<{ownerId:string;accessToken:string}>
  getStatus():Promise<{enabled:boolean;hasStoredBackup:boolean}>
@@ -86,6 +86,12 @@ export function createCloudFirst(args:{
    }else if(r.kind==='rejected'&&r.reason==='authentication'){
      set({phase:'attention',identityInvalid:true,
        message:'微信账号验证已失效，原账号已锁定；本机记录已保留。',pendingLocal:true})
+   }else if(r.kind==='rejected'&&r.reason==='consent_required'){
+     // Consent can be revoked AFTER status GET but BEFORE snapshot PUT.
+     // Preserve the existing pending idempotency request and require an
+     // explicit user action instead of calling it a cloud conflict.
+     set({phase:'attention',consentRequired:true,
+       message:'云端保存授权已关闭；未上传的修改仍在本机，重新确认后才能恢复同步。',pendingLocal:true})
    }else if(r.kind==='manual_conflict'||r.kind==='rejected'){
      set({phase:'attention',message:'云端已有更新，本机尚未同步的内容已保留，未覆盖。',pendingLocal:true})
    }else set({phase:'pending',message:'等待首次云端同步',pendingLocal:true})
@@ -102,7 +108,8 @@ export function createCloudFirst(args:{
      // Server-side consent was revoked: NEVER silently re-enable it based on
      // a remembered local preference from a previous app launch.
      if(!consentJustAcknowledged){
-       set({phase:'attention',message:'云端授权已关闭，本机记录仍保留；如需恢复请重新确认。',pendingLocal:true})
+       set({phase:'attention',consentRequired:true,
+         message:'云端保存授权已关闭；数字、简记和修改历史均已保留，请主动确认后再恢复同步。',pendingLocal:true})
        return
      }
      const updated=await auth.setCloudConsent(true,args.noticeVersion)
@@ -112,6 +119,9 @@ export function createCloudFirst(args:{
      args.onServerConsentConfirmed?.()
      consentJustAcknowledged=false
    }
+   // The server has confirmed consent or the current user explicitly renewed
+   // it; never clear the re-consent gate on a mere retry or network return.
+   if(state.consentRequired)set({consentRequired:false})
    const remote=await readCloud()
    const journal=port.load(),local=port.readLocal();validate(local)
    const localDigest=digest(local)

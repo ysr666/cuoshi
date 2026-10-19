@@ -1,8 +1,15 @@
 <script setup lang="ts">
 import {onShow} from '@dcloudio/uni-app'
-import {state,start,retry} from '../../../future/miniapp/runtime'
+import {ref} from 'vue'
+import {state,start,retry,consent} from '../../../future/miniapp/runtime'
 onShow(()=>{void start()})
 function back(){uni.navigateBack()}
+const confirmError=ref('')
+async function confirmAgain(){
+ confirmError.value=''
+ try{await consent()}
+ catch(e){confirmError.value=e instanceof Error?e.message:'暂时无法确认，请稍后重试'}
+}
 </script>
 <template>
 <view class="screen">
@@ -12,6 +19,11 @@ function back(){uni.navigateBack()}
  <view class="row"><text>保存方式</text><text>云端自动同步</text></view>
  <view class="row"><text>当前状态</text><text>{{state.sync||'未连接'}}</text></view>
  <text class="help">{{state.message}}</text>
+ <view v-if="state.consentRequired" class="reauthorize">
+  <text>云端保存授权已关闭。你的数字、简记与每次修改历史仍然保留；只有你主动重新确认，才会恢复自动上传。</text>
+  <button class="button" @click="confirmAgain">重新确认自动云端保存</button>
+  <text v-if="confirmError" class="confirm-error">{{confirmError}}</text>
+ </view>
  <button class="button" @click="retry">检查连接状态</button>
  <view class="privacy">
  <text class="label">隐私与数据</text>
@@ -34,6 +46,9 @@ function back(){uni.navigateBack()}
 .row text:last-child{color:#6c675e}
 .help{display:block;color:#6c675e;font-size:25rpx;line-height:1.9;margin-top:25rpx}
 .button{background:transparent;border:1rpx solid #ded8ce;color:#292723;font-size:27rpx;margin-top:35rpx}
+.reauthorize{padding:28rpx 0;font-size:26rpx;line-height:1.8;color:#6c675e}
+.reauthorize text{display:block}
+.reauthorize .confirm-error{color:#9c604f;margin-top:16rpx}
 .privacy{border-top:1rpx solid #ded8ce;margin-top:90rpx;padding-top:32rpx}
 .privacy text{display:block;font-size:26rpx;line-height:2;color:#6c675e;margin-bottom:25rpx}
 .privacy .label{color:#292723;font-size:30rpx}

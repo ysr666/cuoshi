@@ -30,6 +30,10 @@ const todayScript=read('pages/today/index.js')
 check(todayScript.includes('展开全部')&&todayScript.includes('收起历史'),
  'Native history offers expandable complete ledger rather than silently hiding older events')
 check(settings.includes('云端自动同步'),'Native settings explain cloud-first storage')
+check(read('pages/today/index.js').includes('重新确认自动云端保存'),
+ 'Native today page offers an explicit restore action after revoked cloud consent')
+check(settings.includes('重新确认自动云端保存'),
+ 'Native settings provide a visible re-consent path without deleting records')
 check(!settings.includes('JSON 备份'),'No v0.4 temporary JSON backup UI')
 const config=JSON.parse(read('project.config.json'))
 check(config.appid==='touristappid','No fake production AppID embedded')

@@ -33,7 +33,7 @@ try{
  const cloud=new CloudContractSimulator()
  const storage=new Map(),tokens=new Map(),networkListeners=new Set()
  let ignoreNextOwnerRemoval=false,rejectNextLogin=false,nextLoginHttpStatus=0
- let rejectSnapshotRead=false,rejectSnapshotUpload=false
+ let rejectSnapshotRead=false,rejectSnapshotUpload=false,rejectSnapshotConsent=false
  let owner='account0001',online=true,serverConsent=false,loginCalls=0,
    httpCalls=0,uploads=0,wxCSPRNG=0,uniCSPRNG=0
  const device=()=>String(storage.get('cuoshi-future-v05-miniapp-device-id')||'')
@@ -100,6 +100,11 @@ try{
    }
    if(url.endsWith('/v1/backup/snapshot')&&method==='PUT'){
     if(rejectSnapshotUpload){rejectSnapshotUpload=false;success({statusCode:403,data:{}});return}
+    if(rejectSnapshotConsent){
+     rejectSnapshotConsent=false;serverConsent=false
+     success({statusCode:403,data:{kind:'rejected',reason:'consent_required'}})
+     return
+    }
     uploads++
     const decision=cloud.propose(principal(),data)
     success({statusCode:decision.kind==='conflict'?409:200,data:decision})
@@ -320,6 +325,55 @@ try{
    'Verified login after 429 and 503 uploads all pending local count changes')
  ok(storage.get('cuoshi-future-v05-miniapp-last-verified-owner')?.ownerId===originalOwner,
    'Recovering from rate limiting keeps the same verified owner')
+ // Revoke server-side cloud consent while the verified owner still has all
+ // its private events. A reconnect must NOT renew permission on its own.
+ serverConsent=false
+ const priorRevocationUpload=uploads
+ app.onForeground()
+ await until(()=>app.state.consentRequired===true&&
+   app.state.sync==='需要重新确认云端存储')
+ ok(app.state.stage==='ready'&&app.getActions()?.day().count===3,
+   'Revoked cloud consent keeps same-account history safe in local storage')
+ app.retry()
+ await until(()=>app.state.consentRequired===true&&
+   app.state.sync==='需要重新确认云端存储')
+ ok(serverConsent===false&&uploads===priorRevocationUpload,
+   'Automatic retry does not re-enable explicitly revoked cloud permission')
+ networkListeners.clear()
+ delete require.cache[require.resolve(runtimeModule)]
+ app=require(runtimeModule)
+ await app.start()
+ await until(()=>app.state.consentRequired===true&&
+   app.state.sync==='需要重新确认云端存储')
+ ok(serverConsent===false&&uploads===priorRevocationUpload,
+   'Cold restart also cannot silently override consent explicitly revoked by server')
+ ok(app.getActions()?.day().count===3,
+   'Cold restart retains account-owned records while requiring re-consent')
+ await app.consent()
+ await until(()=>app.state.sync==='已同步'&&app.state.consentRequired===false)
+ ok(serverConsent===true&&app.getActions()?.day().count===3,
+   'Explicit re-consent restores automatic sync without losing count or notes')
+ ok(uploads===priorRevocationUpload,
+   'Renewing authorization does not duplicate an already-synced revision')
+ // Consent may be revoked between a successful status preflight and a PUT.
+ // An authenticated 403 consent_required must expose the re-consent action
+ // rather than a fake conflict or an old-owner account lock.
+ rejectSnapshotConsent=true
+ const revisionBeforeRacingRevoke=uploads
+ app.getActions().adjustCount(records.localDate(),1,true)
+ await until(()=>app.state.consentRequired===true&&
+   app.state.sync==='需要重新确认云端存储')
+ ok(app.state.stage==='ready'&&app.getActions().day().count===4,
+   'Snapshot PUT consent race keeps the new unsent count on verified owner')
+ ok(uploads===revisionBeforeRacingRevoke&&serverConsent===false,
+   'Upload rejected for missing consent never modifies authoritative cloud')
+ await app.consent()
+ await until(()=>app.state.sync==='已同步'&&
+   cloud.readForOwner(principal(),owner)?.records.days[records.localDate()]?.count===4)
+ ok(app.getActions().day().count===4,
+   'Fresh explicit consent replays queued PUT without losing historical edits')
+ ok(uploads===revisionBeforeRacingRevoke+1,
+   'Re-consent reuses pending upload without creating duplicate revisions')
  // No previous binding: rate limiting must NEVER grant a new offline account.
  storage.delete('cuoshi-future-v05-miniapp-last-verified-owner')
  networkListeners.clear()

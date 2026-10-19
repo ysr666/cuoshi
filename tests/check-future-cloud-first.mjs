@@ -86,6 +86,24 @@ try{
    'Cloud preserves explicit zero and note')
  ok(journal.load()?.cursor.revision===1,
    'First automatic upload writes durable cursor')
+ // The server revokes cloud consent on an already-linked account.
+ // Routine foreground/reconnect MUST NOT reinstate permission silently.
+ consent=false;who.cloudBackupEnabled=false
+ const uploadsBeforeRevocation=uploaded
+ state=await ctl.onForeground()
+ ok(state.phase==='attention'&&state.consentRequired===true&&state.pendingLocal,
+   'Server-revoked consent exposes a distinct explicit re-confirmation gate')
+ state=await ctl.onNetworkRestored()
+ ok(state.consentRequired===true&&consent===false&&uploaded===uploadsBeforeRevocation,
+   'Network retry cannot silently re-enable revoked consent or upload content')
+ ok(sim.readForOwner({...who,cloudBackupEnabled:true},ownerId).records.days[prior].count===0,
+   'Revoked-consent snapshot and complete history stay unchanged on server')
+ state=await ctl.acceptCloudNotice()
+ ok(state.phase==='synced'&&state.consentRequired!==true&&consent===true,
+   'Only an explicit renewed user confirmation restores server authorization')
+ ok(uploaded===uploadsBeforeRevocation&&
+   sim.readForOwner(who,ownerId).records.days[prior].notes.length===1,
+   'Re-consent does not duplicate uploads or delete original notes')
  online=false
  m.setCount(current,day,3)
  state=await ctl.onLocalSaved()
