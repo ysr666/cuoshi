@@ -35,7 +35,10 @@
     "test:future:client-adapters": "node tests/check-future-client-adapters.mjs",
     "test:future:backup-http": "node tests/check-future-backup-http.mjs",
     "test:future:account-http": "node tests/check-future-account-http.mjs",
-    "test:future:wechat-session": "node tests/check-future-wechat-session.mjs"
+    "test:future:wechat-session": "node tests/check-future-wechat-session.mjs",
+    "typecheck:future:cloud-ui": "vue-tsc --noEmit -p future/tsconfig.ui.json",
+    "build:future:cloud-ui": "vite build --config future/preview/vite.config.ts",
+    "test:future:cloud-ui": "node tests/check-future-cloud-ui.cjs"
   },
   "dependencies": {
     "@dcloudio/uni-app": "3.0.0-4080720251210001",

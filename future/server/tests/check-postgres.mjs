@@ -265,6 +265,13 @@ try{
     check((await fetch(target+'/v1/backup/status',{
       headers:{Authorization:'Bearer '+staffToken('support0001')}
     })).status===401,'Staff token audience cannot access user backup status')
+    const logoutReply=await fetch(target+'/v1/auth/logout',{
+      method:'POST',headers
+    })
+    check(logoutReply.status===204,
+      'Real restricted PostgreSQL token revocation confirms current-device logout')
+    check((await fetch(target+'/v1/backup/status',{headers})).status===401,
+      'Revoked WeChat HTTP session cannot resume cloud access')
   }finally{await new Promise(resolve=>authServer.close(resolve))}
 
   await assert.rejects(loginWithWechatCode(identityPool,'wecode0001','device0001',

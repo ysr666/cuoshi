@@ -35,6 +35,10 @@ try{
      return {enabled:consent,hasStoredBackup:revision!==null,
        revision,lastSuccessAt}
    },
+   async logoutUser(value){
+     if(value!==token)throw Error('unauthorized')
+     token='REVOKED_TOKEN'
+   },
    async setConsent(value,enabled,version){
      if(value!==token)throw Error('unauthorized')
      if(version!=='privacy-v1')throw Error('invalid_consent')
@@ -147,6 +151,10 @@ try{
    {enabled:false,noticeVersion:'privacy-v1'},authHeaders)
  check(no.status===200&&(await no.json()).enabled===false,
    'Cloud opt-out disables new uploads without deleting existing data')
+ const loggedOut=await call('/v1/auth/logout','POST',undefined,authHeaders)
+ check(loggedOut.status===204,'Current session revoked through explicit HTTP logout')
+ check((await call('/v1/backup/status','GET',undefined,authHeaders)).status===401,
+   'A logged-out session cannot read backup status')
  check((await call('/v1/backup/status?ownerId=account0002','GET',
    undefined,authHeaders)).status===404,
    'Status URL cannot select another owner')

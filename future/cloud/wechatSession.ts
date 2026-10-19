@@ -39,6 +39,7 @@ export function createWeChatSessionManager(args:{
   getStatus():Promise<FutureCloudStatus>
   setCloudConsent(enabled:boolean,noticeVersion:string):Promise<FutureCloudStatus>
   clearLocalSession():void
+  logoutCurrentDevice():Promise<void>
 }{
   const {deviceId,platform,http,nowSeconds}=args
   const origin=safeOrigin(args.origin)
@@ -141,6 +142,12 @@ export function createWeChatSessionManager(args:{
       throw Error('wechat_session_status_invalid')
     return body as FutureCloudStatus
   }
+  function clear(){
+    generation++
+    session=null
+    ownerLock=null
+    inProgress=null
+  }
   return {
     getVerifiedSession,
     async getStatus(){
@@ -155,13 +162,21 @@ export function createWeChatSessionManager(args:{
       })
       return validateStatus(response.data)
     },
-    clearLocalSession(){
-      // This only forgets a local cached bearer; server-side revocation must
-      // be performed via a separately authenticated logout endpoint.
-      generation++
-      session=null
-      ownerLock=null
-      inProgress=null
-    }
+    async logoutCurrentDevice(){
+      // Do NOT conflate locally discarding a bearer with revoking its JWT.
+      // Retain the cached session when the network cannot confirm revocation.
+      // UI must show failure and must not claim sign-out succeeded.
+      const verified=await getVerifiedSession()
+      const response=await http.request({
+        url:origin+'/v1/auth/logout',method:'POST',
+        header:{
+          Authorization:'Bearer '+verified.accessToken,
+          Accept:'application/json'
+        }
+      })
+      if(response.statusCode!==204)throw Error('wechat_session_logout_not_confirmed')
+      clear()
+    },
+    clearLocalSession:clear
   }
 }

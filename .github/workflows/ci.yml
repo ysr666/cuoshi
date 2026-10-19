@@ -46,6 +46,8 @@ jobs:
         run: npm run test:future:account-http
       - name: WeChat session refresh, account switch and consent client contracts
         run: npm run test:future:wechat-session
+      - name: Future cloud settings Vue typecheck
+        run: npm run typecheck:future:cloud-ui
       - name: WeChat backup bridge contracts
         run: npm run test:wechat:backup-bridge
       - name: Build H5
@@ -70,6 +72,10 @@ jobs:
       - name: Set up Chrome for real H5 browser checks
         id: chrome
         uses: browser-actions/setup-chrome@v2
+      - name: Build isolated v0.5 cloud settings demo (synthetic data only)
+        run: npm run build:future:cloud-ui
+      - name: Test v0.5 opt-in cloud settings user flow in Chrome
+        run: npm run test:future:cloud-ui
       - name: H5 layout, typography, touch feedback and notes
         env:
           CHROME_PATH: ${{ steps.chrome.outputs.chrome-path }}

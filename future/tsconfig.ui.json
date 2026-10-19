@@ -1,0 +1,14 @@
+{
+  "extends": "../tsconfig.json",
+  "compilerOptions": {
+    "types": ["vite/client", "@dcloudio/types"]
+  },
+  "include": [
+    "../src/**/*.ts",
+    "cloud/*.ts",
+    "ui/**/*.ts",
+    "ui/**/*.vue",
+    "preview/**/*.ts"
+  ],
+  "exclude": ["preview-dist", "server"]
+}

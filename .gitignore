@@ -11,3 +11,4 @@ qa-*.png
 .idea/
 .vscode/
 coverage/
+future/preview-dist/

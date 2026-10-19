@@ -51,6 +51,10 @@ try{
       if(!req.header.Authorization||
          !tokens.has(req.header.Authorization.slice(7)))
         return {statusCode:401,data:{error:'unauthorized'}}
+      if(req.url===origin+'/v1/auth/logout'){
+        tokens.delete(req.header.Authorization.slice(7))
+        return {statusCode:204,data:null}
+      }
       if(req.url===origin+'/v1/backup/status'){
         return {statusCode:200,data:{
           enabled,hasStoredBackup,revision:hasStoredBackup?2:null,
@@ -129,6 +133,12 @@ try{
   const afterClear=await manager.getVerifiedSession()
   ok(afterClear.ownerId===account&&codes===7,
     'Explicit local clear forgets bearer without claiming server token revocation')
+  await manager.logoutCurrentDevice()
+  ok(received.at(-1).url===origin+'/v1/auth/logout'&&
+    received.at(-1).method==='POST',
+    'Explicit sign out hits server-side token revocation endpoint')
+  ok((await manager.getVerifiedSession()).ownerId===account&&codes===8,
+    'After server-confirmed logout, a new wx.login code is required')
   const beforeFailure=codes
   allowed=false
   time+=250

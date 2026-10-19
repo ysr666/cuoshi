@@ -12,7 +12,7 @@ import {
   HttpFailure,answer,bearer,collectJson,errorResponse
 } from './backupHttp'
 
-type AccountService=Pick<AuthenticatedCloudService,'status'|'setConsent'>
+type AccountService=Pick<AuthenticatedCloudService,'status'|'setConsent'|'logoutUser'>
 type LoginFn=(
   pool:DbPool,code:string,deviceId:string,config:WechatAuthConfig,
   exchange:WechatExchange
@@ -67,6 +67,7 @@ export function createAccountHttpHandler(deps:AccountHttpDependencies){
      typeof deps.exchange!=='function'||!deps.authConfig||
      typeof deps.account?.status!=='function'||
      typeof deps.account?.setConsent!=='function'||
+     typeof deps.account?.logoutUser!=='function'||
      typeof deps.permitLogin!=='function')
     throw Error('account_http_dependencies_required')
   return async (req:IncomingMessage,res:ServerResponse):Promise<void>=>{
@@ -99,6 +100,15 @@ export function createAccountHttpHandler(deps:AccountHttpDependencies){
           // JWT maximum 15 minutes; a client should renew by fresh wx.login.
           expiresInSeconds:900 // Existing account consent is read via /status.
         })
+      }
+      if(path==='/v1/auth/logout'){
+        if(req.method!=='POST'){
+          res.setHeader('Allow','POST')
+          throw new HttpFailure(405,'method_not_allowed')
+        }
+        const token=bearer(req)
+        await deps.account.logoutUser(token)
+        return answer(res,204)
       }
       if(path==='/v1/backup/status'){
         if(req.method!=='GET'){
