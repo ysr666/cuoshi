@@ -12,7 +12,7 @@ import {INITIAL_MIGRATION_CONFIRMATION} from './initialMigration'
 import type {CloudSnapshot} from './snapshotContract'
 const valid=/^[A-Za-z0-9_-]{8,128}$/
 const digest=(r:Records)=>sha256(stableJson(r))
-const empty=(r:Records)=>Object.keys(r.days).length===0&&r.events.length===0
+const empty=(r:Records)=>r.theme==='paper'&&Object.keys(r.days).length===0&&r.events.length===0
 const clone=<T>(v:T):T=>JSON.parse(JSON.stringify(v))
 export type CloudPhase='notice'|'checking'|'synced'|'pending'|'offline'|'attention'
 export type CloudState={phase:CloudPhase;message:string;pendingLocal:boolean;hasCloudBackup:boolean}
@@ -25,9 +25,17 @@ export type CloudFirstPort=FirstLinkPort&{load():SyncJournal|null;save(state:Syn
 export function createCloudFirst(args:{
  ownerId:string;deviceId:string;auth:CloudFirstAuth;port:CloudFirstPort
  noticeVersion:string
+ /** True only for same owner and the same notice version, durably saved. */
+ previouslyAcknowledged?:boolean
+ /** Explicitly accepted while offline, before the server could persist it. */
+ pendingFirstConsent?:boolean
+ /** Called after authoritative server status confirms consent. */
+ onServerConsentConfirmed?:()=>void
  /** MUST atomically compare expected on-disk digest and preserve drafts.
   * Reject changes during network read; resolve only after durable readback. */
  replaceCleanLocal:(records:Records,expectedDigest:string)=>Promise<void>
+ /** Called only after the linked cursor was durably saved. */
+ finishCloudAdoption?:()=>void
  onChange?:(state:CloudState)=>void
 }){
  const {ownerId,deviceId,auth,port}=args
@@ -38,7 +46,8 @@ export function createCloudFirst(args:{
     typeof port?.readCloud!=='function'||typeof args.replaceCleanLocal!=='function'||
     !/^[a-zA-Z0-9._-]{3,64}$/.test(args.noticeVersion))
    throw Error('cloud_first_dependencies_required')
- let approved=false,busy=false,rerun=false
+ let approved=args.previouslyAcknowledged===true||args.pendingFirstConsent===true,busy=false,rerun=false
+ let consentJustAcknowledged=args.pendingFirstConsent===true
  let state:CloudState={phase:'notice',message:'开始使用前，请了解记录与简记将自动保存在云端。',pendingLocal:false,hasCloudBackup:false}
  const set=(next:Partial<CloudState>)=>{state={...state,...next};args.onChange?.({...state})}
  const first=createFirstLinkRuntime({ownerId,deviceId,port,
@@ -64,6 +73,7 @@ export function createCloudFirst(args:{
    const applied=port.readLocal();validate(applied)
    if(digest(applied)!==remote.digest)throw Error('cloud_first_local_write_unverified')
    saveCursor(remote,applied)
+   args.finishCloudAdoption?.()
    set({phase:'synced',message:'已同步',hasCloudBackup:true,pendingLocal:false})
  }
  function result(r:SyncResult){
@@ -76,14 +86,25 @@ export function createCloudFirst(args:{
    }else set({phase:'pending',message:'等待首次云端同步',pendingLocal:true})
  }
  async function cycle(){
+   // No wx.login, temporary code or private upload before first notice.
+   if(!approved){set({phase:'notice',message:'请先阅读并同意云端自动保存说明。'});return}
    set({phase:'checking',message:'正在同步…'})
    const identity=await auth.getVerifiedSession()
    if(identity.ownerId!==ownerId)throw Error('cloud_first_account_changed')
    let status=await auth.getStatus()
    if(!status.enabled){
-     if(!approved){set({phase:'notice',message:'请先阅读并同意云端自动保存说明。'});return}
+     // Server-side consent was revoked: NEVER silently re-enable it based on
+     // a remembered local preference from a previous app launch.
+     if(!consentJustAcknowledged){
+       set({phase:'attention',message:'云端授权已关闭，本机记录仍保留；如需恢复请重新确认。',pendingLocal:true})
+       return
+     }
      const updated=await auth.setCloudConsent(true,args.noticeVersion)
      if(!updated.enabled||(await auth.getStatus()).enabled!==true)throw Error('cloud_first_consent_failed')
+   }
+   if(consentJustAcknowledged){
+     args.onServerConsentConfirmed?.()
+     consentJustAcknowledged=false
    }
    const remote=await readCloud()
    const journal=port.load(),local=port.readLocal();validate(local)
@@ -134,7 +155,8 @@ export function createCloudFirst(args:{
            '同步暂未完成，本机记录已保留。',
            pendingLocal:true})
        }
-       if(!rerun||['offline','attention','notice'].includes(state.phase))break
+       if(!rerun||['offline','attention'].includes(state.phase)||
+          (state.phase==='notice'&&!approved))break
      }
    }finally{busy=false}
    return {...state}
@@ -142,7 +164,7 @@ export function createCloudFirst(args:{
  return {
    state:()=>({...state}),
    /** Once at first-use onboarding; never ask again for each edit. */
-   acceptCloudNotice:async()=>{approved=true;return tick()},
+   acceptCloudNotice:async()=>{approved=true;consentJustAcknowledged=true;return tick()},
    onLocalSaved:tick,onForeground:tick,onNetworkRestored:tick
  }
 }

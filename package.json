@@ -35,6 +35,7 @@
     "test:future:first-link-ui": "node tests/check-future-first-link-ui.mjs",
     "test:future:conflict-review": "node tests/check-future-conflict-review.mjs",
     "test:future:cloud-first": "node tests/check-future-cloud-first.mjs",
+    "test:future:uni-host": "node tests/check-future-uni-host.mjs",
     "test:future:auto-sync": "node tests/check-future-automatic-sync.mjs",
     "test:future:client-adapters": "node tests/check-future-client-adapters.mjs",
     "test:future:backup-http": "node tests/check-future-backup-http.mjs",

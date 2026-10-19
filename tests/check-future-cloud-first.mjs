@@ -153,6 +153,8 @@ try{
      assert.equal(dig(local2),expected);local2=copy(records)
    }})
  state=await second.onForeground()
+ ok(state.phase==='notice','New device displays first-use privacy disclosure before cloud access')
+ state=await second.acceptCloudNotice()
  ok(state.phase==='synced'&&local2.days[day].count===10,
    'Already-authorized new empty device auto-downloads cloud')
  ok(journal2.load().cursor.revision===sim.readForOwner(who,ownerId).revision,
