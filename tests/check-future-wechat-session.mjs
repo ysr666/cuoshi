@@ -50,6 +50,10 @@ try{
           deviceId,accessToken:token,expiresInSeconds:300,isNewAccount:authCalls===1
         }}
       }
+      if(req.url===origin+'/v1/account/cancel/status'){
+        return {statusCode:200,data:{state:
+          tokens.has(req.header.Authorization?.slice(7))?'active':'unknown'}}
+      }
       if(!req.header.Authorization||
          !tokens.has(req.header.Authorization.slice(7)))
         return {statusCode:401,data:{error:'unauthorized'}}
@@ -196,6 +200,16 @@ try{
   const {ACCOUNT_CANCELLATION_CONFIRMATION}=require(join(out,'future/cloud/wechatSession.js'))
   const deleteManager=build()
   const preDelete=await deleteManager.getVerifiedSession()
+  const beforeClosureCheck=authCalls
+  ok(await deleteManager.checkCancellationStatus()==='active',
+    'Original short-lived bearer verifies active tombstone state without wx.login')
+  ok(authCalls===beforeClosureCheck,
+    'Cancellation status cannot mint a replacement WeChat session')
+  time+=301
+  await rejects(()=>deleteManager.checkCancellationStatus(),/original_session_expired/)
+  time-=301
+  ok(authCalls===beforeClosureCheck,
+    'Expired original bearer is rejected without silently exchanging wx.login')
   await rejects(()=>deleteManager.cancelCloudAccount('注销'),/confirmation_required/)
   ok(deleteCalls===0,'Partial cancellation confirmation never reaches HTTP')
   deletionHttpStatus=503

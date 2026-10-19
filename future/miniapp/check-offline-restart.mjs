@@ -34,7 +34,8 @@ try{
  const storage=new Map(),tokens=new Map(),networkListeners=new Set()
  let ignoreNextOwnerRemoval=false,rejectNextLogin=false,nextLoginHttpStatus=0
  let rejectSnapshotRead=false,rejectSnapshotUpload=false,rejectSnapshotConsent=false
- let cancelHttpStatus=0,cancelRequests=0
+ let cancelHttpStatus=0,cancelRequests=0,cancelStatusHttpStatus=0,loseCancelReply=false
+ const cancelledTokens=new Set()
  let owner='account0001',online=true,serverConsent=false,loginCalls=0,
    httpCalls=0,uploads=0,wxCSPRNG=0,uniCSPRNG=0
  const device=()=>String(storage.get('cuoshi-future-v05-miniapp-device-id')||'')
@@ -81,6 +82,15 @@ try{
     return
    }
    const token=header?.Authorization?.slice(7)
+   if(url.endsWith('/v1/account/cancel/status')){
+    if(cancelStatusHttpStatus){
+     const status=cancelStatusHttpStatus;cancelStatusHttpStatus=0
+     success({statusCode:status,data:{error:'unavailable'}});return
+    }
+    success({statusCode:200,data:{state:cancelledTokens.has(token)?'closed':
+       tokens.get(token)===owner?'active':'unknown'}})
+    return
+   }
    if(tokens.get(token)!==owner){success({statusCode:401,data:{}});return}
    const snapshot=cloud.readForOwner(principal(),owner)
    if(url.endsWith('/v1/account/cancel')){
@@ -94,8 +104,10 @@ try{
      success({statusCode:400,data:{error:'bad_request'}});return
     }
     tokens.delete(token)
+    cancelledTokens.add(token)
     cloud.snapshots.delete(owner)
     serverConsent=false
+    if(loseCancelReply){loseCancelReply=false;fail({message:'network_lost_after_commit'});return}
     success({statusCode:200,data:{deleted:true,privateBackupErased:true,
      redactedAuditRows:0,
      retainedBackendData:'anonymous_monthly_totals_and_redacted_security_audits'}})
@@ -413,11 +425,15 @@ try{
  await assert.rejects(()=>app.cancelAccount('注销'),/完整输入/)
  ok(cancelRequests===0,'Partial typed confirmation never calls the account cancellation backend')
  cancelHttpStatus=503
- await assert.rejects(()=>app.cancelAccount('注销账号并清除云端记录'),/not_confirmed/)
- ok(app.state.stage==='ready'&&app.getActions()?.day().count===4&&
-   storage.has(oldPrivateKey),'503 deletion reply cannot claim success or erase local records')
- ok(!app.accountWasCancelled(),'Unconfirmed deletion does not leave durable cancellation marker')
- await until(()=>app.state.sync==='已同步')
+ await assert.rejects(()=>app.cancelAccount('注销账号并清除云端记录'),/outcome_uncertain/)
+ ok(app.cancellationOutcomePending()&&app.getActions()===null&&
+   storage.has(oldPrivateKey),'503 reply cannot falsely claim success or expose old records')
+ ok(!app.accountWasCancelled(),'Unconfirmed deletion does not leave confirmed-cancellation marker')
+ // Even if status currently says active, a pending POST may still commit.
+ await assert.rejects(()=>app.recheckCancellationOutcome(),/可能尚在处理/)
+ ok(app.cancellationOutcomePending(),'Active state check cannot prematurely unlock deletion')
+ await app.restartAfterUnconfirmedCancellation()
+ await until(()=>app.state.stage==='ready'&&app.state.sync==='已同步')
  await app.cancelAccount('注销账号并清除云端记录')
  ok(app.state.stage==='blocked'&&app.state.sync==='账号已注销'&&
    app.getActions()===null&&app.accountWasCancelled(),
@@ -452,5 +468,46 @@ try{
  ok(app.getActions()?.day().count===null&&
    storage.get('cuoshi-future-v05-miniapp-last-verified-owner')?.ownerId===owner,
    'New account needs its own verified cloud consent and fresh offline grant')
+ // POST committed, but HTTPS response vanished; an ORIGINAL JWT status check
+ // must recover the tombstone without minting a replacement login.
+ app.getActions().changeCount(records.localDate(),2,true)
+ await until(()=>app.state.sync==='已同步')
+ const loginsBeforeLostReceipt=loginCalls
+ loseCancelReply=true
+ await app.cancelAccount('注销账号并清除云端记录')
+ ok(app.state.sync==='账号已注销'&&app.accountWasCancelled(),
+   'Original JWT verifies deletion after HTTP receipt is lost')
+ ok(loginCalls===loginsBeforeLostReceipt,
+   'Lost receipt verification never invokes a new wx.login or creates account')
+ owner='account0004';serverConsent=false
+ await app.restartAfterCancellation()
+ await until(()=>app.state.stage==='ready'&&app.state.sync==='需要确认云端存储')
+ await app.consent()
+ await until(()=>app.state.sync==='已同步')
+ // Both deletion POST and verification endpoint are unreachable, so an
+ // ambiguous outcome is persisted, blocks cold startup and cannot claim
+ // deletion success or display the private notes.
+ cancelHttpStatus=503;cancelStatusHttpStatus=503
+ await assert.rejects(()=>app.cancelAccount('注销账号并清除云端记录'),/outcome_uncertain/)
+ ok(app.cancellationOutcomePending()&&app.getActions()===null&&
+   app.state.sync==='注销结果待核验'&&!app.accountWasCancelled(),
+   'Unverifiable deletion locks private account without claiming success')
+ const loginBeforeRecheck=loginCalls
+ await assert.rejects(()=>app.recheckCancellationOutcome(),/可能尚在处理/)
+ ok(loginCalls===loginBeforeRecheck&&app.getActions()===null&&
+   app.cancellationOutcomePending(),
+   'ACTIVE status cannot prematurely unlock a potentially in-flight deletion')
+ networkListeners.clear()
+ delete require.cache[require.resolve(runtimeModule)]
+ app=require(runtimeModule)
+ const loginsBeforePendingBoot=loginCalls
+ await app.start()
+ ok(app.cancellationOutcomePending()&&app.getActions()===null&&
+   loginCalls===loginsBeforePendingBoot,
+   'Cold boot with unresolved deletion never logs in or opens old notes')
+ await app.restartAfterUnconfirmedCancellation()
+ await until(()=>app.state.stage==='ready')
+ ok(loginCalls>loginsBeforePendingBoot&&!app.cancellationOutcomePending(),
+   'Only an explicit acknowledge-risk action permits re-registration')
  console.log('PASS',n,'native wx crypto, cold offline restart and reconnect tests')
 }finally{rmSync(temp,{recursive:true,force:true})}

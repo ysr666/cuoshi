@@ -28,7 +28,7 @@ try{
  const issuedCode=new Set()
  let allows=true,loginCalls=0,limiterCalls=0,providerCalls=0
  let consent=false,revision=null,lastSuccessAt=null
- let token=null
+ let token=null,deletedToken=null
  const account={
    async status(value){
      if(value!==token)throw Error('unauthorized')
@@ -39,9 +39,15 @@ try{
      if(value!==token)throw Error('unauthorized')
      token='REVOKED_TOKEN'
    },
+   async cancellationStatus(value){
+     if(value===deletedToken)return {state:'closed'}
+     if(value===token)return {state:'active'}
+     throw Error('unauthorized')
+   },
    async cancelAccount(value,confirmation){
      if(value!==token)throw Error('unauthorized')
      if(confirmation!=='注销账号并清除云端记录')throw Error('invalid_confirmation')
+     deletedToken=token
      token='REVOKED_TOKEN'
      return {deleted:true,privateBackupErased:true,redactedAuditRows:2,
        retainedBackendData:'anonymous_monthly_totals_and_redacted_security_audits'}
@@ -186,6 +192,17 @@ try{
    {code:'finalauth0001',deviceId:device})
  check(finalLogin.status===200,'Fresh verified token obtained for deletion')
  const finalToken=(await finalLogin.json()).accessToken
+ check((await call('/v1/account/cancel/status','GET',undefined,
+   {Authorization:'Bearer '+finalToken})).status===200,
+   'Original bearer can check live cancellation state without wx.login')
+ check((await call('/v1/account/cancel/status','GET',undefined,
+   {Authorization:'Bearer '+finalToken}).then(x=>x.json())).state==='active',
+   'Tombstone endpoint reports active account before deletion')
+ check((await call('/v1/account/cancel/status')).status===401,
+   'Unauthenticated caller cannot enumerate account deletion outcomes')
+ check((await call('/v1/account/cancel/status?ownerId=account0002','GET',undefined,
+   {Authorization:'Bearer '+finalToken})).status===404,
+   'Cancellation status never accepts arbitrary owner IDs')
  const cancelled=await call('/v1/account/cancel','POST',
    {confirmation:'注销账号并清除云端记录'},
    {Authorization:'Bearer '+finalToken})
@@ -193,6 +210,10 @@ try{
  check(cancelled.status===200&&cancelledJson.deleted===true&&
    cancelledJson.privateBackupErased===true&&cancelledJson.redactedAuditRows===2,
    'Correct explicit confirmation returns only verified account erasure receipt')
+ const closed=await call('/v1/account/cancel/status','GET',undefined,
+   {Authorization:'Bearer '+finalToken})
+ check(closed.status===200&&(await closed.json()).state==='closed',
+   'Original JWT sees closed tombstone even after backup access revoked')
  check((await call('/v1/backup/status','GET',undefined,
    {Authorization:'Bearer '+finalToken})).status===401,
    'Cancellation revokes the prior session instead of leaving cloud data accessible')

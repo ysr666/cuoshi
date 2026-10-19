@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import {computed,ref} from 'vue'
 import {onShow} from '@dcloudio/uni-app'
-import {state,start,consent,onForeground,getActions,changed,settings,retry,accountWasCancelled,restartAfterCancellation} from '../../../future/miniapp/runtime'
+import {state,start,consent,onForeground,getActions,changed,settings,retry,accountWasCancelled,restartAfterCancellation,cancellationOutcomePending,restartAfterUnconfirmedCancellation,recheckCancellationOutcome} from '../../../future/miniapp/runtime'
 import {dateOffset,localDate,dayOf,type ChangeEvent} from '../../../src/core/model'
 import {pastCountChange,localEventTime} from '../../../future/miniapp/historyView'
 const selected=ref(localDate()),draft=ref(''),editing=ref(''),editBody=ref(''),
@@ -26,6 +26,18 @@ function shift(n:number){
  const next=dateOffset(selected.value,n)
  if(next>localDate())return
  selected.value=next;historyExpanded.value=false;reloadDraft()
+}
+function recheckUnconfirmed(){
+ void recheckCancellationOutcome().catch(e=>{feedback.value=e instanceof Error?e.message:'暂时无法核验'})
+}
+function resolveUnconfirmed(){
+ uni.showModal({title:'注销结果仍未核验',
+  content:'无法确定服务器是否已经完成注销。如果选择重新开始，旧账号云端记录可能仍存在。我们不会把本机旧记录迁移到新账号。请确认你理解这一点。',
+  confirmText:'仍要开始',confirmColor:'#a04c3c',
+  success:result=>{if(result.confirm)void restartAfterUnconfirmedCancellation().catch(e=>{
+   feedback.value=e instanceof Error?e.message:'重新开始失败'
+  })}
+ })
 }
 function beginAgain(){void restartAfterCancellation().catch(e=>{feedback.value=e instanceof Error?e.message:'重新开始失败'})}
 function moveToday(){selected.value=localDate();historyExpanded.value=false;reloadDraft()}
@@ -112,7 +124,12 @@ const dateLabel=computed(()=>selected.value.split('-').slice(1).join('月')+'日
  <view v-else-if="state.stage==='connecting'" class="status-note">正在验证微信账号…</view>
  <view v-else-if="state.stage==='blocked'||state.stage==='offline'" class="notice">
   <text class="detail">{{state.message}}</text>
-  <button v-if="accountWasCancelled()" class="secondary" @click="beginAgain">重新开始（创建新账号）</button>
+  <template v-if="cancellationOutcomePending()">
+   <button class="secondary" @click="recheckUnconfirmed">重新核验注销结果</button>
+   <button class="secondary" @click="resolveUnconfirmed">我了解风险，主动重新开始</button>
+   <text class="detail" v-if="feedback">{{feedback}}</text>
+  </template>
+  <button v-else-if="accountWasCancelled()" class="secondary" @click="beginAgain">重新开始（创建新账号）</button>
   <button v-else class="secondary" @click="retry">重新检查连接</button>
  </view>
  <view v-else class="content">

@@ -14,7 +14,7 @@ import {
 } from './backupHttp'
 
 type AccountService=Pick<AuthenticatedCloudService,'status'|'setConsent'|'logoutUser'> &
- Partial<Pick<AuthenticatedCloudService,'cancelAccount'>>
+ Partial<Pick<AuthenticatedCloudService,'cancelAccount'|'cancellationStatus'>>
 type LoginFn=(
   pool:DbPool,code:string,deviceId:string,config:WechatAuthConfig,
   exchange:WechatExchange
@@ -102,6 +102,18 @@ export function createAccountHttpHandler(deps:AccountHttpDependencies){
           // JWT maximum 15 minutes; a client should renew by fresh wx.login.
           expiresInSeconds:900 // Existing account consent is read via /status.
         })
+      }
+      if(path==='/v1/account/cancel/status'){
+        if(req.method!=='GET'){
+          res.setHeader('Allow','GET')
+          throw new HttpFailure(405,'method_not_allowed')
+        }
+        if(typeof deps.account.cancellationStatus!=='function')
+          throw new HttpFailure(503,'cloud_temporarily_unavailable')
+        const outcome=await deps.account.cancellationStatus(bearer(req))
+        if(!outcome||!['closed','active','unknown'].includes(outcome.state))
+          throw new HttpFailure(503,'cloud_temporarily_unavailable')
+        return answer(res,200,{state:outcome.state})
       }
       if(path==='/v1/account/cancel'){
         if(req.method!=='POST'){

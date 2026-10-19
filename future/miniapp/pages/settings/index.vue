@@ -1,13 +1,28 @@
 <script setup lang="ts">
 import {onShow} from '@dcloudio/uni-app'
 import {ref} from 'vue'
-import {state,start,retry,consent,cancelAccount,accountWasCancelled,restartAfterCancellation} from '../../../future/miniapp/runtime'
+import {state,start,retry,consent,cancelAccount,accountWasCancelled,restartAfterCancellation,cancellationOutcomePending,restartAfterUnconfirmedCancellation,recheckCancellationOutcome} from '../../../future/miniapp/runtime'
 import {ACCOUNT_CANCELLATION_CONFIRMATION} from '../../../future/cloud/wechatSession'
 onShow(()=>{void start()})
 function back(){uni.navigateBack()}
 async function restartNewAccount(){
  try{await restartAfterCancellation()}
  catch(e){deletionFeedback.value=e instanceof Error?e.message:'重新开始暂不可用'}
+}
+async function recheckUnconfirmed(){
+ try{await recheckCancellationOutcome()}
+ catch(e){deletionFeedback.value=e instanceof Error?e.message:'暂时无法核验'}
+}
+function resolveUnconfirmed(){
+ uni.showModal({title:'注销结果仍未核验',
+  content:'可能已注销，也可能仍有云端记录。如主动重新开始，本机旧记录不会关联新账号，且不能将旧账号视为已删除。',
+  confirmText:'仍要开始',confirmColor:'#a04c3c',
+  success:async result=>{
+   if(!result.confirm)return
+   try{await restartAfterUnconfirmedCancellation()}
+   catch(e){deletionFeedback.value=e instanceof Error?e.message:'重新开始失败'}
+  }
+ })
 }
 const confirmError=ref('')
 const deletionOpen=ref(false),deletionInput=ref(''),deletionBusy=ref(false),deletionFeedback=ref('')
@@ -31,7 +46,7 @@ async function requestCancellation(){
     deletionOpen.value=false;deletionInput.value=''
     deletionFeedback.value='服务器已确认注销，旧账号本机记录已锁定。'
    }catch{
-    deletionFeedback.value='服务器尚未确认注销，请联网后重试；本机记录没有被删除。'
+    deletionFeedback.value='注销结果尚未核验；请查看顶部账号状态。旧记录没有在本机删除。'
    }finally{deletionBusy.value=false}
   }
  })
@@ -55,7 +70,11 @@ async function confirmAgain(){
   <button class="button" @click="confirmAgain">重新确认自动云端保存</button>
   <text v-if="confirmError" class="confirm-error">{{confirmError}}</text>
  </view>
- <button v-if="accountWasCancelled()" class="button" @click="restartNewAccount">重新开始（创建新账号）</button>
+ <view v-if="cancellationOutcomePending()">
+  <button class="button" @click="recheckUnconfirmed">重新核验注销结果</button>
+  <button class="button danger" @click="resolveUnconfirmed">无法核验：了解风险并重新开始</button>
+ </view>
+ <button v-else-if="accountWasCancelled()" class="button" @click="restartNewAccount">重新开始（创建新账号）</button>
  <button v-else class="button" @click="retry">检查连接状态</button>
  <view class="privacy">
  <text class="label">隐私与数据</text>

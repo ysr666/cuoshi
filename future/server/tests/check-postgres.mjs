@@ -996,6 +996,13 @@ try{
       method:'POST',headers:{'Content-Type':'application/json',
         Authorization:'Bearer '+bearerToken},body:JSON.stringify(body)
     })
+    const statusUrl=deletionHttp.origin+'/v1/account/cancel/status'
+    const status=()=>fetch(statusUrl,{headers:{Authorization:'Bearer '+wxToken}})
+    check((await status()).status===200&&
+      (await status().then(x=>x.json())).state==='active',
+      'PostgreSQL confirms original account is still active before cancellation')
+    check((await fetch(statusUrl)).status===401,
+      'No unauthenticated access to cancellation outcome')
     const wrong=await post({confirmation:'注销'})
     check(wrong.status===400,'Actual PostgreSQL deletion HTTP requires full typed confirmation')
     const crossed=await post({confirmation:ACCOUNT_DELETE_CONFIRMATION,
@@ -1010,6 +1017,12 @@ try{
     result=await deleted.json()
     check(deleted.status===200&&deleted.headers.get('cache-control')?.includes('no-store'),
       'Actual HTTP cancellation gives a non-cacheable confirmed erasure receipt')
+    const closed=await status()
+    check(closed.status===200&&(await closed.json()).state==='closed',
+      'Original signed JWT independently confirms PostgreSQL deleted_at after receipt loss')
+    check((await fetch(statusUrl+'?ownerId=account0002',{
+      headers:{Authorization:'Bearer '+wxToken}})).status===404,
+      'Deletion status query can never select a different account')
   }finally{await deletionHttp.close()}
   check(result.deleted&&result.privateBackupErased&&result.redactedAuditRows===1,
     'Account deletion completes atomically and gives a non-personal receipt')

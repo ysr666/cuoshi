@@ -42,6 +42,7 @@ export function createWeChatSessionManager(args:{
   clearLocalSession():void
   logoutCurrentDevice():Promise<void>
   cancelCloudAccount(confirmation:string):Promise<{deleted:true;privateBackupErased:boolean;redactedAuditRows:number}>
+  checkCancellationStatus():Promise<'closed'|'active'|'unknown'>
 }{
   const {deviceId,platform,http,nowSeconds}=args
   const origin=safeOrigin(args.origin)
@@ -184,6 +185,25 @@ export function createWeChatSessionManager(args:{
       })
       if(response.statusCode!==204)throw Error('wechat_session_logout_not_confirmed')
       clear()
+    },
+    async checkCancellationStatus(){
+      // This endpoint MUST use the original still-valid token. Calling
+      // getVerifiedSession here could issue a fresh wx.login and accidentally
+      // CREATE a replacement account before deletion was verified.
+      if(!session||session.expiry<=nowSeconds())
+        throw Error('wechat_cancellation_original_session_expired')
+      const response=await http.request({
+        url:origin+'/v1/account/cancel/status',method:'GET',
+        header:{Authorization:'Bearer '+session.accessToken,Accept:'application/json'}
+      })
+      if(response.statusCode!==200)
+        throw Error('wechat_cancellation_status_unavailable')
+      const body=response.data as Record<string,unknown>|null
+      if(!body||typeof body!=='object'||
+         !['closed','active','unknown'].includes(String(body.state))||
+         Object.keys(body).length!==1)
+        throw Error('wechat_cancellation_status_invalid')
+      return body.state as 'closed'|'active'|'unknown'
     },
     async cancelCloudAccount(confirmation:string){
       if(confirmation!==ACCOUNT_CANCELLATION_CONFIRMATION)

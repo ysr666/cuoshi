@@ -111,6 +111,21 @@ export class AuthenticatedCloudService{
   }
   async deleteBackup(token:unknown){return deleteCloudBackup(this.backupDb,await this.asUser(token))}
   /** No default deletion privileges: separate restricted account-cancellation role required. */
+  /** A non-content-bearing check for a lost account-deletion HTTP response.
+   * Only a still-valid ORIGINAL signed JWT can query its own user tombstone;
+   * this cannot mint credentials or associate a new WeChat account.
+   */
+  async cancellationStatus(token:unknown):Promise<{state:'closed'|'active'|'unknown'}>{
+    const claims=this.readClaims(token,'cuoshi-cloud-backup')
+    if(!claims?.deviceId)throw Error('unauthorized')
+    const db=await this.backupDb.connect()
+    try{
+      const row=await db.query('SELECT deleted_at FROM cloud_users WHERE user_id=$1',
+        [claims.sub])
+      if(row.rows.length!==1)return {state:'unknown'}
+      return {state:row.rows[0].deleted_at?'closed':'active'}
+    }finally{db.release()}
+  }
   async cancelAccount(token:unknown,confirmation:string){
     if(!this.cancellationDb)throw Error('account_cancellation_unavailable')
     // Never allow a client-supplied userId; verified session determines owner.

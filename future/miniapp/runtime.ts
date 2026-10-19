@@ -18,6 +18,7 @@ const DEVICE='cuoshi-future-v05-miniapp-device-id'
 const OFFLINE_OWNER='cuoshi-future-v05-miniapp-last-verified-owner'
 const OFFLINE_QUARANTINE='cuoshi-future-v05-miniapp-offline-reverification-required'
 const ACCOUNT_CLOSED='cuoshi-future-v05-miniapp-account-closed-confirmed'
+const CANCEL_PENDING='cuoshi-future-v05-miniapp-account-cancel-outcome-pending'
 type OfflineBinding={version:1;ownerId:string;deviceId:string;noticeVersion:string}
 const ownerPattern=/^[A-Za-z0-9_-]{8,128}$/
 let host:Host|null=null,actions:Actions|null=null,task:Promise<void>|null=null
@@ -267,6 +268,13 @@ export function start():Promise<void>{
   return Promise.resolve()
  }
  if(cancellationTask)return cancellationTask
+ if(uni.getStorageSync(CANCEL_PENDING)===true){
+  actions=null
+  state.stage='blocked';state.sync='注销结果待核验'
+  state.message='注销请求的结果未能确认。已暂停旧账号记录访问及所有自动登录，避免误建新账号。旧数据仍保留在本机。'
+  state.revision++
+  return Promise.resolve()
+ }
  if(task)return task
  if(state.stage==='ready'&&!offlineLocal)return Promise.resolve()
  if(!accepted()){state.stage='notice';return Promise.resolve()}
@@ -320,18 +328,52 @@ export async function consent(){
   update()
  }
 }
-/** Account cancellation keeps owner-scoped local bytes for forensic recovery,
- * but revokes the device's offline permission and never auto-uploads them.
- * The deleted account's old content is never associated with future logins.
+/** Pending deletion must survive process restarts; the original signed
+ * JWT is held in memory only, never put into wx persistent storage. A
+ * dropped response must never silently re-register a new WeChat account.
  */
 let cancellationTask:Promise<void>|null=null
+let pendingCancellationHost:Host|null=null
+function markCancellationResultConfirmed():void{
+ pendingCancellationHost=null
+ const durable=quarantineOfflineEntitlement()
+ let closedMarked=false
+ try{
+  uni.setStorageSync(ACCOUNT_CLOSED,true)
+  closedMarked=uni.getStorageSync(ACCOUNT_CLOSED)===true
+ }catch{/* Keep pending marker to block cold auto-login. */}
+ if(durable&&closedMarked){
+  try{uni.removeStorageSync(CANCEL_PENDING)}catch{}
+ }
+ releaseOfflineNetworkWatch()
+ host?.stop()
+ host=null
+ actions=null
+ offlineLocal=false
+ state.stage='blocked'
+ state.sync='账号已注销'
+ state.consentRequired=false
+ state.message=durable&&closedMarked?
+  '云端已核验账号注销成功，私人云记录与微信身份关联已清除。本机旧记录已锁定；再次使用须主动创建新账号。':
+  '云端已核验注销成功，但本机安全标记保存失败；请勿退出或离线重启，先修复本机存储。'
+ state.revision++
+}
 export function cancelAccount(confirmation:string):Promise<void>{
  if(confirmation!==ACCOUNT_CANCELLATION_CONFIRMATION)
-   return Promise.reject(Error('请完整输入指定的注销确认语'))
+  return Promise.reject(Error('请完整输入指定的注销确认语'))
  if(cancellationTask)return cancellationTask
- if(!host||offlineLocal||state.stage!=='ready'||task)
-   return Promise.reject(Error('请先联网验证账号后再申请注销'))
- const current=host,currentActions=actions
+ if(!host||offlineLocal||state.stage!=='ready'||task||
+    uni.getStorageSync(CANCEL_PENDING)===true)
+   return Promise.reject(Error('请先联网验证账号并处理未核验的注销请求'))
+ const current=host
+ // Must be durable BEFORE the first irreversible network request.
+ try{
+  uni.setStorageSync(CANCEL_PENDING,true)
+  if(uni.getStorageSync(CANCEL_PENDING)!==true)
+    throw Error('pending_not_persisted')
+ }catch{
+  return Promise.reject(Error('本机无法保存注销待核验标记，已阻止注销请求'))
+ }
  state.stage='connecting'
  state.message='正在向云端确认注销，请勿退出…'
  state.revision++
@@ -339,40 +381,78 @@ export function cancelAccount(confirmation:string):Promise<void>{
  current.stop()
  cancellationTask=(async()=>{
    try{
-     // If the request times out after the DB commits, we must NOT claim
-     // success. The next verified status will independently resolve closure.
      await current.session.cancelCloudAccount(confirmation)
+     markCancellationResultConfirmed()
+     return
    }catch(error){
-     // No success receipt: do NOT delete any private storage, revoke account
-     // locally, or tell the user cancellation has completed.
-     host=current
-     actions=currentActions
-     state.stage='ready'
-     state.message='注销请求未获服务器确认，账号及本机记录未在客户端清除；请检查后重试。'
+     // Recheck the OLD valid bearer, without wx.login. If the server committed
+     // but the response was lost, the deleted_at tombstone proves completion.
+     let outcome:'closed'|'active'|'unknown'='unknown'
+     try{outcome=await current.session.checkCancellationStatus()}catch{}
+     if(outcome==='closed'){
+       host=current
+       markCancellationResultConfirmed()
+       return
+     }
+     // An ACTIVE check cannot prove cancellation did not begin: the original
+     // POST could still be in flight and commit just after this GET. Never
+     // clear the durable pending barrier merely because a GET says active.
+     pendingCancellationHost=current
+     releaseOfflineNetworkWatch()
+     host?.stop()
+     host=null
+     actions=null
+     offlineLocal=false
+     state.stage='blocked'
+     state.sync='注销结果待核验'
+     state.message='注销结果暂无法核实，已暂停旧账号访问及自动登录；不能视为注销成功。你可以稍后检查或主动选择重新开始。'
      state.revision++
-     current.start()
-     throw error
+     throw Error('wechat_account_cancellation_outcome_uncertain')
    }
-   const durable=quarantineOfflineEntitlement()
-   let closedMarked=false
-   try{
-    uni.setStorageSync(ACCOUNT_CLOSED,true)
-    closedMarked=uni.getStorageSync(ACCOUNT_CLOSED)===true
-   }catch{/* Surface storage failure below; do not report safe cold restart. */}
-   releaseOfflineNetworkWatch()
-   host=null
-   actions=null
-   offlineLocal=false
-   state.stage='blocked'
-   state.sync='账号已注销'
-   state.consentRequired=false
-   state.message=durable&&closedMarked?
-     '云端确认账号已注销，私人云记录及身份关联已清除；本机旧记录已锁定，匿名统计与脱敏安全审计仍按规则保留。':
-     '云端确认账号已注销，但本机安全状态保存失败；请勿退出或离线重启，先修复本机存储。'
-   state.revision++
  })().finally(()=>{cancellationTask=null})
  return cancellationTask
 }
+/** Retry only against the ORIGINAL in-memory JWT; never issue wx.login
+ * during ambiguous account deletion. A cold restart intentionally cannot
+ * reconstruct the sensitive token from local storage.
+ */
+export async function recheckCancellationOutcome(){
+ if(uni.getStorageSync(CANCEL_PENDING)!==true||
+    uni.getStorageSync(ACCOUNT_CLOSED)===true)
+  throw Error('当前没有需要重新核验的注销请求')
+ if(!pendingCancellationHost)
+  throw Error('原注销会话已过期或小程序已重启，无法自动核验；请选择人工核对或自行承担风险重新开始')
+ let result:'closed'|'active'|'unknown'
+ try{result=await pendingCancellationHost.session.checkCancellationStatus()}
+ catch{throw Error('暂时无法核验注销结果，请检查网络后重试')}
+ if(result==='closed'){
+  host=pendingCancellationHost
+  markCancellationResultConfirmed()
+  return
+ }
+ if(result==='active')
+  throw Error('此刻账号仍有效，但原注销请求可能尚在处理；为防止误恢复，仍保持待核验状态')
+ throw Error('账号状态无法确定，未解除注销待核验锁')
+}
+/** If an ambiguous cancellation survives process death, its bearer is gone.
+ * Never recover that original bearer from storage; the user must consciously
+ * accept that deletion may remain incomplete before making a new account.
+ */
+export async function restartAfterUnconfirmedCancellation(){
+ if(uni.getStorageSync(CANCEL_PENDING)!==true||
+    uni.getStorageSync(ACCOUNT_CLOSED)===true)
+  throw Error('当前没有需要处理的注销待核验状态')
+ if(!quarantineOfflineEntitlement())
+  throw Error('本机安全锁保存失败，已阻止创建新账号')
+ pendingCancellationHost=null
+ uni.removeStorageSync(CANCEL_PENDING)
+ if(uni.getStorageSync(CANCEL_PENDING)===true)
+  throw Error('无法清除待核验状态，已阻止创建新账号')
+ state.sync=''
+ await start()
+}
+export function cancellationOutcomePending(){return uni.getStorageSync(CANCEL_PENDING)===true&&
+ uni.getStorageSync(ACCOUNT_CLOSED)!==true}
 export async function restartAfterCancellation(){
  if(uni.getStorageSync(ACCOUNT_CLOSED)!==true)
   throw Error('当前不存在需要重新开始的已注销账号')
