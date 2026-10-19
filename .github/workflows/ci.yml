@@ -71,6 +71,8 @@ jobs:
         run: npm run build:future:mp-weixin
       - name: Verify native pages, privacy gate, package hygiene and typecheck
         run: npm run test:future:mp-weixin
+      - name: Test native wx crypto, verified-offline restart and automatic reconnect
+        run: npm run test:future:mp-weixin:offline
       - name: Upload isolated v0.5 developer-package (not for release)
         uses: actions/upload-artifact@v4
         with:

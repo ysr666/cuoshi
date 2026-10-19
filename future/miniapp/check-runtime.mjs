@@ -24,7 +24,10 @@ try{
   removeStorageSync:k=>{data.delete(k)},
   login(){calls.login++;throw Error('No origin, login forbidden')},
   request(){calls.request++;throw Error('No origin, requests forbidden')},
-  getRandomValues(){calls.random++;throw Error('No origin, random forbidden')}
+  getRandomValues(){throw Error('Should not access undocumented uni crypto shim')}
+ }
+ globalThis.wx={
+  getRandomValues(){calls.random++;throw Error('No origin, crypto forbidden')}
  }
  const require=createRequire(import.meta.url)
  const runtime=require(join(out,'future','miniapp','runtime.js'))
