@@ -32,6 +32,7 @@ try{
  const records=require(join(out,'src','core','model.js'))
  const cloud=new CloudContractSimulator()
  const storage=new Map(),tokens=new Map(),networkListeners=new Set()
+ let ignoreNextOwnerRemoval=false,rejectNextLogin=false
  let owner='account0001',online=true,serverConsent=false,loginCalls=0,
    httpCalls=0,uploads=0,wxCSPRNG=0,uniCSPRNG=0
  const device=()=>String(storage.get('cuoshi-future-v05-miniapp-device-id')||'')
@@ -47,7 +48,12 @@ try{
  globalThis.uni={
   getStorageSync:key=>storage.has(key)?copy(storage.get(key)):'',
   setStorageSync(key,value){storage.set(key,copy(value))},
-  removeStorageSync:key=>{storage.delete(key)},
+  removeStorageSync:key=>{
+   if(key==='cuoshi-future-v05-miniapp-last-verified-owner'&&ignoreNextOwnerRemoval){
+    ignoreNextOwnerRemoval=false;return
+   }
+   storage.delete(key)
+  },
   getRandomValues(){uniCSPRNG++;throw Error('undocumented shim used')},
   login({success,fail}){
    loginCalls++
@@ -58,6 +64,7 @@ try{
    httpCalls++
    if(!online){fail({message:'offline'});return}
    if(url.endsWith('/v1/auth/wechat')){
+    if(rejectNextLogin){rejectNextLogin=false;success({statusCode:401,data:{}});return}
     const token='a'.repeat(110)+String(loginCalls).padStart(5,'0')
     tokens.set(token,owner)
     success({statusCode:200,data:{
@@ -135,6 +142,32 @@ try{
    'Temporary offline listener replaced by one live cloud-host listener')
  ok(uploads===2,'Offline edits uploaded once without duplicate revisions')
  ok(uniCSPRNG===0,'No insecure crypto fallback after reconnect')
+ // Live session revocation / account switch: an old page must NOT keep the
+ // account A actions exposed when the backend returns HTTP 401 for its JWT.
+ owner='account0002';serverConsent=false
+ ignoreNextOwnerRemoval=true
+ app.onForeground()
+ await until(()=>app.state.stage==='blocked')
+ ok(app.getActions()===null&&app.state.sync==='账号需要重新验证',
+   'Active page is immediately quarantined after verified session is rejected')
+ ok(storage.get('cuoshi-future-v05-miniapp-offline-reverification-required')===true,
+   'Revocation writes a durable deny-offline marker even if owner removal fails')
+ ok(storage.has('cuoshi-future-v05-miniapp-last-verified-owner'),
+   'Synthetic write failure retains stale owner marker for cold-boot attack test')
+ ok(networkListeners.size===0,'Quarantined host releases its network observers')
+ const originalRecordsKey='cuoshi-future-v05-owner-records-v1:'+
+   require(join(out,'src','core','backup.js')).sha256(
+    require(join(out,'future','cloud','stableJson.js')).stableJson('account0001'))
+ ok(storage.has(originalRecordsKey),
+   'Revoking live access preserves the original full account A record storage')
+ online=false
+ networkListeners.clear()
+ delete require.cache[require.resolve(runtimeModule)]
+ app=require(runtimeModule)
+ await app.start()
+ ok(app.state.stage==='blocked'&&app.getActions()===null,
+   'Cold offline restart rejects stale owner despite failed entitlement removal')
+ online=true
  // A new account must never read old account data.
  owner='account0002';serverConsent=false
  networkListeners.clear()
@@ -147,16 +180,49 @@ try{
  ok(uploads===2,'Switching accounts cannot upload first account old records')
  ok(!storage.has('cuoshi-future-v05-miniapp-last-verified-owner'),
    'Verified account switch invalidates prior account offline access immediately')
+ ok(storage.get('cuoshi-future-v05-miniapp-offline-reverification-required')===true,
+   'Old offline entitlement stays quarantined until new account consents')
  online=false
  networkListeners.clear()
  delete require.cache[require.resolve(runtimeModule)]
  app=require(runtimeModule)
  await app.start()
- ok(app.state.stage==='offline'&&app.getActions()===null,
-   'Without B consent, offline reboot cannot reveal A private records')
+ ok(app.state.stage==='blocked'&&app.getActions()===null,
+   'Before B consent, quarantined offline reboot cannot reveal account A data')
  ok(storage.has('cuoshi-future-v05-owner-records-v1:'+
    require(join(out,'src','core','backup.js')).sha256(
     require(join(out,'future','cloud','stableJson.js')).stableJson('account0001'))),
    'Revoking A offline access does not delete A original records')
+ online=true
+ await app.start()
+ await until(()=>app.state.stage==='ready'&&app.state.sync==='需要确认云端存储')
+ await app.consent()
+ await until(()=>app.state.stage==='ready'&&app.state.sync==='已同步')
+ ok(!storage.has('cuoshi-future-v05-miniapp-offline-reverification-required'),
+   'B verified server consent and sync removes the offline quarantine')
+ ok(storage.get('cuoshi-future-v05-miniapp-last-verified-owner')?.ownerId==='account0002',
+   'Only newly verified B is granted fresh cold-offline entitlement')
+ online=false
+ networkListeners.clear()
+ delete require.cache[require.resolve(runtimeModule)]
+ app=require(runtimeModule)
+ await app.start()
+ ok(app.state.stage==='ready'&&app.getActions().day().count===null,
+   'Cold offline account B never inherits A private record after authorization')
+ online=true;rejectNextLogin=true
+ networkListeners.clear()
+ delete require.cache[require.resolve(runtimeModule)]
+ app=require(runtimeModule)
+ await app.start()
+ ok(app.state.stage==='blocked'&&app.getActions()===null,
+   'Server-rejected fresh login never opens the previously verified private account')
+ ok(storage.get('cuoshi-future-v05-miniapp-offline-reverification-required')===true,
+   'Rejected preflight login persists a new deny-offline marker')
+ online=false
+ delete require.cache[require.resolve(runtimeModule)]
+ app=require(runtimeModule)
+ await app.start()
+ ok(app.state.stage==='blocked'&&app.getActions()===null,
+   'Offline cold reboot cannot resurrect account B after preflight rejection')
  console.log('PASS',n,'native wx crypto, cold offline restart and reconnect tests')
 }finally{rmSync(temp,{recursive:true,force:true})}

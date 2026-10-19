@@ -16,6 +16,7 @@ export const state=reactive({
 const NOTICE='cuoshi-future-v05-miniapp-disclosure'
 const DEVICE='cuoshi-future-v05-miniapp-device-id'
 const OFFLINE_OWNER='cuoshi-future-v05-miniapp-last-verified-owner'
+const OFFLINE_QUARANTINE='cuoshi-future-v05-miniapp-offline-reverification-required'
 type OfflineBinding={version:1;ownerId:string;deviceId:string;noticeVersion:string}
 const ownerPattern=/^[A-Za-z0-9_-]{8,128}$/
 let host:Host|null=null,actions:Actions|null=null,task:Promise<void>|null=null
@@ -24,7 +25,12 @@ let offlineReconnectListener:((value:{isConnected:boolean})=>void)|null=null
 const foreground=new Set<()=>void>(),pool:string[]=[]
 let filling:Promise<void>|null=null
 const accepted=()=>uni.getStorageSync(NOTICE)===cloudNoticeVersion
-function ownerBinding():OfflineBinding|null{
+function ownerBinding(allowVerifiedLogin=false):OfflineBinding|null{
+ const lock=uni.getStorageSync(OFFLINE_QUARANTINE)
+ if(lock!==undefined&&lock!==null&&lock!==''&&lock!==true)
+  throw Error('本机账号安全状态异常，已停止离线读取')
+ if(lock===true&&!allowVerifiedLogin)
+  throw Error('微信账号需要重新联网验证，离线记录已锁定')
  const value=uni.getStorageSync(OFFLINE_OWNER)
  if(value===undefined||value===null||value==='')return null
  if(!value||typeof value!=='object'||value.version!==1||
@@ -38,6 +44,11 @@ function rememberOwner(ownerId:string,deviceId:string){
  if(!ownerPattern.test(ownerId)||!/^device[a-f0-9]{32}$/.test(deviceId))
   throw Error('账号身份未核验')
  const binding:OfflineBinding={version:1,ownerId,deviceId,noticeVersion:cloudNoticeVersion}
+ // Only a newly completed, verified cloud cycle can unlock cold offline use.
+ uni.removeStorageSync(OFFLINE_QUARANTINE)
+ const lock=uni.getStorageSync(OFFLINE_QUARANTINE)
+ if(lock!==undefined&&lock!==null&&lock!=='')
+  throw Error('账号重新验证已成功，但离线权限解除未成功')
  uni.setStorageSync(OFFLINE_OWNER,binding)
  const saved=ownerBinding()
  if(!saved||saved.ownerId!==ownerId||saved.deviceId!==deviceId)
@@ -123,9 +134,41 @@ function platform():UniCloudPlatform{
   offNetworkStatusChange:cb=>uni.offNetworkStatusChange(cb)
  }
 }
+// Reject a cached offline owner on any explicit server authentication failure.
+// Both the marker and removal are attempted independently: either one being
+// durable is enough to reject a cold offline restart without deleting data.
+function quarantineOfflineEntitlement():boolean{
+ let marked=false,cleared=false
+ try{
+  uni.setStorageSync(OFFLINE_QUARANTINE,true)
+  marked=uni.getStorageSync(OFFLINE_QUARANTINE)===true
+ }catch{/* Still attempt to remove the old entitlement. */}
+ try{
+  uni.removeStorageSync(OFFLINE_OWNER)
+  const left=uni.getStorageSync(OFFLINE_OWNER)
+  cleared=left===undefined||left===null||left===''
+ }catch{/* A durable quarantine marker independently denies offline access. */}
+ return marked||cleared
+}
 function update(){
  const data=host?.cloud.state()
  if(!data)return
+ if(data.identityInvalid){
+  // Reject live use of a prior owner's data when remote session is revoked
+  // or the verified owner changed. Do not delete account-scoped records.
+  actions=null
+  offlineLocal=false
+  releaseOfflineNetworkWatch()
+  host?.stop()
+  host=null
+  state.message=quarantineOfflineEntitlement()?
+   '微信账号验证已失效，请重新检查连接；本机记录已保留。':
+   '微信账号验证已失效，本机安全锁写入失败；请勿退出程序，先修复本机存储。'
+  state.stage='blocked'
+  state.sync='账号需要重新验证'
+  state.revision++
+  return
+ }
  state.sync=data.phase==='synced'?'已同步':data.phase==='offline'?'暂未同步':
   data.phase==='checking'?'正在同步':data.phase==='notice'?'需要确认云端存储':
   data.phase==='attention'?'部分记录暂未同步':'等待同步'
@@ -163,14 +206,14 @@ async function connect(){
  // BEFORE opening any old private records on screen.
  const confirmed=await host.session.getVerifiedSession()
  if(confirmed.ownerId!==identity.ownerId)throw Error('微信账号在登录期间发生变化')
- const prior=ownerBinding()
+ const prior=ownerBinding(true)
  if(prior&&prior.ownerId!==identity.ownerId){
   // A verified account switch instantly revokes the previous account's
   // offline-open permission; its actual private records remain unchanged
   // under its own account-specific key.
   actions=null
   uni.removeStorageSync(OFFLINE_OWNER)
-  if(ownerBinding())throw Error('无法清除之前账号的离线使用权限')
+  if(ownerBinding(true))throw Error('无法清除之前账号的离线使用权限')
  }
  actions=createCloudRecordActions({
   ownerId:identity.ownerId,storage:p,store:host.store
@@ -235,7 +278,10 @@ export function start():Promise<void>{
   host=null
   offlineLocal=false
   releaseOfflineNetworkWatch()
-  state.message=reason
+  const rejected=/^(?:wechat_session_(?:account_changed|authorization_required|access_denied|authentication_failed|invalid_response|status_invalid)|cloud_first_account_changed|微信账号在登录期间发生变化)$/.test(reason)
+  const quarantined=rejected?quarantineOfflineEntitlement():true
+  state.message=rejected&&!quarantined?
+   '微信账号验证被拒绝，本机安全锁写入失败；请勿退出程序，先修复本机存储。':reason
   state.stage=network?'offline':'blocked'
  }).finally(()=>{task=null})
  return task

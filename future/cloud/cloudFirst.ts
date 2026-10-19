@@ -15,7 +15,7 @@ const digest=(r:Records)=>sha256(stableJson(r))
 const empty=(r:Records)=>r.theme==='paper'&&Object.keys(r.days).length===0&&r.events.length===0
 const clone=<T>(v:T):T=>JSON.parse(JSON.stringify(v))
 export type CloudPhase='notice'|'checking'|'synced'|'pending'|'offline'|'attention'
-export type CloudState={phase:CloudPhase;message:string;pendingLocal:boolean;hasCloudBackup:boolean}
+export type CloudState={phase:CloudPhase;message:string;pendingLocal:boolean;hasCloudBackup:boolean;identityInvalid?:boolean}
 export type CloudFirstAuth={
  getVerifiedSession():Promise<{ownerId:string;accessToken:string}>
  getStatus():Promise<{enabled:boolean;hasStoredBackup:boolean}>
@@ -152,10 +152,14 @@ export function createCloudFirst(args:{
        try{await cycle()}
        catch(e){
          const reason=e instanceof Error?e.message:''
-         const network=/network|offline|timeout|unavailable|http/i.test(reason)
-         set({phase:network?'offline':'attention',
-           message:network?'网络异常，暂未同步；联网后将自动重试，本机记录已保留。':
-           '同步暂未完成，本机记录已保留。',
+         // A remote 401/403 or a changed account is NOT offline. Quarantine
+         // the old account until a newly verified login explicitly unlocks it.
+         const invalid=/^(?:wechat_session_(?:account_changed|authorization_required|access_denied|authentication_failed|abandoned|invalid_response)|cloud_first_account_changed|sync_owner_mismatch|cloud_first_wrong_account)$/.test(reason)
+         const network=!invalid&&/network|offline|timeout|unavailable|http/i.test(reason)
+         set({phase:network?'offline':'attention',identityInvalid:invalid||state.identityInvalid,
+           message:invalid?'微信账号验证已失效，已锁定原账号记录；请重新验证。':
+             network?'网络异常，暂未同步；联网后将自动重试，本机记录已保留。':
+             '同步暂未完成，本机记录已保留。',
            pendingLocal:true})
        }
        if(!rerun||['offline','attention'].includes(state.phase)||
