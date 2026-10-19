@@ -2,12 +2,13 @@
 import {computed,ref} from 'vue'
 import {onShow} from '@dcloudio/uni-app'
 import {state,start,consent,onForeground,getActions,changed,settings,retry,accountWasCancelled,restartAfterCancellation,cancellationOutcomePending,restartAfterUnconfirmedCancellation,recheckCancellationOutcome} from '../../../future/miniapp/runtime'
-import {dateOffset,localDate,dayOf,type ChangeEvent} from '../../../src/core/model'
+import {dateOffset,dateValid,localDate,type ChangeEvent} from '../../../src/core/model'
 import {pastCountChange,localEventTime} from '../../../future/miniapp/historyView'
 const selected=ref(localDate()),draft=ref(''),editing=ref(''),editBody=ref(''),
  numberInput=ref(''),numberOpen=ref(false),feedback=ref(''),historyExpanded=ref(false)
 onShow(()=>{
- selected.value=localDate();historyExpanded.value=false
+ if(!dateValid(selected.value)||selected.value>localDate())selected.value=localDate()
+ historyExpanded.value=false
  void start().then(()=>{onForeground();reloadDraft()})
 })
 const actions=computed(()=>{void state.revision;return getActions()})
@@ -22,10 +23,25 @@ const pastEdits=computed(()=>{void state.revision
 })
 const visibleHistory=computed(()=>historyExpanded.value?history.value:history.value.slice(0,12))
 function reloadDraft(){try{draft.value=actions.value?.draft(selected.value)??''}catch{draft.value=''}}
+function showDate(next:string){
+ if(!dateValid(next)||next>localDate()){
+  feedback.value='只能查看今天及以前的日期';return
+ }
+ selected.value=next
+ historyExpanded.value=false
+ editing.value=''
+ numberOpen.value=false
+ feedback.value=''
+ reloadDraft()
+}
+function chooseDate(e:Event){
+ const event=e as Event&{detail?:{value?:string}}
+ showDate(typeof event.detail?.value==='string'?event.detail.value:'')
+}
 function shift(n:number){
  const next=dateOffset(selected.value,n)
  if(next>localDate())return
- selected.value=next;historyExpanded.value=false;reloadDraft()
+ showDate(next)
 }
 function recheckUnconfirmed(){
  void recheckCancellationOutcome().catch(e=>{feedback.value=e instanceof Error?e.message:'暂时无法核验'})
@@ -40,7 +56,7 @@ function resolveUnconfirmed(){
  })
 }
 function beginAgain(){void restartAfterCancellation().catch(e=>{feedback.value=e instanceof Error?e.message:'重新开始失败'})}
-function moveToday(){selected.value=localDate();historyExpanded.value=false;reloadDraft()}
+function moveToday(){showDate(localDate())}
 function attempt(fn:()=>boolean,success='已保存'){
  if(!canEdit.value)return
  try{
@@ -108,7 +124,9 @@ async function accept(){
  try{await consent();reloadDraft()}
  catch(e){feedback.value=e instanceof Error?e.message:String(e)}
 }
-const dateLabel=computed(()=>selected.value.split('-').slice(1).join('月')+'日')
+const dateLabel=computed(()=>{const [year,month,day]=selected.value.split('-')
+ return year+'年'+Number(month)+'月'+Number(day)+'日'
+})
 </script>
 <template>
 <view class="screen">
@@ -144,7 +162,10 @@ const dateLabel=computed(()=>selected.value.split('-').slice(1).join('月')+'日
   </view>
   <view v-else>
    <view class="date-nav"><text @click="shift(-1)">‹</text>
-    <text>{{dateLabel}}</text><text @click="moveToday">今天</text>
+    <picker mode="date" :value="selected" :end="localDate()" @change="chooseDate">
+     <text class="date-picker">{{dateLabel}} <text class="date-chevron">⌄</text></text>
+    </picker>
+    <text @click="moveToday">今天</text>
     <text :class="{disabled:selected>=localDate()}" @click="shift(1)">›</text></view>
    <view class="counter">
     <text class="caption">{{selected===localDate()?'今天觉得做错了':'那一天觉得做错了'}}</text>
@@ -220,7 +241,9 @@ const dateLabel=computed(()=>selected.value.split('-').slice(1).join('月')+'日
 .status.warning{color:#956c46;flex-wrap:wrap}
 .status-note{margin-top:100rpx;color:#6c675e}
 .date-nav{display:flex;align-items:center;justify-content:flex-end;gap:30rpx;font-size:25rpx;color:#6c675e;margin-top:10rpx}
-.date-nav text:first-child,.date-nav text:last-child{font-size:46rpx}
+.date-nav>text:first-child,.date-nav>text:last-child{font-size:46rpx}
+.date-picker{display:block;color:#554e45;font-size:27rpx;padding:12rpx 4rpx}
+.date-chevron{font-size:25rpx;color:#948779}
 .disabled{opacity:.25}
 .counter{text-align:center;padding:65rpx 0 35rpx}
 .caption{display:block;color:#6c675e;font-size:29rpx;letter-spacing:3rpx}

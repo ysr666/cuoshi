@@ -29,6 +29,15 @@ for(const term of ['今天修改了过去的记录','原文：','删除前：','
 const todayScript=read('pages/today/index.js')
 check(todayScript.includes('展开全部')&&todayScript.includes('收起历史'),
  'Native history offers expandable complete ledger rather than silently hiding older events')
+check(today.includes('mode="date"')&&today.includes('end="{{')&&
+ today.includes('date-picker'),
+ 'Native history date is directly selectable with today as the upper bound')
+check(todayScript.includes('dateValid')&&
+ todayScript.includes('只能查看今天及以前的日期'),
+ 'Invalid or future date selection is refused before switching account records')
+check(!today.includes('导出数据')&&!settings.includes('导出数据')&&
+ !today.includes('导入数据')&&!settings.includes('导入数据'),
+ 'No unnecessary export/import controls on either page')
 check(settings.includes('云端自动同步'),'Native settings explain cloud-first storage')
 check(settings.includes('暂停自动云端保存')&&settings.includes('重试关闭云端授权')&&
  settings.includes('重新开启自动云端保存'),

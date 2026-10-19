@@ -112,6 +112,7 @@ async function confirmAgain(){
  <text v-if="pauseError" class="confirm-error">{{pauseError}}</text>
  <view class="privacy">
  <text class="label">隐私与数据</text>
+ <text>在首页点击日期，就能直接回看那天的数字、简记和完整修改历史。</text>
  <text>记录的数字、可选简记及每次修改历史在首次明确同意后自动上云。
   本机未提交草稿不会上传。网络异常时会提示并保留本机记录；不静默覆盖未同步的本机内容。</text>
  <text>当前 v0.5 仅为独立技术验证包，云域名和 AppID 未配置时不进行任何微信登录或上传。
