@@ -34,6 +34,7 @@ try{
  const storage=new Map(),tokens=new Map(),networkListeners=new Set()
  let ignoreNextOwnerRemoval=false,rejectNextLogin=false,nextLoginHttpStatus=0
  let rejectSnapshotRead=false,rejectSnapshotUpload=false,rejectSnapshotConsent=false
+ let cancelHttpStatus=0,cancelRequests=0
  let owner='account0001',online=true,serverConsent=false,loginCalls=0,
    httpCalls=0,uploads=0,wxCSPRNG=0,uniCSPRNG=0
  const device=()=>String(storage.get('cuoshi-future-v05-miniapp-device-id')||'')
@@ -82,6 +83,24 @@ try{
    const token=header?.Authorization?.slice(7)
    if(tokens.get(token)!==owner){success({statusCode:401,data:{}});return}
    const snapshot=cloud.readForOwner(principal(),owner)
+   if(url.endsWith('/v1/account/cancel')){
+    cancelRequests++
+    if(cancelHttpStatus){
+     const status=cancelHttpStatus;cancelHttpStatus=0
+     success({statusCode:status,data:{error:'cloud_temporarily_unavailable'}})
+     return
+    }
+    if(method!=='POST'||data?.confirmation!=='注销账号并清除云端记录'){
+     success({statusCode:400,data:{error:'bad_request'}});return
+    }
+    tokens.delete(token)
+    cloud.snapshots.delete(owner)
+    serverConsent=false
+    success({statusCode:200,data:{deleted:true,privateBackupErased:true,
+     redactedAuditRows:0,
+     retainedBackendData:'anonymous_monthly_totals_and_redacted_security_audits'}})
+    return
+   }
    if(url.endsWith('/v1/backup/status')){
     success({statusCode:200,data:{enabled:serverConsent,hasStoredBackup:!!snapshot,
      revision:snapshot?.revision??null,lastSuccessAt:snapshot?'2026-10-19T00:00:00Z':null}})
@@ -383,5 +402,55 @@ try{
  await app.start()
  ok(app.state.stage==='offline'&&app.getActions()===null,
    '429 without previous identity grant cannot reveal even existing private data')
+ online=true
+ await app.start()
+ await until(()=>app.state.stage==='ready'&&app.state.sync==='已同步')
+ const deletionOwner=owner
+ const oldPrivateKey='cuoshi-future-v05-owner-records-v1:'+
+   require(join(out,'src','core','backup.js')).sha256(
+    require(join(out,'future','cloud','stableJson.js')).stableJson(deletionOwner))
+ ok(storage.has(oldPrivateKey),'Before cancellation, account history exists on this device')
+ await assert.rejects(()=>app.cancelAccount('注销'),/完整输入/)
+ ok(cancelRequests===0,'Partial typed confirmation never calls the account cancellation backend')
+ cancelHttpStatus=503
+ await assert.rejects(()=>app.cancelAccount('注销账号并清除云端记录'),/not_confirmed/)
+ ok(app.state.stage==='ready'&&app.getActions()?.day().count===4&&
+   storage.has(oldPrivateKey),'503 deletion reply cannot claim success or erase local records')
+ ok(!app.accountWasCancelled(),'Unconfirmed deletion does not leave durable cancellation marker')
+ await until(()=>app.state.sync==='已同步')
+ await app.cancelAccount('注销账号并清除云端记录')
+ ok(app.state.stage==='blocked'&&app.state.sync==='账号已注销'&&
+   app.getActions()===null&&app.accountWasCancelled(),
+   'Confirmed cancellation locks private UI and sets durable account-closed guard')
+ ok(!cloud.snapshots.has(deletionOwner)&&storage.has(oldPrivateKey),
+   'Simulated server erases old cloud content while untouched local bytes stay locked')
+ ok(storage.get('cuoshi-future-v05-miniapp-offline-reverification-required')===true,
+   'Verified cancellation revokes offline access, not merely cloud session')
+ online=false
+ networkListeners.clear()
+ delete require.cache[require.resolve(runtimeModule)]
+ app=require(runtimeModule)
+ const loginsBeforeCancelledBoot=loginCalls
+ await app.start()
+ ok(app.state.stage==='blocked'&&app.accountWasCancelled()&&app.getActions()===null&&
+   loginCalls===loginsBeforeCancelledBoot,
+   'Cold offline restart never reopens cancelled private account or calls login')
+ online=true
+ await app.start()
+ ok(app.state.stage==='blocked'&&loginCalls===loginsBeforeCancelledBoot,
+   'Cancelled online restart cannot silently create a replacement WeChat account')
+ owner='account0003';serverConsent=false
+ await app.restartAfterCancellation()
+ await until(()=>app.state.stage==='ready'&&
+   app.state.sync==='需要确认云端存储')
+ ok(app.getActions()?.day().count===null&&!app.accountWasCancelled(),
+   'Only explicit re-registration exposes NEW verified owner with blank history')
+ ok(storage.has(oldPrivateKey)&&!storage.get('cuoshi-future-v05-miniapp-last-verified-owner'),
+   'Starting fresh does not import the deleted account private local history')
+ await app.consent()
+ await until(()=>app.state.stage==='ready'&&app.state.sync==='已同步')
+ ok(app.getActions()?.day().count===null&&
+   storage.get('cuoshi-future-v05-miniapp-last-verified-owner')?.ownerId===owner,
+   'New account needs its own verified cloud consent and fresh offline grant')
  console.log('PASS',n,'native wx crypto, cold offline restart and reconnect tests')
 }finally{rmSync(temp,{recursive:true,force:true})}

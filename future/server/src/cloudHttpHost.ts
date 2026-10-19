@@ -14,7 +14,7 @@ import type {AuthenticatedCloudService} from './authenticatedService'
 type BackupService=Pick<AuthenticatedCloudService,'readBackup'|'upload'>
 export type CloudHttpDependencies={account:AccountHttpDependencies;backup:BackupService}
 const accountRoutes=new Set([
-  '/v1/auth/wechat','/v1/auth/logout',
+  '/v1/auth/wechat','/v1/auth/logout','/v1/account/cancel',
   '/v1/backup/status','/v1/backup/consent'
 ])
 

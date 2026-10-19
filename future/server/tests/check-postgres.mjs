@@ -982,7 +982,35 @@ try{
   check(Number((await pool.query('SELECT count(*) AS n FROM cloud_revoked_backup_tokens WHERE subject_id=$1',
     [wxLogin.userId])).rows[0].n)===2,'Both HTTP logout and second-device revoked nonces exist before cancellation')
   const beforeStat=await pool.query('SELECT COALESCE(sum(accounts_deleted),0) AS n FROM cloud_account_deletion_totals')
-  const result=await service.cancelAccount(wxToken,ACCOUNT_DELETE_CONFIRMATION)
+  // The actual composed route must cancel only the JWT owner, using the
+  // separate deletion role; no test direct function call on the success path.
+  const deletionHttp=await listenCloudLoopbackForQa({
+    account:{identityDb,authConfig:wxConfig,exchange:mockExchange,
+      login:loginWithWechatCode,account:service,permitLogin:()=>true},
+    backup:service
+  },'SYNTHETIC_TEST_ONLY')
+  let result
+  try{
+    const url=deletionHttp.origin+'/v1/account/cancel'
+    const post=(body,bearerToken=wxToken)=>fetch(url,{
+      method:'POST',headers:{'Content-Type':'application/json',
+        Authorization:'Bearer '+bearerToken},body:JSON.stringify(body)
+    })
+    const wrong=await post({confirmation:'注销'})
+    check(wrong.status===400,'Actual PostgreSQL deletion HTTP requires full typed confirmation')
+    const crossed=await post({confirmation:ACCOUNT_DELETE_CONFIRMATION,
+      ownerId:'account0002'})
+    check(crossed.status===400,'Deletion HTTP rejects attacker-supplied other owner')
+    const staff=await post({confirmation:ACCOUNT_DELETE_CONFIRMATION},
+      staffToken('support0001'))
+    check(staff.status===401,'Staff JWT cannot cancel a user via public HTTP')
+    check((await service.status(wxToken)).enabled,
+      'Denied HTTP cancellation leaves original account active')
+    const deleted=await post({confirmation:ACCOUNT_DELETE_CONFIRMATION})
+    result=await deleted.json()
+    check(deleted.status===200&&deleted.headers.get('cache-control')?.includes('no-store'),
+      'Actual HTTP cancellation gives a non-cacheable confirmed erasure receipt')
+  }finally{await deletionHttp.close()}
   check(result.deleted&&result.privateBackupErased&&result.redactedAuditRows===1,
     'Account deletion completes atomically and gives a non-personal receipt')
   check(!JSON.stringify(result).includes(wxLogin.userId)&&!JSON.stringify(result).includes('私人文字'),

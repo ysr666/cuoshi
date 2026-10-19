@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import {computed,ref} from 'vue'
 import {onShow} from '@dcloudio/uni-app'
-import {state,start,consent,onForeground,getActions,changed,settings,retry} from '../../../future/miniapp/runtime'
+import {state,start,consent,onForeground,getActions,changed,settings,retry,accountWasCancelled,restartAfterCancellation} from '../../../future/miniapp/runtime'
 import {dateOffset,localDate,dayOf,type ChangeEvent} from '../../../src/core/model'
 import {pastCountChange,localEventTime} from '../../../future/miniapp/historyView'
 const selected=ref(localDate()),draft=ref(''),editing=ref(''),editBody=ref(''),
@@ -27,6 +27,7 @@ function shift(n:number){
  if(next>localDate())return
  selected.value=next;historyExpanded.value=false;reloadDraft()
 }
+function beginAgain(){void restartAfterCancellation().catch(e=>{feedback.value=e instanceof Error?e.message:'重新开始失败'})}
 function moveToday(){selected.value=localDate();historyExpanded.value=false;reloadDraft()}
 function attempt(fn:()=>boolean,success='已保存'){
  if(!canEdit.value)return
@@ -111,7 +112,8 @@ const dateLabel=computed(()=>selected.value.split('-').slice(1).join('月')+'日
  <view v-else-if="state.stage==='connecting'" class="status-note">正在验证微信账号…</view>
  <view v-else-if="state.stage==='blocked'||state.stage==='offline'" class="notice">
   <text class="detail">{{state.message}}</text>
-  <button class="secondary" @click="retry">重新检查连接</button>
+  <button v-if="accountWasCancelled()" class="secondary" @click="beginAgain">重新开始（创建新账号）</button>
+  <button v-else class="secondary" @click="retry">重新检查连接</button>
  </view>
  <view v-else class="content">
   <view class="status" :class="{warning:state.sync!=='已同步'}">

@@ -1,10 +1,41 @@
 <script setup lang="ts">
 import {onShow} from '@dcloudio/uni-app'
 import {ref} from 'vue'
-import {state,start,retry,consent} from '../../../future/miniapp/runtime'
+import {state,start,retry,consent,cancelAccount,accountWasCancelled,restartAfterCancellation} from '../../../future/miniapp/runtime'
+import {ACCOUNT_CANCELLATION_CONFIRMATION} from '../../../future/cloud/wechatSession'
 onShow(()=>{void start()})
 function back(){uni.navigateBack()}
+async function restartNewAccount(){
+ try{await restartAfterCancellation()}
+ catch(e){deletionFeedback.value=e instanceof Error?e.message:'重新开始暂不可用'}
+}
 const confirmError=ref('')
+const deletionOpen=ref(false),deletionInput=ref(''),deletionBusy=ref(false),deletionFeedback=ref('')
+const cancellationText=ACCOUNT_CANCELLATION_CONFIRMATION
+function onInput(e:Event){
+ const detail=e as Event&{detail?:{value?:string}}
+ deletionInput.value=typeof detail.detail?.value==='string'?detail.detail.value:''
+}
+async function requestCancellation(){
+ if(deletionBusy.value||deletionInput.value!==cancellationText){
+  deletionFeedback.value='请完整输入确认语后再注销';return
+ }
+ uni.showModal({title:'最后确认注销账号？',
+  content:'将清除这个微信账号的私人云记录和身份关联。不能恢复；仅保留匿名月度统计及脱敏安全审计。',
+  confirmText:'确认注销',confirmColor:'#a04c3c',
+  success:async result=>{
+   if(!result.confirm||deletionBusy.value)return
+   deletionBusy.value=true;deletionFeedback.value=''
+   try{
+    await cancelAccount(cancellationText)
+    deletionOpen.value=false;deletionInput.value=''
+    deletionFeedback.value='服务器已确认注销，旧账号本机记录已锁定。'
+   }catch{
+    deletionFeedback.value='服务器尚未确认注销，请联网后重试；本机记录没有被删除。'
+   }finally{deletionBusy.value=false}
+  }
+ })
+}
 async function confirmAgain(){
  confirmError.value=''
  try{await consent()}
@@ -24,13 +55,28 @@ async function confirmAgain(){
   <button class="button" @click="confirmAgain">重新确认自动云端保存</button>
   <text v-if="confirmError" class="confirm-error">{{confirmError}}</text>
  </view>
- <button class="button" @click="retry">检查连接状态</button>
+ <button v-if="accountWasCancelled()" class="button" @click="restartNewAccount">重新开始（创建新账号）</button>
+ <button v-else class="button" @click="retry">检查连接状态</button>
  <view class="privacy">
  <text class="label">隐私与数据</text>
  <text>记录的数字、可选简记及每次修改历史在首次明确同意后自动上云。
   本机未提交草稿不会上传。网络异常时会提示并保留本机记录；不静默覆盖未同步的本机内容。</text>
  <text>当前 v0.5 仅为独立技术验证包，云域名和 AppID 未配置时不进行任何微信登录或上传。
-  正式上线还需要账号注销、数据处理说明与真机验收。</text>
+  正式上线还需要正式隐私政策、注销结果回执验证、留存规则公示与真机验收。</text>
+ </view>
+ <view class="account">
+  <text class="label">账号管理</text>
+  <text>注销将清除该账号的私人云记录和微信身份关联。本机旧记录会被锁定，不会自动关联到新账号。后台只保留匿名月度统计与已脱敏安全审计。</text>
+  <button class="button danger" :disabled="state.stage!=='ready'||deletionBusy"
+    @click="deletionOpen=!deletionOpen;deletionFeedback='';deletionInput=''">申请注销账号</button>
+  <view v-if="deletionOpen" class="delete-confirm">
+   <text>此操作不可撤销。请先输入：</text>
+   <text class="confirmation">{{cancellationText}}</text>
+   <input :value="deletionInput" :disabled="deletionBusy" :placeholder="cancellationText" @input="onInput"/>
+   <button class="button danger" :disabled="deletionBusy||deletionInput!==cancellationText"
+     @click="requestCancellation">{{deletionBusy?'正在向服务器确认…':'继续注销（还需最终确认）'}}</button>
+  </view>
+  <text v-if="deletionFeedback" class="confirm-error">{{deletionFeedback}}</text>
  </view>
  <text class="footer">错了就错了，先放在这里吧。</text>
 </view>
@@ -52,5 +98,13 @@ async function confirmAgain(){
 .privacy{border-top:1rpx solid #ded8ce;margin-top:90rpx;padding-top:32rpx}
 .privacy text{display:block;font-size:26rpx;line-height:2;color:#6c675e;margin-bottom:25rpx}
 .privacy .label{color:#292723;font-size:30rpx}
+.account{border-top:1rpx solid #ded8ce;margin-top:55rpx;padding-top:35rpx}
+.account text{display:block;font-size:26rpx;line-height:1.9;color:#6c675e;margin-top:18rpx}
+.account .label{font-size:30rpx;color:#292723;margin-top:0}
+.account .confirmation{font-weight:600;color:#9c4e3f;user-select:text}
+.account .confirm-error{color:#9c4e3f}
+.delete-confirm input{border:1rpx solid #ded8ce;padding:20rpx;margin-top:18rpx;font-size:26rpx}
+.button.danger{border-color:#b99083;color:#9c4e3f}
+.button[disabled]{opacity:.45}
 .footer{display:block;font-family:serif;margin-top:100rpx;color:#837d73}
 </style>

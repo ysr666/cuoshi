@@ -137,3 +137,11 @@ SQL 的审计禁止修改触发器只是**附加防线**，拥有数据库所有
 - 注意：这个设计依赖 **TLS 终止网关正确隔离并重写私有请求头**。反向代理必须禁止客户端直接访问 HTTP 回环服务、不能透传外部提供的代理密钥/IP 头，网关私有密钥必须从秘密管理器注入并受最小权限保护。若 CDN 在网关之前，必须配置严格可信的 CDN IP 列表，否则 IP 限流依据应是网关接收到的 CDN 地址。入口可另外由 WAF 预先限流；勿把静态边缘密钥当成终端用户认证。
 - 服务编译：先在仓库根目录 `npm ci`，再 `npm ci --prefix future/server`；执行 `npm run build:private --prefix future/server`，产物仅出现在被 Git 忽略的 `future/server/.private-build`；设置经过安全审核的环境变量后再运行 `npm run start:private --prefix future/server`。仓库中的 `.env.example` 只是**无效占位模板**，绝不存放真实值。不得将此服务打包进微信小程序。
 - CI 测试：`npm run test:future:trusted-edge`（26 项实际本机 HTTP 请求检查）、`npm run test:future:private-config`（23 项配置拒绝和编译产物启动检查），加上隔离 PostgreSQL 对可信代理 → 微信登录 → SQL 登录限流 → 云端账号的联动检查。**仍未接真实微信平台，也未设置正式 TLS 网关、服务器运维或上线。**
+
+
+## 2026-10-19 · 对外账号注销路由及独立运行身份
+
+- `POST /v1/account/cancel` 只在 Bearer JWT 验证通过、JSON **恰好**包含 `confirmation: "注销账号并清除云端记录"` 后调用已有 `AuthenticatedCloudService.cancelAccount()`；不接受 ownerId、openid 或 query 参数。使用单独 `CUOSHI_PG_CANCELLATION_URL`（必须与 backup / identity / staff 三个受限角色互异）执行数据库内事务。没有单独删除角色时启动配置校验直接失败，绝不借用备份角色执行删除。
+- 成功响应仅回传删除确认、是否清理过私人云备份以及脱敏审计数量。失败时只返回统一 HTTP 错误，禁止泄漏记录内容、JWT、用户标识或 SQL 明细；接口与所有其他用户路由一样只允许经可信回环代理访问，正式公网入口尚未部署。
+- PostgreSQL 一次性 CI 通过实际 HTTP 请求检验拒绝不完整确认、禁止指定他人账号/员工令牌，并核验仅正确 JWT 所属账号删除，月度匿名总计与脱敏审计保留，旧 JWT、管理员工单、私有云内容不可再读。
+- 这只是开发版本。**正式发布仍需审核个人信息保护的保存期限、基础设施备份清除周期、审计脱敏充分性、身份再注册策略和用户可访问的隐私政策**，不能默认为无限期保留可识别的用户资料。

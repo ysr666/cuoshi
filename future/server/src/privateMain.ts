@@ -23,8 +23,8 @@ async function main(){
  const connect=(url:string)=>new Pool({connectionString:url,max:6,
    connectionTimeoutMillis:5000,idleTimeoutMillis:20000})
  const identityDb=connect(config.identityDbUrl),backupDb=connect(config.backupDbUrl),
-   staffDb=connect(config.staffDbUrl)
- const pools=[identityDb,backupDb,staffDb]
+   staffDb=connect(config.staffDbUrl),cancellationDb=connect(config.cancellationDbUrl)
+ const pools=[identityDb,backupDb,staffDb,cancellationDb]
  let host:Awaited<ReturnType<typeof listenPrivateEdgeLoopback>>|null=null
  try{
    // Fail before opening any TCP listener. Application roles must be distinct
@@ -52,15 +52,19 @@ async function main(){
        throw Error('private_cloud_database_schema_missing')
      roles.push(role.name)
    }
-   if(new Set(roles).size!==3)throw Error('private_cloud_database_roles_not_separated')
+   if(new Set(roles).size!==4)throw Error('private_cloud_database_roles_not_separated')
    const limiterFunction=await identityDb.query(
      "SELECT to_regprocedure('cloud_take_wechat_login_slot(text)') AS configured")
    if(!limiterFunction.rows[0]?.configured)
      throw Error('private_cloud_login_limiter_migration_missing')
+   const deletion=await cancellationDb.query(
+     "SELECT to_regprocedure('cloud_cancel_account(text)') AS configured")
+   if(!deletion.rows[0]?.configured)
+     throw Error('private_cloud_account_cancellation_migration_missing')
    const edge=createTrustedEdgeBoundary({sharedSecret:config.edgeSecret})
    const service=new AuthenticatedCloudService(backupDb,staffDb,{
      backupKey:config.backupSigningKey,staffKey:config.staffSigningKey
-   })
+   },()=>Math.floor(Date.now()/1000),cancellationDb)
    const limiter=createPostgresWechatLoginLimiter({
      db:identityDb,peerHmacKey:config.loginPeerKey,verifiedPeer:edge.clientIp
    })

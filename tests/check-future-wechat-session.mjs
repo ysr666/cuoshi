@@ -23,6 +23,7 @@ try{
   let account='account0001',time=1800000000,codes=0,authCalls=0,allowed=true
   let enabled=false,hasStoredBackup=false,permitLogin=true
   let throwRequest=false,malformed=false,changeOwner=false,loginHttpStatus=0
+  let deletionHttpStatus=0,deleteCalls=0
   const received=[]
   const tokens=new Set()
   const platform={
@@ -52,6 +53,14 @@ try{
       if(!req.header.Authorization||
          !tokens.has(req.header.Authorization.slice(7)))
         return {statusCode:401,data:{error:'unauthorized'}}
+      if(req.url===origin+'/v1/account/cancel'){
+        deleteCalls++
+        if(deletionHttpStatus)return {statusCode:deletionHttpStatus,data:{error:'unavailable'}}
+        tokens.delete(req.header.Authorization.slice(7))
+        return {statusCode:200,data:{deleted:true,privateBackupErased:true,
+          redactedAuditRows:2,
+          retainedBackendData:'anonymous_monthly_totals_and_redacted_security_audits'}}
+      }
       if(req.url===origin+'/v1/auth/logout'){
         tokens.delete(req.header.Authorization.slice(7))
         return {statusCode:204,data:null}
@@ -184,5 +193,25 @@ try{
   await rejects(()=>pending,/abandoned/)
   ok((await slow.getVerifiedSession()).ownerId===account,
     'Clear while login pending cannot restore abandoned session')
+  const {ACCOUNT_CANCELLATION_CONFIRMATION}=require(join(out,'future/cloud/wechatSession.js'))
+  const deleteManager=build()
+  const preDelete=await deleteManager.getVerifiedSession()
+  await rejects(()=>deleteManager.cancelCloudAccount('注销'),/confirmation_required/)
+  ok(deleteCalls===0,'Partial cancellation confirmation never reaches HTTP')
+  deletionHttpStatus=503
+  await rejects(()=>deleteManager.cancelCloudAccount(ACCOUNT_CANCELLATION_CONFIRMATION),
+    /not_confirmed/)
+  ok(deleteCalls===1&&
+    (await deleteManager.getVerifiedSession()).accessToken===preDelete.accessToken,
+    'Server 503 does not erase, revoke locally or falsely mark deletion success')
+  deletionHttpStatus=0
+  const receipt=await deleteManager.cancelCloudAccount(ACCOUNT_CANCELLATION_CONFIRMATION)
+  ok(receipt.deleted&&receipt.privateBackupErased&&receipt.redactedAuditRows===2,
+    'Strict backend erasure receipt confirms account cancellation')
+  ok(deleteCalls===2&&received.at(-1).url===origin+'/v1/account/cancel',
+    'Cancellation sends owner-bound bearer and exact fixed route')
+  const newLogin=await deleteManager.getVerifiedSession()
+  ok(newLogin.accessToken!==preDelete.accessToken,
+    'Confirmed cancellation invalidates cached token and requires new wx.login')
   console.log('PASS',tests,'WeChat code-to-token client and consent assertions; mock transport only')
 }finally{rmSync(temp,{recursive:true,force:true})}

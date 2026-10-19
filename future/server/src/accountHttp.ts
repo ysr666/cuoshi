@@ -8,11 +8,13 @@ import type {IncomingMessage,ServerResponse} from 'node:http'
 import type {WechatAuthConfig,WechatExchange,WechatLogin} from './wechatIdentity'
 import type {DbPool} from './repository'
 import type {AuthenticatedCloudService} from './authenticatedService'
+import {ACCOUNT_DELETE_CONFIRMATION} from './accountCancellation'
 import {
   HttpFailure,answer,bearer,collectJson,errorResponse
 } from './backupHttp'
 
-type AccountService=Pick<AuthenticatedCloudService,'status'|'setConsent'|'logoutUser'>
+type AccountService=Pick<AuthenticatedCloudService,'status'|'setConsent'|'logoutUser'> &
+ Partial<Pick<AuthenticatedCloudService,'cancelAccount'>>
 type LoginFn=(
   pool:DbPool,code:string,deviceId:string,config:WechatAuthConfig,
   exchange:WechatExchange
@@ -100,6 +102,29 @@ export function createAccountHttpHandler(deps:AccountHttpDependencies){
           // JWT maximum 15 minutes; a client should renew by fresh wx.login.
           expiresInSeconds:900 // Existing account consent is read via /status.
         })
+      }
+      if(path==='/v1/account/cancel'){
+        if(req.method!=='POST'){
+          res.setHeader('Allow','POST')
+          throw new HttpFailure(405,'method_not_allowed')
+        }
+        // Optional feature, unavailable until a separate least-privileged
+        // deletion role has been configured. Never fall back to backup role.
+        if(typeof deps.account.cancelAccount!=='function')
+          throw new HttpFailure(503,'cloud_temporarily_unavailable')
+        const token=bearer(req)
+        const payload=await collectJson(req,1024)
+        if(!hasExactKeys(payload,['confirmation'])||
+           payload.confirmation!==ACCOUNT_DELETE_CONFIRMATION)
+          throw new HttpFailure(400,'bad_request')
+        const result=await deps.account.cancelAccount(token,payload.confirmation)
+        if(result?.deleted!==true||typeof result.privateBackupErased!=='boolean'||
+           !Number.isSafeInteger(result.redactedAuditRows)||
+           result.redactedAuditRows<0||
+           result.retainedBackendData!==
+             'anonymous_monthly_totals_and_redacted_security_audits')
+          throw new HttpFailure(503,'cloud_temporarily_unavailable')
+        return answer(res,200,result)
       }
       if(path==='/v1/auth/logout'){
         if(req.method!=='POST'){

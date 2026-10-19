@@ -39,6 +39,13 @@ try{
      if(value!==token)throw Error('unauthorized')
      token='REVOKED_TOKEN'
    },
+   async cancelAccount(value,confirmation){
+     if(value!==token)throw Error('unauthorized')
+     if(confirmation!=='注销账号并清除云端记录')throw Error('invalid_confirmation')
+     token='REVOKED_TOKEN'
+     return {deleted:true,privateBackupErased:true,redactedAuditRows:2,
+       retainedBackendData:'anonymous_monthly_totals_and_redacted_security_audits'}
+   },
    async setConsent(value,enabled,version){
      if(value!==token)throw Error('unauthorized')
      if(version!=='privacy-v1')throw Error('invalid_consent')
@@ -151,6 +158,18 @@ try{
    {enabled:false,noticeVersion:'privacy-v1'},authHeaders)
  check(no.status===200&&(await no.json()).enabled===false,
    'Cloud opt-out disables new uploads without deleting existing data')
+ check((await call('/v1/account/cancel','GET',undefined,authHeaders)).status===405,
+   'Cancellation only permits POST with authenticated bearer')
+ check((await call('/v1/account/cancel','POST',{confirmation:'注销'},authHeaders)).status===400,
+   'Cancellation refuses partial typed confirmation')
+ check((await call('/v1/account/cancel','POST',{
+   confirmation:'注销账号并清除云端记录',ownerId:'account0002'},authHeaders)).status===400,
+   'Account erasure never accepts user-selected owner ID')
+ check((await call('/v1/account/cancel?ownerId=account0002','POST',{
+   confirmation:'注销账号并清除云端记录'},authHeaders)).status===404,
+   'Cancellation query parameters cannot select other accounts')
+ check((await call('/v1/account/cancel','POST',{confirmation:'注销账号并清除云端记录'})).status===401,
+   'Unauthenticated cancellation cannot erase any account')
  const loggedOut=await call('/v1/auth/logout','POST',undefined,authHeaders)
  check(loggedOut.status===204,'Current session revoked through explicit HTTP logout')
  check((await call('/v1/backup/status','GET',undefined,authHeaders)).status===401,
@@ -162,7 +181,22 @@ try{
    {enabled:true,noticeVersion:'privacy-v1'},
    {Authorization:'Bearer '+'b'.repeat(128)})
  check(bad.status===401,'Forged user token cannot change backup consent')
- check(providerCalls===1,'Only first valid non-replay exchange reaches provider')
+ // A new short-lived session is required after current-device logout.
+ const finalLogin=await call('/v1/auth/wechat','POST',
+   {code:'finalauth0001',deviceId:device})
+ check(finalLogin.status===200,'Fresh verified token obtained for deletion')
+ const finalToken=(await finalLogin.json()).accessToken
+ const cancelled=await call('/v1/account/cancel','POST',
+   {confirmation:'注销账号并清除云端记录'},
+   {Authorization:'Bearer '+finalToken})
+ const cancelledJson=await cancelled.json()
+ check(cancelled.status===200&&cancelledJson.deleted===true&&
+   cancelledJson.privateBackupErased===true&&cancelledJson.redactedAuditRows===2,
+   'Correct explicit confirmation returns only verified account erasure receipt')
+ check((await call('/v1/backup/status','GET',undefined,
+   {Authorization:'Bearer '+finalToken})).status===401,
+   'Cancellation revokes the prior session instead of leaving cloud data accessible')
+ check(providerCalls===2,'Only accepted unique login codes reach synthetic provider')
  check(limiterCalls>=8,'Login requests are consistently rate gated')
  console.log('PASS',n,'WeChat account HTTP + consent loopback assertions; all identities synthetic')
 }finally{

@@ -10,6 +10,7 @@ export type PrivateCloudConfig={
   backupDbUrl:string
   identityDbUrl:string
   staffDbUrl:string
+  cancellationDbUrl:string
   backupSigningKey:Uint8Array
   staffSigningKey:Uint8Array
   subjectPepper:Uint8Array
@@ -56,7 +57,8 @@ export function parsePrivateCloudConfig(env:Record<string,string|undefined>):Pri
  const urls=[
    databaseUrl(env,'CUOSHI_PG_BACKUP_URL'),
    databaseUrl(env,'CUOSHI_PG_IDENTITY_URL'),
-   databaseUrl(env,'CUOSHI_PG_STAFF_URL')
+   databaseUrl(env,'CUOSHI_PG_STAFF_URL'),
+   databaseUrl(env,'CUOSHI_PG_CANCELLATION_URL')
  ]
  if(new Set(urls.map(x=>x.role)).size!==urls.length)
    throw Error('private_cloud_database_roles_not_separated')
@@ -69,7 +71,7 @@ export function parsePrivateCloudConfig(env:Record<string,string|undefined>):Pri
    throw Error('private_cloud_secrets_not_separated')
  return {
    port,appId,appSecret,
-   backupDbUrl:urls[0].value,identityDbUrl:urls[1].value,staffDbUrl:urls[2].value,
+   backupDbUrl:urls[0].value,identityDbUrl:urls[1].value,staffDbUrl:urls[2].value,cancellationDbUrl:urls[3].value,
    backupSigningKey:keys[0],staffSigningKey:keys[1],
    subjectPepper:keys[2],codePepper:keys[3],loginPeerKey:keys[4],edgeSecret:keys[5]
  }

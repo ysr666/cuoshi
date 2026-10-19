@@ -1,5 +1,5 @@
 import {reactive} from 'vue'
-import {createWeChatSessionManager} from '../cloud/wechatSession'
+import {createWeChatSessionManager,ACCOUNT_CANCELLATION_CONFIRMATION} from '../cloud/wechatSession'
 import {createUniRequestTransport,createDurableJournalStore} from '../cloud/clientAdapters'
 import {createUniCloudHost,type UniCloudPlatform} from '../cloud/uniCloudHost'
 import {createCloudRecordActions} from '../cloud/cloudRecordActions'
@@ -17,6 +17,7 @@ const NOTICE='cuoshi-future-v05-miniapp-disclosure'
 const DEVICE='cuoshi-future-v05-miniapp-device-id'
 const OFFLINE_OWNER='cuoshi-future-v05-miniapp-last-verified-owner'
 const OFFLINE_QUARANTINE='cuoshi-future-v05-miniapp-offline-reverification-required'
+const ACCOUNT_CLOSED='cuoshi-future-v05-miniapp-account-closed-confirmed'
 type OfflineBinding={version:1;ownerId:string;deviceId:string;noticeVersion:string}
 const ownerPattern=/^[A-Za-z0-9_-]{8,128}$/
 let host:Host|null=null,actions:Actions|null=null,task:Promise<void>|null=null
@@ -259,6 +260,13 @@ function offlineAfterVerifiedLoginFailure(rateLimited=false):boolean{
  return true
 }
 export function start():Promise<void>{
+ if(uni.getStorageSync(ACCOUNT_CLOSED)===true){
+  state.stage='blocked';state.sync='账号已注销'
+  state.message='当前账号已注销。如需再次使用，请主动选择「重新开始」，创建全新账号；旧账号私人记录不会自动恢复。'
+  state.revision++
+  return Promise.resolve()
+ }
+ if(cancellationTask)return cancellationTask
  if(task)return task
  if(state.stage==='ready'&&!offlineLocal)return Promise.resolve()
  if(!accepted()){state.stage='notice';return Promise.resolve()}
@@ -312,6 +320,71 @@ export async function consent(){
   update()
  }
 }
+/** Account cancellation keeps owner-scoped local bytes for forensic recovery,
+ * but revokes the device's offline permission and never auto-uploads them.
+ * The deleted account's old content is never associated with future logins.
+ */
+let cancellationTask:Promise<void>|null=null
+export function cancelAccount(confirmation:string):Promise<void>{
+ if(confirmation!==ACCOUNT_CANCELLATION_CONFIRMATION)
+   return Promise.reject(Error('请完整输入指定的注销确认语'))
+ if(cancellationTask)return cancellationTask
+ if(!host||offlineLocal||state.stage!=='ready'||task)
+   return Promise.reject(Error('请先联网验证账号后再申请注销'))
+ const current=host,currentActions=actions
+ state.stage='connecting'
+ state.message='正在向云端确认注销，请勿退出…'
+ state.revision++
+ actions=null
+ current.stop()
+ cancellationTask=(async()=>{
+   try{
+     // If the request times out after the DB commits, we must NOT claim
+     // success. The next verified status will independently resolve closure.
+     await current.session.cancelCloudAccount(confirmation)
+   }catch(error){
+     // No success receipt: do NOT delete any private storage, revoke account
+     // locally, or tell the user cancellation has completed.
+     host=current
+     actions=currentActions
+     state.stage='ready'
+     state.message='注销请求未获服务器确认，账号及本机记录未在客户端清除；请检查后重试。'
+     state.revision++
+     current.start()
+     throw error
+   }
+   const durable=quarantineOfflineEntitlement()
+   let closedMarked=false
+   try{
+    uni.setStorageSync(ACCOUNT_CLOSED,true)
+    closedMarked=uni.getStorageSync(ACCOUNT_CLOSED)===true
+   }catch{/* Surface storage failure below; do not report safe cold restart. */}
+   releaseOfflineNetworkWatch()
+   host=null
+   actions=null
+   offlineLocal=false
+   state.stage='blocked'
+   state.sync='账号已注销'
+   state.consentRequired=false
+   state.message=durable&&closedMarked?
+     '云端确认账号已注销，私人云记录及身份关联已清除；本机旧记录已锁定，匿名统计与脱敏安全审计仍按规则保留。':
+     '云端确认账号已注销，但本机安全状态保存失败；请勿退出或离线重启，先修复本机存储。'
+   state.revision++
+ })().finally(()=>{cancellationTask=null})
+ return cancellationTask
+}
+export async function restartAfterCancellation(){
+ if(uni.getStorageSync(ACCOUNT_CLOSED)!==true)
+  throw Error('当前不存在需要重新开始的已注销账号')
+ uni.removeStorageSync(ACCOUNT_CLOSED)
+ if(uni.getStorageSync(ACCOUNT_CLOSED)===true)
+  throw Error('无法保存重新开始的选择，请检查本机存储')
+ // Deliberately leave previous offline quarantine intact until a NEW
+ // verified owner explicitly consents and completes its cloud sync.
+ state.sync=''
+ await start()
+}
+export function accountWasCancelled(){return uni.getStorageSync(ACCOUNT_CLOSED)===true}
 export function onForeground(){
  state.date=localDate()
  for(const fn of foreground)fn()

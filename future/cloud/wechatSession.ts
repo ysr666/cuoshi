@@ -14,6 +14,7 @@ export type WechatLoginApi={
 const id=/^[A-Za-z0-9_-]{8,128}$/
 const code=/^[A-Za-z0-9_-]{8,512}$/
 const token=/^[A-Za-z0-9_.-]{90,1800}$/
+export const ACCOUNT_CANCELLATION_CONFIRMATION='注销账号并清除云端记录'
 type Session={ownerId:string;deviceId:string;accessToken:string;expiry:number}
 export type FutureCloudStatus={
   enabled:boolean;hasStoredBackup:boolean;revision:number|null;
@@ -40,6 +41,7 @@ export function createWeChatSessionManager(args:{
   setCloudConsent(enabled:boolean,noticeVersion:string):Promise<FutureCloudStatus>
   clearLocalSession():void
   logoutCurrentDevice():Promise<void>
+  cancelCloudAccount(confirmation:string):Promise<{deleted:true;privateBackupErased:boolean;redactedAuditRows:number}>
 }{
   const {deviceId,platform,http,nowSeconds}=args
   const origin=safeOrigin(args.origin)
@@ -182,6 +184,36 @@ export function createWeChatSessionManager(args:{
       })
       if(response.statusCode!==204)throw Error('wechat_session_logout_not_confirmed')
       clear()
+    },
+    async cancelCloudAccount(confirmation:string){
+      if(confirmation!==ACCOUNT_CANCELLATION_CONFIRMATION)
+        throw Error('wechat_account_cancellation_confirmation_required')
+      const verified=await getVerifiedSession()
+      const response=await http.request({
+        url:origin+'/v1/account/cancel',method:'POST',
+        header:{Authorization:'Bearer '+verified.accessToken,
+          Accept:'application/json','Content-Type':'application/json'},
+        data:{confirmation}
+      })
+      if(response.statusCode!==200){
+        if(response.statusCode===401||response.statusCode===403){
+          session=null
+          throw Error('wechat_account_cancellation_authentication_required')
+        }
+        throw Error('wechat_account_cancellation_not_confirmed')
+      }
+      const receipt=response.data as Record<string,unknown>|null
+      if(!receipt||typeof receipt!=='object'||receipt.deleted!==true||
+         typeof receipt.privateBackupErased!=='boolean'||
+         !Number.isSafeInteger(receipt.redactedAuditRows)||
+         Number(receipt.redactedAuditRows)<0||
+         receipt.retainedBackendData!==
+           'anonymous_monthly_totals_and_redacted_security_audits')
+        throw Error('wechat_account_cancellation_invalid_receipt')
+      // Only an exact trusted server receipt confirms irreversible deletion.
+      clear()
+      return {deleted:true,privateBackupErased:receipt.privateBackupErased,
+        redactedAuditRows:Number(receipt.redactedAuditRows)}
     },
     clearLocalSession:clear
   }

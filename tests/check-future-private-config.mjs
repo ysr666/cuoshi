@@ -24,7 +24,8 @@ try{
   CUOSHI_WECHAT_APP_ID:'wx0123456789abcdef',CUOSHI_WECHAT_APP_SECRET:'a'.repeat(32),
   CUOSHI_PG_BACKUP_URL:'postgresql://backup_private:password@pg.example.net:5432/cuoshi?sslmode=verify-full',
   CUOSHI_PG_IDENTITY_URL:'postgresql://identity_private:password@pg.example.net:5432/cuoshi?sslmode=verify-full',
-  CUOSHI_PG_STAFF_URL:'postgresql://staff_private:password@pg.example.net:5432/cuoshi?sslmode=verify-full'}
+  CUOSHI_PG_STAFF_URL:'postgresql://staff_private:password@pg.example.net:5432/cuoshi?sslmode=verify-full',
+  CUOSHI_PG_CANCELLATION_URL:'postgresql://cancellation_private:password@pg.example.net:5432/cuoshi?sslmode=verify-full'}
  for(const key of keys)env[key]=randomBytes(32).toString('hex')
  const config=parse(env)
  check(config.port===18765&&config.appId===env.CUOSHI_WECHAT_APP_ID,
@@ -47,6 +48,8 @@ try{
   /database_invalid/,'DB transport cannot be plaintext')
  reject({CUOSHI_PG_BACKUP_URL:'postgresql://backup_private:password@pg.example.net/cuoshi?sslmode=verify-full&sslmode=disable'},
   /database_invalid/,'Duplicate SSL parameters cannot downgrade encryption')
+ reject({CUOSHI_PG_CANCELLATION_URL:env.CUOSHI_PG_BACKUP_URL},/roles_not_separated/,
+  'Cancellation account never shares backup DB role')
  reject({CUOSHI_PG_STAFF_URL:env.CUOSHI_PG_BACKUP_URL},/roles_not_separated/,
   'Staff account never shares backup DB role')
  reject({CUOSHI_BACKUP_SIGNING_KEY_HEX:'a'.repeat(12)},/secret_missing_or_invalid/,

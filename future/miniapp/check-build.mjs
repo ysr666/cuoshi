@@ -32,6 +32,13 @@ check(todayScript.includes('展开全部')&&todayScript.includes('收起历史')
 check(settings.includes('云端自动同步'),'Native settings explain cloud-first storage')
 check(read('pages/today/index.js').includes('重新确认自动云端保存'),
  'Native today page offers an explicit restore action after revoked cloud consent')
+check(settings.includes('申请注销账号')&&
+ read('pages/settings/index.js').includes('最后确认注销账号'),
+ 'Native settings retain irreversible cancellation confirmation and warnings')
+check(read('common/vendor.js').includes('注销账号并清除云端记录'),
+ 'Native settings require exact typed account deletion confirmation')
+check(today.includes('重新开始（创建新账号）'),
+ 'Native today page offers explicit re-registration after cancellation')
 check(settings.includes('重新确认自动云端保存'),
  'Native settings provide a visible re-consent path without deleting records')
 check(!settings.includes('JSON 备份'),'No v0.4 temporary JSON backup UI')
