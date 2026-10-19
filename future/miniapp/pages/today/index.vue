@@ -3,10 +3,11 @@ import {computed,ref} from 'vue'
 import {onShow} from '@dcloudio/uni-app'
 import {state,start,consent,onForeground,getActions,changed,settings,retry} from '../../../future/miniapp/runtime'
 import {dateOffset,localDate,dayOf,type ChangeEvent} from '../../../src/core/model'
+import {pastCountChange,localEventTime} from '../../../future/miniapp/historyView'
 const selected=ref(localDate()),draft=ref(''),editing=ref(''),editBody=ref(''),
- numberInput=ref(''),numberOpen=ref(false),feedback=ref('')
+ numberInput=ref(''),numberOpen=ref(false),feedback=ref(''),historyExpanded=ref(false)
 onShow(()=>{
- selected.value=localDate()
+ selected.value=localDate();historyExpanded.value=false
  void start().then(()=>{onForeground();reloadDraft()})
 })
 const actions=computed(()=>{void state.revision;return getActions()})
@@ -16,15 +17,16 @@ const history=computed(()=>{void state.revision
  return actions.value?.read().events.filter(e=>e.targetDate===selected.value).slice().reverse()??[]
 })
 const pastEdits=computed(()=>{void state.revision
- return actions.value?.recentPastChanges().length??0
+ return selected.value===localDate()?actions.value?.recentPastChanges().slice().reverse()??[]:[]
 })
+const visibleHistory=computed(()=>historyExpanded.value?history.value:history.value.slice(0,12))
 function reloadDraft(){try{draft.value=actions.value?.draft(selected.value)??''}catch{draft.value=''}}
 function shift(n:number){
  const next=dateOffset(selected.value,n)
  if(next>localDate())return
- selected.value=next;reloadDraft()
+ selected.value=next;historyExpanded.value=false;reloadDraft()
 }
-function moveToday(){selected.value=localDate();reloadDraft()}
+function moveToday(){selected.value=localDate();historyExpanded.value=false;reloadDraft()}
 function attempt(fn:()=>boolean,success='已保存'){
  if(!canEdit.value)return
  try{
@@ -150,12 +152,22 @@ const dateLabel=computed(()=>selected.value.split('-').slice(1).join('月')+'日
     <text v-if="draft" class="fine">草稿只存在本机，点「留下」才会保存正式历史。</text>
    </view>
    <text v-if="feedback" class="feedback">{{feedback}}</text>
-   <view v-if="pastEdits" class="quiet">今天还修改了过去的记录 · {{pastEdits}} 次</view>
-   <view class="history"><text class="history-title">这一天的修改历史 · {{history.length}} 次</text>
-    <view v-for="item in history.slice(0,12)" :key="item.id" class="event">
-     <text>{{eventLabel(item)}}</text><text class="stamp">{{item.at.slice(0,16).replace('T',' ')}} UTC</text>
+   <view v-if="pastEdits.length" class="quiet">
+    <text class="past-title">今天修改了过去的记录 · {{pastEdits.length}} 次</text>
+    <view v-for="item in pastEdits" :key="item.id" class="past-entry">
+     <text>{{item.targetDate}} · {{pastCountChange(item)}}</text>
     </view>
-    <text v-if="history.length>12" class="fine">其他历史仍完整保存在数据中</text>
+   </view>
+   <view class="history"><text class="history-title">这一天的修改历史 · {{history.length}} 次</text>
+    <view v-for="item in visibleHistory" :key="item.id" class="event">
+     <view class="event-head"><text>{{eventLabel(item)}}</text>
+      <text class="stamp">{{localEventTime(item.at)}} · 本地时间</text></view>
+     <text v-if="item.type==='note_add'" class="event-detail">内容：{{item.newText}}</text>
+     <text v-if="item.type==='note_edit'" class="event-detail">原文：{{item.oldText}}
+改为：{{item.newText}}</text>
+     <text v-if="item.type==='note_delete'" class="event-detail">删除前：{{item.oldText}}</text>
+    </view>
+    <text v-if="history.length>12" class="history-toggle" @click="historyExpanded=!historyExpanded">{{historyExpanded?'收起历史':'展开全部 '+history.length+' 条历史'}}</text>
    </view>
   </view>
  </view>
@@ -207,10 +219,16 @@ const dateLabel=computed(()=>selected.value.split('-').slice(1).join('月')+'日
 .leave{font-size:27rpx;color:#675b4a}
 .feedback,.quiet{display:block;padding:26rpx 0;color:#6c675e;font-size:25rpx}
 .quiet{border-top:1rpx solid #ded8ce}
+.past-title{display:block;margin-bottom:15rpx}
+.past-entry{font-size:25rpx;line-height:1.8;padding:8rpx 0;word-break:break-all}
 .history{border-top:1rpx solid #ded8ce;padding-top:33rpx;margin-top:25rpx}
 .history-title{display:block;font-size:27rpx;margin-bottom:15rpx}
-.event{display:flex;justify-content:space-between;gap:15rpx;border-bottom:1rpx solid #ded8ce;padding:19rpx 0;font-size:24rpx}
-.stamp{font-size:21rpx;color:#837d73}
+.event{display:flex;flex-direction:column;gap:8rpx;border-bottom:1rpx solid #ded8ce;padding:19rpx 0;font-size:24rpx}
+.event-head{display:flex;justify-content:space-between;gap:15rpx;align-items:flex-start}
+.event-head text:first-child{flex:1}
+.event-detail{font-size:23rpx;color:#6c675e;white-space:pre-wrap;word-break:break-all;line-height:1.7}
+.stamp{font-size:21rpx;color:#837d73;text-align:right}
+.history-toggle{display:block;text-align:center;padding:28rpx 0;color:#6c675e;font-size:26rpx}
 .shade{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;background:#29272344;padding:35rpx}
 .dialog{background:#f7f3eb;padding:50rpx;width:100%;max-width:680rpx;border-radius:16rpx;text-align:center}
 .dialog input{height:95rpx;font-size:45rpx;margin:38rpx 0;border:1rpx solid #ded8ce}

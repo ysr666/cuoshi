@@ -22,6 +22,13 @@ for(const term of ['了解并开始','今天','留几个字','修改历史','首
  check(today.includes(term),'Native template keeps '+term)
 }
 const settings=read('pages/settings/index.wxml')
+// Regression guard: complete history must remain reachable on the native page.
+for(const term of ['今天修改了过去的记录','原文：','删除前：','本地时间']){
+ check(today.includes(term),'Native history renders '+term)
+}
+const todayScript=read('pages/today/index.js')
+check(todayScript.includes('展开全部')&&todayScript.includes('收起历史'),
+ 'Native history offers expandable complete ledger rather than silently hiding older events')
 check(settings.includes('云端自动同步'),'Native settings explain cloud-first storage')
 check(!settings.includes('JSON 备份'),'No v0.4 temporary JSON backup UI')
 const config=JSON.parse(read('project.config.json'))
