@@ -57,7 +57,8 @@ try{
     resolve(root,'future/server/src/cloudHttpHost.ts'),
     resolve(root,'future/server/src/trustedEdge.ts'),
     resolve(root,'future/server/src/loginRateLimiter.ts'),
-    resolve(root,'future/server/src/privateConfig.ts')
+    resolve(root,'future/server/src/privateConfig.ts'),
+    resolve(root,'future/server/src/privateReadiness.ts')
   ],{cwd:root,stdio:'pipe'})
   const m=require(join(out,'src/core/model.js'))
   const {
@@ -69,6 +70,7 @@ try{
   const {listenCloudLoopbackForQa,listenPrivateEdgeLoopback}=require(join(out,'future/server/src/cloudHttpHost.js'))
   const {createTrustedEdgeBoundary}=require(join(out,'future/server/src/trustedEdge.js'))
   const {privatePoolConnectionOptions}=require(join(out,'future/server/src/privateConfig.js'))
+  const {checkPrivateDatabaseReadiness}=require(join(out,'future/server/src/privateReadiness.js'))
   const {createPostgresWechatLoginLimiter}=require(join(out,'future/server/src/loginRateLimiter.js'))
   const repository=require(join(out,'future/server/src/repository.js'))
   const admin=require(join(out,'future/server/src/adminRepository.js'))
@@ -132,6 +134,24 @@ try{
     options:'-c search_path='+schema,max:3})
   reportingPool=new Pool({connectionString:roleUrl(reportingRole,reportingSecret),
     options:'-c search_path='+schema,max:3})
+  // Real production startup preflight now executes against genuine isolated
+  // PostgreSQL and all four restricted runtime login roles, not test doubles.
+  const runtimeRoles={identityDb:identityPool,backupDb:backupPool,
+    staffDb:adminPool,cancellationDb:deletionPool}
+  await checkPrivateDatabaseReadiness(runtimeRoles,schema)
+  check(true,'Real production pre-listener readiness approves four correct roles')
+  await assert.rejects(checkPrivateDatabaseReadiness(
+    {...runtimeRoles,staffDb:backupPool},schema),
+    /private_cloud_database_roles_not_separated/);checks++
+  await assert.rejects(checkPrivateDatabaseReadiness(
+    {...runtimeRoles,identityDb:pool},schema),
+    /private_cloud_database_role_unsafe/);checks++
+  await assert.rejects(checkPrivateDatabaseReadiness(
+    runtimeRoles,'wrong_schema'),
+    /private_cloud_database_schema_missing/);checks++
+  await assert.rejects(checkPrivateDatabaseReadiness(
+    {...runtimeRoles,cancellationDb:null},schema),
+    /private_cloud_database_connections_required/);checks++
   const attempt=async(rolePool,sql,params=[])=>{
     const c=await rolePool.connect()
     try{await assert.rejects(c.query(sql,params),/permission denied|must be owner|not owner/i);checks++}

@@ -176,3 +176,8 @@ SQL 的审计禁止修改触发器只是**附加防线**，拥有数据库所有
 ### PostgreSQL 启动时 schema（上线阻断修复）
 
 `CUOSHI_PG_SCHEMA` 是必填服务端环境变量，必须与七份迁移目标 schema 完全相同；私有 Node 服务四个独立 `pg.Pool` 使用 `privatePoolConnectionOptions()` 限定启动时 `search_path=<schema>,pg_catalog`，并在监听端口前核验 `current_schema()`。没有此设置，真实迁移后数据库可存在业务表，但 PostgreSQL 的默认 `public` 搜索路径无法访问，服务会启动失败。配置拒绝空值、默认 `public`、危险 SQL 名称以及 URL 的 `options` 连接参数覆盖；真实 PG CI 按同一连接函数验证，不使用测试专有的隐式 schema 设置。
+
+
+### 生产启动自检与真实 PostgreSQL 使用同一代码（2026-10-20）
+
+`src/privateReadiness.ts` 提取了 `privateMain` 在绑定 127.0.0.1 端口之前必须运行的数据库自检：四个互异、非提权且不拥有私有表的登录角色，四条连接都选中指定 schema，微信登录限流函数和账号注销过程完整存在。真实 PostgreSQL CI 使用**同一个函数**在四条真实受限连接上验证，并验证复用角色、迁移 owner、错误 schema 或缺少连接时均拒绝启动；不是另写一套模仿生产的测试 SQL。验证全通过后才允许私有 Node 监听端口，不能靠放宽运行账号权限或迁移到 `public` 来绕过失败。

@@ -12,6 +12,7 @@ import {createPostgresWechatLoginLimiter} from './loginRateLimiter'
 import {makeWechatCodeExchanger,loginWithWechatCode} from './wechatIdentity'
 import {AuthenticatedCloudService} from './authenticatedService'
 import type {DbPool} from './repository'
+import {checkPrivateDatabaseReadiness} from './privateReadiness'
 
 async function main(){
  const config=parsePrivateCloudConfig(process.env)
@@ -26,41 +27,10 @@ async function main(){
  const pools=[identityDb,backupDb,staffDb,cancellationDb]
  let host:Awaited<ReturnType<typeof listenPrivateEdgeLoopback>>|null=null
  try{
-   // Fail before opening any TCP listener. Application roles must be distinct
-   // and cannot be superusers, role creators, or table-migration owners.
-   const roles:string[]=[]
-   for(const pool of pools){
-     const result=await pool.query(`SELECT current_user AS name,rolsuper,rolcreatedb,
-       rolcreaterole,rolreplication,rolbypassrls FROM pg_roles WHERE rolname=current_user`)
-     const role=result.rows[0]
-     if(!role||typeof role.name!=='string'||role.rolsuper!==false||
-        role.rolcreatedb!==false||role.rolcreaterole!==false||
-        role.rolreplication!==false||role.rolbypassrls!==false)
-       throw Error('private_cloud_database_role_unsafe')
-     // A role may own tables despite lacking SUPERUSER or CREATEROLE.
-     const ownership=await pool.query(`SELECT EXISTS(
-       SELECT 1 FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace
-       WHERE c.relowner=(SELECT oid FROM pg_roles WHERE rolname=current_user)
-         AND c.relname IN ('cloud_users','cloud_snapshots','cloud_admin_audit',
-           'cloud_wechat_identities','cloud_wechat_login_rate_windows')
-     ) AS owns_sensitive_tables`)
-     if(ownership.rows[0]?.owns_sensitive_tables!==false)
-       throw Error('private_cloud_database_role_unsafe')
-     const schema=await pool.query(
-       "SELECT current_schema() AS active_schema,to_regclass('cloud_users') AS users")
-     if(schema.rows[0]?.active_schema!==config.dbSchema||!schema.rows[0]?.users)
-       throw Error('private_cloud_database_schema_missing')
-     roles.push(role.name)
-   }
-   if(new Set(roles).size!==4)throw Error('private_cloud_database_roles_not_separated')
-   const limiterFunction=await identityDb.query(
-     "SELECT to_regprocedure('cloud_take_wechat_login_slot(text)') AS configured")
-   if(!limiterFunction.rows[0]?.configured)
-     throw Error('private_cloud_login_limiter_migration_missing')
-   const deletion=await cancellationDb.query(
-     "SELECT to_regprocedure('cloud_cancel_account(text)') AS configured")
-   if(!deletion.rows[0]?.configured)
-     throw Error('private_cloud_account_cancellation_migration_missing')
+   // Run the SAME pre-listener checks as the real PostgreSQL CI contract.
+   // A failing identity, role, schema or required function cannot listen.
+   await checkPrivateDatabaseReadiness(
+     {identityDb,backupDb,staffDb,cancellationDb},config.dbSchema)
    const edge=createTrustedEdgeBoundary({sharedSecret:config.edgeSecret})
    const service=new AuthenticatedCloudService(backupDb,staffDb,{
      backupKey:config.backupSigningKey,staffKey:config.staffSigningKey
