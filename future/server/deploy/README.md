@@ -23,3 +23,16 @@
 - **机密信息只留服务器**：AppSecret、数据库登录密码、JWT 签名私钥和 Caddy 派生代理头不能放小程序、GitHub、公开二维码、CI 变量回显或截图。
 - **无法核验的直接阻断上线**：TLS 证书链与自动更新、合法 request 域名、腾讯云/实际服务商备案、可回溯脱敏安全审计、私有记录权限、服务器时间、备份生命周期、异常告警、WAL/灾备副本清理演练及注销后处置协议。
 - 当前仓库没有可重复的真实 Caddy 启动或 HTTPS 探针通过证据，也没有真实私有云账号。此模板需要在未来的受控运行环境**执行原生命令验证并做安全复核**，不能称为已部署成功。
+
+
+## 数据库的七步迁移交付（离线生成，不直接写数据库）
+
+`render-migrations.mjs` 是独立的安全迁移渲染器。首次生产部署前，必须由**有权限的独立数据库管理员**创建受控 schema 和 6 个不同 LOGIN 角色：备份、管理员、微信身份、注销、维护、汇总统计。运行时的 4 个服务角色不能拥有 schema、执行 DDL 或成为超级用户；维护/只读统计角色只用于独立管理服务，**不复用小程序的数据库账号**。
+
+1. 由云服务管理员先核准本项目部署方案、schema 名称及各角色名；**不要把密码填进下列变量或提交给 GitHub**。准备 `CUOSHI_PG_SCHEMA`、`CUOSHI_PG_BACKUP_ROLE`、`CUOSHI_PG_ADMIN_ROLE`、`CUOSHI_PG_AUTH_ROLE`、`CUOSHI_PG_DELETION_ROLE`、`CUOSHI_PG_MAINTENANCE_ROLE`、`CUOSHI_PG_REPORTING_ROLE`，均应是符合 SQL 标识符规则的不同小写英文下划线名称。
+2. 将以上仅含**非秘密角色名字**的环境变量交给离线 CLI：`npm run prepare:future:migrations -- /absolute/private/out/new-migrations`。输出必须是此前不存在的目录、在仓库之外；不会发送数据库请求、不会创建账号、不会执行 SQL。失败也不会留下部分迁移。
+3. 工具按固定顺序生成 `001_initial.sql` 至 `007_login_rate_limits.sql` 和 `SHA256-MANIFEST.json`；目录权限 0700、文件 0600，带完整 SHA-256 校验和。每个 SQL 在 `BEGIN` 后显式 `SET LOCAL search_path` 指向经过严格校验的 schema，以免依赖数据库客户端默认 search_path 而错建表。
+4. **人工逐项复核生成 SQL**，确认实例及 schema 与账号归属，检查是否已存在对象、角色权限、需要的维护窗口、可回滚快照以及数据库实际备份。此脚本目前面向新部署的**一次性、从空 schema 开始**的迁移，不提供在线重放/升级或自动 rollback；数据库已有数据绝不能再次跑首建 SQL。
+5. 由经过授权的**独立迁移账号**按文件名顺序执行，严格核对每步的 DB 返回、对象/权限和失败日志；严禁使用运行时备份、微信身份、注销或管理员账户执行 DDL。迁移成功后才能启动私有 Node 服务，验证 4 个最小权限登录，随后再通过可信代理连接真实微信服务。
+
+`npm run test:future:migration-render` 用 **62 项**静态与临时文件合同验证固定顺序、SQL 角色名、注入防护、只写仓库外权限隔离目录及 checksum；独立的真实 PostgreSQL CI 则直接调用相同渲染器执行 7 份迁移并验证角色权限与注销业务。这两类测试均不能代替生产实例上的审查和演练。

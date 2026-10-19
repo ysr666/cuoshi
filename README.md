@@ -87,3 +87,5 @@ npm run test:store   # 30 项模拟 uni 本地存储、冲突和失败回归
 正式 AppID、备案及国内云服务尚未接入时，v0.5 仍是仅用合成身份的独立构建，不得合并上线。`npm run test:future:release-config` 拒绝使用虚构域名或缺资料的候选构建；`npm run test:future:public-edge` 是不联网的公网检查工具单测，不代表部署完成。
 
 个人主体办理已确认，注册、微信小程序备案与国内后端域名 ICP 备案分开核对；步骤见 [v0.5 个人主体注册实操](docs/RELEASE_V05_PERSONAL_REGISTRATION.md)。
+
+候选版依赖安全尚未签核：[2026-10-20 官方 npm 审计分流](docs/RELEASE_V05_SECURITY_AUDIT_2026-10-20.md)；云后端与微信构建依赖需分开评估，不等于已允许发布。

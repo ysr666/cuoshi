@@ -2,10 +2,11 @@
 import assert from 'node:assert/strict'
 import {createRequire} from 'node:module'
 import {execFileSync} from 'node:child_process'
-import {mkdtempSync,mkdirSync,rmSync,readFileSync} from 'node:fs'
+import {mkdtempSync,mkdirSync,rmSync} from 'node:fs'
 import {tmpdir} from 'node:os'
 import {join,resolve} from 'node:path'
 import {fileURLToPath} from 'node:url'
+import {validateMigrationConfig,renderMigration} from '../deploy/render-migrations.mjs'
 import crypto from 'node:crypto'
 import {createServer} from 'node:http'
 const root=fileURLToPath(new URL('../../../',import.meta.url))
@@ -27,6 +28,16 @@ const backupRole='cuoshi_b_'+suffix,adminRole='cuoshi_a_'+suffix
 const identityRole='cuoshi_i_'+suffix
 const deletionRole='cuoshi_d_'+suffix,maintenanceRole='cuoshi_m_'+suffix
 const reportingRole='cuoshi_r_'+suffix
+// Exercise the exact same SQL renderer operators will use to deploy:
+// synthetic PG integration can no longer pass a hand-substituted template
+// while a separate production renderer silently breaks privileges/schema.
+const sqlVars=validateMigrationConfig({
+ CUOSHI_PG_SCHEMA:schema,
+ CUOSHI_PG_BACKUP_ROLE:backupRole,CUOSHI_PG_ADMIN_ROLE:adminRole,
+ CUOSHI_PG_AUTH_ROLE:identityRole,CUOSHI_PG_DELETION_ROLE:deletionRole,
+ CUOSHI_PG_MAINTENANCE_ROLE:maintenanceRole,
+ CUOSHI_PG_REPORTING_ROLE:reportingRole
+})
 let rolesInstalled=false
 try{
   const out=join(temp,'build');mkdirSync(out)
@@ -66,7 +77,7 @@ try{
   const {readAnonymousDeletionSummary}=require(join(out,'future/server/src/deletionReporting.js'))
   await basePool.query('CREATE SCHEMA "'+schema+'"')
   pool=new Pool({connectionString:source,options:'-c search_path='+schema,max:14})
-  const ddl=readFileSync(new URL('../sql/001_initial.sql',import.meta.url),'utf8')
+  const ddl=renderMigration('001_initial.sql',sqlVars)
   await pool.query(ddl)
 
   // Every service operation below uses a separate non-owner, non-superuser DB
@@ -83,34 +94,14 @@ try{
     await basePool.query('CREATE ROLE "'+role+'" LOGIN PASSWORD \''+secret+'\'')
   }
   rolesInstalled=true
-  const grants=readFileSync(new URL('../sql/002_runtime_permissions.sql',import.meta.url),'utf8')
-    .replaceAll('__SCHEMA__','"'+schema+'"')
-    .replaceAll('__BACKUP_ROLE__','"'+backupRole+'"')
-    .replaceAll('__ADMIN_ROLE__','"'+adminRole+'"')
-  try{await pool.query(grants)}catch(error){console.error('MIGRATION_SQL_ERROR',error.message,error.position,error.where,error.detail);throw error}
-  const identityMigration=readFileSync(new URL('../sql/003_wechat_identity.sql',import.meta.url),'utf8')
-    .replaceAll('__SCHEMA__','"'+schema+'"')
-    .replaceAll('__AUTH_ROLE__','"'+identityRole+'"')
-  await pool.query(identityMigration)
-  const revocationMigration=readFileSync(new URL('../sql/004_session_revocation.sql',import.meta.url),'utf8')
-    .replaceAll('__SCHEMA__','"'+schema+'"')
-    .replaceAll('__BACKUP_ROLE__','"'+backupRole+'"')
-    .replaceAll('__ADMIN_ROLE__','"'+adminRole+'"')
-  await pool.query(revocationMigration)
-  const cancellationMigration=readFileSync(new URL('../sql/005_account_cancellation.sql',import.meta.url),'utf8')
-    .replaceAll('__SCHEMA__','"'+schema+'"')
-    .replaceAll('__DELETION_ROLE__','"'+deletionRole+'"')
-    .replaceAll('__MAINTENANCE_ROLE__','"'+maintenanceRole+'"')
-    .replaceAll('__REPORTING_ROLE__','"'+reportingRole+'"')
-  await pool.query(cancellationMigration)
-  const generationMigration=readFileSync(new URL('../sql/006_global_session_revocation.sql',import.meta.url),'utf8')
-    .replaceAll('__SCHEMA__','"'+schema+'"').replaceAll('__BACKUP_ROLE__','"'+backupRole+'"')
-  await pool.query(generationMigration)
-  const loginLimitMigration=readFileSync(new URL('../sql/007_login_rate_limits.sql',import.meta.url),'utf8')
-    .replaceAll('__SCHEMA__','"'+schema+'"')
-    .replaceAll('__AUTH_ROLE__','"'+identityRole+'"')
-    .replaceAll('__MAINTENANCE_ROLE__','"'+maintenanceRole+'"')
-  await pool.query(loginLimitMigration)
+  // Apply all subsequent SQL in order, using exactly the audited templates.
+  for(const name of [
+    '002_runtime_permissions.sql','003_wechat_identity.sql',
+    '004_session_revocation.sql','005_account_cancellation.sql',
+    '006_global_session_revocation.sql','007_login_rate_limits.sql'
+  ]){
+    await pool.query(renderMigration(name,sqlVars))
+  }
   function roleUrl(role,secret){
     const url=new URL(source)
     url.username=role

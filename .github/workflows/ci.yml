@@ -81,6 +81,8 @@ jobs:
         run: npm run test:future:public-edge
       - name: Verify predeployment HTTPS proxy template and safe credential generation
         run: npm run test:future:proxy-deploy
+      - name: Validate seven SQL migration renders and locked-down operator output
+        run: npm run test:future:migration-render
       - name: Compile isolated v0.5 native WeChat package (no production AppID)
         run: npm run build:future:mp-weixin
       - name: Verify native pages, privacy gate, package hygiene and typecheck
