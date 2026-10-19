@@ -5,13 +5,15 @@ import {createUniCloudHost,type UniCloudPlatform} from '../cloud/uniCloudHost'
 import {createCloudRecordActions} from '../cloud/cloudRecordActions'
 import {createUniAccountRecords} from '../cloud/uniAccountRecords'
 import {localDate} from '../../src/core/model'
-import {cloudOrigin,cloudNoticeVersion} from './cloudConfig'
+import {cloudOrigin,cloudNoticeVersion,cloudFilingNumber,cloudContactEmail} from './cloudConfig'
 type Host=ReturnType<typeof createUniCloudHost>
 type Actions=ReturnType<typeof createCloudRecordActions>
 export const state=reactive({
  stage:'notice' as 'notice'|'connecting'|'ready'|'blocked'|'offline',
  message:'数字、选填简记和历次修改历史默认自动存入云端。首次使用请确认。',
- sync:'',consentRequired:false,cloudPaused:false,pausePending:false,date:localDate(),revision:0
+ sync:'',consentRequired:false,cloudPaused:false,pausePending:false,
+ filingNumber:cloudFilingNumber,contactEmail:cloudContactEmail,
+ date:localDate(),revision:0
 })
 const NOTICE='cuoshi-future-v05-miniapp-disclosure'
 const DEVICE='cuoshi-future-v05-miniapp-device-id'

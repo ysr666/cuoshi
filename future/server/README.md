@@ -152,3 +152,7 @@ SQL 的审计禁止修改触发器只是**附加防线**，拥有数据库所有
 - `GET /v1/account/cancel/status` 在既有可信边缘网关后提供**只读**注销状态：验证原有未过期 `cuoshi-cloud-backup` JWT 后按其签名主体查询 `cloud_users.deleted_at`；不接受用户 ID、微信 openid 或任何查询参数。返回 `closed`、`active` 或 `unknown`，不返回私人内容、身份映射或任何新的 bearer。旧墓碑超过维护期限被清理时是 `unknown`，不能据此假定删除已成功。
 - 注销响应可能在 PostgreSQL 事务提交后丢失；原 JWT 的其它用户数据请求已禁止，但该只读状态检查仍可在原令牌有效期内证明 `deleted_at`。不能走普通 `asUser()`（它正确拒绝已注销用户），也不能绕过 JWT 的原始过期时间。`active` 表示该旧用户尚未进入删除墓碑状态，`unknown` 或网络错误不能证明注销已完成。
 - 仅保留原有运行期数据库权限；没有新增查询任意账户、更新其他用户数据或后台管理员访问的能力。真实 PostgreSQL CI 经真实 HTTP 验证账号删除前 `active`、删除后 `closed`、无 token 401、带跨用户 ID 查询 404。
+
+## 正式部署前的公网只读核验（v0.5）
+
+业务上线五关与需人工验证的材料见 [`docs/RELEASE_V05_FIVE_GATES.md`](../../docs/RELEASE_V05_FIVE_GATES.md)。本私有监听进程仍未在大陆生产服务器部署；`npm run test:future:public-edge` 只验证**模拟 HTTP 传输和拒绝私网域名**，没有真实互联网连接。运营者在真实 HTTPS 网关和可信代理配置完毕之后，可在有权限的工作环境执行 `CUOSHI_V05_CLOUD_ORIGIN=https://实际域名 npm run check:future:public-edge`。探针只用 GET 检查 204 健康响应、未授权私有快照 401、未知路由 404；不发送用户身份、简记或 POST。网关与数据库权限审查、真实微信身份验证、备份恢复/删除演练仍需另做。

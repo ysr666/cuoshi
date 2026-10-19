@@ -95,3 +95,12 @@ AppSecret、令牌、用户数据或真实个人信息写入该构建配置。
 ## v0.5 首发功能冻结（2026-10-19）
 
 **以 [`docs/RELEASE_V05_MINIMAL_SCOPE.md`](../../docs/RELEASE_V05_MINIMAL_SCOPE.md) 为准**。只做每天数字、可选简记、过去日期及完整修改历史、自动云同步和必要账号/隐私能力；不再新增导出、导入、统计、提醒、手机号或 AI 功能。微信包构建输入改为明确模块白名单，真实输出另做文件白名单及禁用 API 断言。后续工程只修上线阻断项，不能为增加产品功能拖延发布。
+
+## v0.5 正式接入与五关验收
+
+使用 [五项上线阻断清单](../../docs/RELEASE_V05_FIVE_GATES.md)、[v0.5 云版隐私草案](../../docs/PRIVACY_NOTICE_V05_DRAFT.md) 与 [v0.5 微信审核资料草案](../../docs/WECHAT_REVIEW_V05_DRAFT.md)，**不要复用 v0.4 的导出、日历与统计审核文案**。
+
+- 普通 `npm run build:future:mp-weixin` 永远默认使用空 AppID/空域名，不接真实账户。
+- 运营者取得经平台确认的 AppID、真实 HTTPS 域名、已审核的隐私版本、可核实的备案号及可公开邮箱后，才能设置 `CUOSHI_V05_RELEASE_CANDIDATE=1` 连同 `CUOSHI_V05_WECHAT_APP_ID`、`CUOSHI_V05_CLOUD_ORIGIN`、`CUOSHI_V05_NOTICE_VERSION`、`CUOSHI_V05_FILING_NUMBER`、`CUOSHI_V05_CONTACT_EMAIL` 生成候选包。输入的**语法检查并不验证平台核准状态**。
+- 项目内 `npm run test:future:release-config` 检查 22 项不安全配置拒绝；`npm run test:future:public-edge` 在虚构 fetch 上验证公开网关探针不会泄漏令牌。只有部署后且获授权，才可自行运行 `CUOSHI_V05_CLOUD_ORIGIN=https://已备案真实域名 npm run check:future:public-edge`，验证 TLS 与固定的 204/401/404 响应；这不是微信真实登录成功的证据。
+- **严格禁止**将 `CUOSHI_WECHAT_APP_SECRET`、PG 连接密码、私有 JWT 签名密钥或工作人员的个人身份材料放在小程序构建环境、仓库、PR 或 CI 输出中。

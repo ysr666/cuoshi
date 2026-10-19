@@ -78,3 +78,10 @@ npm run test:store   # 30 项模拟 uni 本地存储、冲突和失败回归
 未来云能力有 `future/cloud/` 的纯合同测试和 `future/server/` 的**独立 PostgreSQL 事务实现及真实数据库集成测试**；但**没有上线服务器、微信/手机号身份认证、可供用户使用的云账号、云数据接口或任何真实上传**。CI 会检查未来代码未打包进 v0.4 H5/微信。
 
 目前**没有正式账号 AppID 或备案结果**。实机测试、隐私指引、平台审核和风险处置完成之前不得合并发布。首发功能范围不增加账号、云同步、排行榜、广告或道德打分。
+
+
+## v0.5 极简微信首发 · 发布关口
+
+目前正沿 [v0.5 首发功能冻结](docs/RELEASE_V05_MINIMAL_SCOPE.md) 推进五件上线必要工作：正式 AppID 与备案、国内可信 HTTPS 云部署、真实双真机微信联调、隐私与依赖安全审核、微信平台提交审核。逐项条件与真实证据见 [五关发布检查表](docs/RELEASE_V05_FIVE_GATES.md)，配套 [v0.5 隐私草案](docs/PRIVACY_NOTICE_V05_DRAFT.md)、[v0.5 微信审核资料](docs/WECHAT_REVIEW_V05_DRAFT.md)。**这三个是 v0.5 专用草案，旧版 v0.4 的导出/导入审核文件仍仅供历史参考，不得用于云端新版本审核。**
+
+正式 AppID、备案及国内云服务尚未接入时，v0.5 仍是仅用合成身份的独立构建，不得合并上线。`npm run test:future:release-config` 拒绝使用虚构域名或缺资料的候选构建；`npm run test:future:public-edge` 是不联网的公网检查工具单测，不代表部署完成。

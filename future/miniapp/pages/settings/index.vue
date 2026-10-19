@@ -113,10 +113,14 @@ async function confirmAgain(){
  <view class="privacy">
  <text class="label">隐私与数据</text>
  <text>在首页点击日期，就能直接回看那天的数字、简记和完整修改历史。</text>
+ <text v-if="state.contactEmail">个人信息查阅、复制、问题反馈及注销协助：{{state.contactEmail}}</text>
+ <text v-if="state.filingNumber">小程序备案编号：{{state.filingNumber}}</text>
  <text>记录的数字、可选简记及每次修改历史在首次明确同意后自动上云。
   本机未提交草稿不会上传。网络异常时会提示并保留本机记录；不静默覆盖未同步的本机内容。</text>
- <text>当前 v0.5 仅为独立技术验证包，云域名和 AppID 未配置时不进行任何微信登录或上传。
+ <text v-if="!state.filingNumber">当前 v0.5 仅为独立技术验证包，云域名和 AppID 未配置时不进行任何微信登录或上传。
   正式上线还需要正式隐私政策、注销结果回执验证、留存规则公示与真机验收。</text>
+ <text v-else>仅在已确认的云端授权范围内保存记录。你可以查看、修改或注销账号；如需查阅或复制个人信息，
+  可使用上方公开联系方式提交申请。云服务相关规则及保存期限以正式发布的隐私政策为准。</text>
  </view>
  <view class="account">
   <text class="label">账号管理</text>

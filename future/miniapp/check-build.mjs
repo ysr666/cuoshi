@@ -59,7 +59,20 @@ check(settings.includes('重新确认自动云端保存'),
  'Native settings provide a visible re-consent path without deleting records')
 check(!settings.includes('JSON 备份'),'No v0.4 temporary JSON backup UI')
 const config=JSON.parse(read('project.config.json'))
-check(config.appid==='touristappid','No fake production AppID embedded')
+const expectedAppId=process.env.CUOSHI_V05_WECHAT_APP_ID||''
+if(expectedAppId)
+ check(config.appid===expectedAppId,
+  'Explicit operator AppID appears only in the generated temporary native package')
+else check(config.appid==='touristappid',
+  'Development package cannot pretend to include a real registered AppID')
+if(process.env.CUOSHI_V05_RELEASE_CANDIDATE==='1'){
+ check(settings.includes('小程序备案编号')&&settings.includes('个人信息查阅'),
+  'RC presents public registration and data-rights contact in settings')
+ const cloudSettings=readFileSync(join(base,'future','miniapp','cloudConfig.ts'),'utf8')
+ check(cloudSettings.includes(process.env.CUOSHI_V05_FILING_NUMBER||'REQUIRED')&&
+  cloudSettings.includes(process.env.CUOSHI_V05_CONTACT_EMAIL||'REQUIRED'),
+  'Release candidate ships its verified public filing/contact fields')
+}
 const generated=readFileSync(join(base,'future','miniapp','cloudConfig.ts'),'utf8')
 const noServer=!process.env.CUOSHI_V05_CLOUD_ORIGIN
 if(noServer){

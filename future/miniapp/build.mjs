@@ -6,9 +6,13 @@ import {cpSync,existsSync,mkdirSync,readFileSync,rmSync,symlinkSync,writeFileSyn
 import {resolve,join,dirname} from 'node:path'
 import {fileURLToPath} from 'node:url'
 import {execFileSync} from 'node:child_process'
+import {parseMiniappBuildConfig} from './buildConfig.mjs'
 const root=resolve(dirname(fileURLToPath(import.meta.url)),'../..')
 const staging=join(root,'future','.generated-mp')
 const src=join(staging,'src'),future=join(staging,'future')
+// Validate BEFORE deleting the previous build. Invalid release inputs must
+// not disturb an existing offline QA package.
+const buildConfig=parseMiniappBuildConfig(process.env)
 if(!existsSync(join(root,'src','pages.json')))throw Error('wrong build root')
 rmSync(staging,{recursive:true,force:true})
 mkdirSync(src,{recursive:true})
@@ -46,19 +50,17 @@ const pages={
 }
 writeFileSync(join(src,'pages.json'),JSON.stringify(pages,null,2))
 const manifest=JSON.parse(readFileSync(join(src,'manifest.json'),'utf8'))
-manifest.name='错事 · v0.5 开发验证'
-manifest.versionName='0.5.0-dev'
+manifest.name=buildConfig.releaseCandidate?'错事':'错事 · v0.5 开发验证'
+manifest.versionName=buildConfig.releaseCandidate?'0.5.0-rc':'0.5.0-dev'
 manifest.versionCode='50'
-manifest['mp-weixin'].appid='' // Never leak or assume a real registered AppID.
+manifest['mp-weixin'].appid=buildConfig.appId // AppID is public; NEVER embed AppSecret.
 writeFileSync(join(src,'manifest.json'),JSON.stringify(manifest,null,2))
-const origin=process.env.CUOSHI_V05_CLOUD_ORIGIN||''
-if(origin&&!/^https:\/\/[a-z0-9.-]+(?::\d{2,5})?$/.test(origin))
- throw Error('CUOSHI_V05_CLOUD_ORIGIN must be an HTTPS host only')
-const version=process.env.CUOSHI_V05_NOTICE_VERSION||'privacy-v1'
-if(!/^[a-zA-Z0-9_.-]{3,64}$/.test(version))throw Error('invalid notice version')
+const {cloudOrigin:origin,noticeVersion:version}=buildConfig
 writeFileSync(join(future,'miniapp','cloudConfig.ts'),
  'export const cloudOrigin='+JSON.stringify(origin)+'\n'+
- 'export const cloudNoticeVersion='+JSON.stringify(version)+'\n')
+ 'export const cloudNoticeVersion='+JSON.stringify(version)+'\n'+
+ 'export const cloudFilingNumber='+JSON.stringify(buildConfig.filingNumber)+'\n'+
+ 'export const cloudContactEmail='+JSON.stringify(buildConfig.contactEmail)+'\n')
 cpSync(join(root,'vite.config.ts'),join(staging,'vite.config.ts'))
 cpSync(join(root,'tsconfig.json'),join(staging,'tsconfig.json'))
 cpSync(join(root,'package.json'),join(staging,'package.json'))
@@ -74,4 +76,6 @@ if(JSON.stringify(app.pages)!==JSON.stringify([
  'pages/today/index','pages/settings/index'
 ]))throw Error('unexpected native mini-program entry pages')
 console.log('PASS isolated v0.5 WeChat miniapp package: '+output)
-console.log(origin?'Cloud host configured for real-provider QA':'No cloud origin: app fails closed without login or private uploads')
+console.log(buildConfig.releaseCandidate?
+ 'Release-CANDIDATE source compiled (operator must still verify AppID, filing, privacy, HTTPS and device QA)':
+ origin?'Cloud host configured for real-provider QA':'No cloud origin: app fails closed without login or private uploads')
