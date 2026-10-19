@@ -21,6 +21,8 @@ export function createTrustedEdgeBoundary(args:{
   sharedSecret:Uint8Array
 }){
   if(!(args?.sharedSecret instanceof Uint8Array)||args.sharedSecret.byteLength<32)throw Error('trusted_edge_not_configured')
+  // The reverse proxy stores ONLY SHA-256(raw service secret). Do not let a
+  // leaked/raw server-only secret double as an accepted proxy bearer.
   const expected=createHash('sha256').update(args.sharedSecret).digest()
   const peers=new WeakMap<IncomingMessage,string>()
   const clientIp=(req:IncomingMessage):string|null=>peers.get(req)??null
@@ -36,7 +38,7 @@ export function createTrustedEdgeBoundary(args:{
       typeof proof==='string'&&/^[a-f0-9]{64}$/i.test(proof)&&
       typeof forwarded==='string'&&isIP(forwarded)!==0
     if(authorized){
-      const actual=createHash('sha256').update(Buffer.from(proof as string,'hex')).digest()
+      const actual=Buffer.from(proof as string,'hex')
       authorized=timingSafeEqual(expected,actual)
     }
     if(!authorized){answer(res,403,{error:'access_denied'});return}

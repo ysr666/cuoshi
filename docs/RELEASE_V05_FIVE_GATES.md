@@ -27,7 +27,7 @@
 
 1. 在个人主体实名条件允许后，选择符合法律与服务目的的中国大陆地域；开通独立 PostgreSQL。由迁移角色执行 `future/server/sql/001` 至 `007`；日常应用不得使用 owner/superuser，四条受限连接串分别提供备份、微信身份、员工、安全注销服务；验证数据库 TLS 服务器名称。
 2. 在独立密钥管理中配置 `future/server/.env.example` 列出的服务器环境变量；AppSecret、数据库口令和签名密钥绝不能进仓库、小程序包、日志或二维码。启动 `npm run build:private --prefix future/server` 和独立的私有进程。**后端只能监听 127.0.0.1，不能直接暴露到公网。**
-3. 在同一可信主机部署真正的 HTTPS 终止代理：**必须删除外部传入的 `X-Cuoshi-Edge-Proof`、`X-Cuoshi-Client-Ip`，再由代理用私有受限密钥和自己核实的客户端 IP 重写它们**。若前面有 CDN/WAF，代理未准确识别真实客户端时只能对代理 IP 保守限流，不能无条件信任 `X-Forwarded-For`。公网 443/TLS、DNS、证书到期告警、WAF 及可用性监控需真实验证。
+3. HTTPS 终止代理已有 [受保护的 Caddy 配置模板](../future/server/deploy/README.md) 和 35 项静态检查，**尚未在真实云主机运行或验证 Caddy 配置**。在同一可信主机部署真正的 HTTPS 终止代理：**必须删除外部传入的 `X-Cuoshi-Edge-Proof`、`X-Cuoshi-Client-Ip`，再由代理用私有受限密钥和自己核实的客户端 IP 重写它们**。若前面有 CDN/WAF，代理未准确识别真实客户端时只能对代理 IP 保守限流，不能无条件信任 `X-Forwarded-For`。公网 443/TLS、DNS、证书到期告警、WAF 及可用性监控需真实验证。
 4. 设定真实的私人快照、WAL/物理备份、副本、审计、网关日志的保存/清理期限；明确注销后尚存备份的隔离与最终清理规则，完成一轮演练，不将匿名化与日志保全当作无限保留正文的理由。
 5. **仅在部署并获授权之后**执行：`CUOSHI_V05_CLOUD_ORIGIN=https://你的实际域名 npm run check:future:public-edge`。只检查 `GET /healthz=204`、未登录 `GET /v1/backup/snapshot=401`、不存在路径 `GET /v1/not-a-real-route=404`。该检查不证明微信登录和上传可用，结果须另按真机表确认。
 

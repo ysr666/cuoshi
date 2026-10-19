@@ -1,0 +1,31 @@
+# TEMPLATE, NOT AN ACTIVE DEPLOYMENT. The public hostname must have valid
+# DNS + an approved ICP filing, and Caddy must be installed on the same host
+# as the private Node HTTP listener (127.0.0.1 only).
+# Do not enable a CDN or global trusted_proxies without a separate IP audit.
+{
+    admin off
+}
+
+{$CUOSHI_PUBLIC_DOMAIN} {
+    # Only the v0.5 first-release HTTP routes are reachable from outside.
+    @cuoshi_api {
+        path /healthz /v1/auth/wechat /v1/auth/logout /v1/account/cancel /v1/account/cancel/status /v1/backup/status /v1/backup/consent /v1/backup/snapshot
+    }
+
+    handle @cuoshi_api {
+        reverse_proxy 127.0.0.1:{$CUOSHI_PRIVATE_PORT} {
+            # Never forward caller-supplied privileged headers. The proof is
+            # derived from the server-only secret; the peer is the IP of the
+            # socket talking to Caddy, NOT an unverified X-Forwarded-For.
+            header_up -X-Cuoshi-Edge-Proof
+            header_up -X-Cuoshi-Client-Ip
+            header_up X-Cuoshi-Edge-Proof {$CUOSHI_EDGE_PROOF_HEX}
+            header_up X-Cuoshi-Client-Ip {http.request.remote.host}
+        }
+    }
+
+    # Unknown paths are not routed to the private Node service.
+    handle {
+        respond 404
+    }
+}

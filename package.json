@@ -11,6 +11,7 @@
     "build:future:mp-weixin": "node future/miniapp/build.mjs",
     "test:future:release-config": "node tests/check-future-release-config.mjs",
     "test:future:public-edge": "node tests/check-future-public-edge.mjs",
+    "test:future:proxy-deploy": "node tests/check-future-proxy-deploy.mjs",
     "check:future:public-edge": "node future/server/check-public-edge.mjs",
     "test:future:mp-weixin": "node future/miniapp/check-build.mjs && vue-tsc --noEmit -p future/.generated-mp/tsconfig.json && node future/miniapp/check-runtime.mjs && node future/miniapp/check-history-view.mjs",
     "test:future:mp-weixin:offline": "CUOSHI_V05_CLOUD_ORIGIN=https://test.cuoshi.invalid node future/miniapp/build.mjs && node future/miniapp/check-offline-restart.mjs && CUOSHI_V05_CLOUD_ORIGIN= node future/miniapp/build.mjs && npm run test:future:mp-weixin",

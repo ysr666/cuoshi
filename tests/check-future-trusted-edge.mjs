@@ -5,7 +5,7 @@ import {createRequire} from 'node:module'
 import {mkdtempSync,mkdirSync,rmSync} from 'node:fs'
 import {tmpdir} from 'node:os'
 import {join,resolve} from 'node:path'
-import {randomBytes} from 'node:crypto'
+import {randomBytes,createHash} from 'node:crypto'
 const root=resolve('.'),temp=mkdtempSync(join(tmpdir(),'cuoshi-private-edge-'))
 const require=createRequire(import.meta.url)
 let count=0
@@ -22,6 +22,7 @@ try{
  const {createTrustedEdgeBoundary}=require(join(out,'future/server/src/trustedEdge.js'))
  const {createPostgresWechatLoginLimiter}=require(join(out,'future/server/src/loginRateLimiter.js'))
  const secret=randomBytes(32),key=randomBytes(32),edge=createTrustedEdgeBoundary({sharedSecret:secret})
+ const derivedProof=createHash('sha256').update(secret).digest('hex')
  assert.throws(()=>createTrustedEdgeBoundary({sharedSecret:randomBytes(8)}),/not_configured/);count++
  assert.throws(()=>edge.protect(null),/route_required/);count++
  let loginCount=0,dbQueries=[],released=0,cloudCalls=0,dbError=false
@@ -32,7 +33,7 @@ try{
  // A leaked proxy proof must NOT authorize sockets from outside loopback.
  const fakeRoute={called:0}
  const fakeReq={socket:{remoteAddress:'203.0.113.9'},headers:{
-  'x-cuoshi-edge-proof':secret.toString('hex'),
+  'x-cuoshi-edge-proof':derivedProof,
   'x-cuoshi-client-ip':'192.0.2.42'
  }}
  const fakeRes={status:0,setHeader(){},writeHead(status){this.status=status},end(){}}
@@ -63,7 +64,7 @@ try{
   check(host.server.address().address==='127.0.0.1',
    'Private listener cannot bind a public interface')
   const good={
-   'X-Cuoshi-Edge-Proof':secret.toString('hex'),
+   'X-Cuoshi-Edge-Proof':derivedProof,
    'X-Cuoshi-Client-Ip':'192.0.2.42',
    'X-Forwarded-For':'203.0.113.20'
   }
@@ -78,6 +79,8 @@ try{
    'Denied reverse-proxy requests are never cacheable')
   check((await call({'X-Cuoshi-Client-Ip':'192.0.2.42'})).status===403,
    'Untrusted forwarded IP is not sufficient')
+  check((await call({...good,'X-Cuoshi-Edge-Proof':secret.toString('hex')})).status===403,
+   'Raw server secret cannot directly impersonate the derived edge proof')
   check((await call({...good,'X-Cuoshi-Edge-Proof':'a'.repeat(64)})).status===403,
    'Wrong proxy credential does not unlock routing')
   check((await call({...good,'X-Cuoshi-Client-Ip':'invalid'})).status===403,

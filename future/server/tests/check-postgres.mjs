@@ -395,7 +395,7 @@ try{
     const base=edgeHost.origin
     const loginBody=(code)=>JSON.stringify({code,deviceId:'device0099'})
     const metadata={
-      'X-Cuoshi-Edge-Proof':edgeSecret.toString('hex'),
+      'X-Cuoshi-Edge-Proof':crypto.createHash('sha256').update(edgeSecret).digest('hex'),
       'X-Cuoshi-Client-Ip':'192.0.2.120',
       'X-Forwarded-For':'192.0.2.42'
     }
@@ -407,6 +407,9 @@ try{
       cloud_wechat_login_rate_windows WHERE scope='global'`)).rows[0].n
     check((await request('edgecode0001',{})).status===403,
       'Unprotected direct local request cannot use trusted edge login')
+    check((await request('edgecode0001',{...metadata,
+      'X-Cuoshi-Edge-Proof':edgeSecret.toString('hex')})).status===403,
+      'Raw Node-only shared secret is no longer a valid HTTP edge proof')
     check((await request('edgecode0001',{...metadata,
       'X-Cuoshi-Edge-Proof':'a'.repeat(64)})).status===403,
       'Wrong local proxy credential fails before WeChat code is consumed')
