@@ -33,3 +33,8 @@ npm audit --registry=https://registry.npmjs.org --omit=dev --json
 现有 GitHub Actions 中的 Official npm SCA inventory Job **即使 SUCCESS 也可能仅表示“收集到了报告”**，不是安全审核通过。v0.5 功能已冻结，若最终出现明确可利用漏洞，只做阻断级修复并重新验证，不顺手增加导出、AI、统计或社交。
 
 **剩余阻断**：正式服务域名和运维账目、备份保留期限、微信 AppID/备案、两台真机和最终生产候选的全部依赖风险处置未完成。本文是记录当前风险，不是批准发布。
+
+
+## 自动化阻断规则更新
+
+独立 PostgreSQL 云后端的 GitHub CI 在 `npm ci --prefix future/server` 后，现直接执行 `npm audit --prefix future/server --omit=dev --audit-level=high --registry=https://registry.npmjs.org`；**任何 backend high/critical 报告或官方审计端点错误都会令数据库 Job 失败**，不会把网络无法审计当成 0 风险。根包的 uni-app/Vue 依赖保留既有完整 advisory 库存与上文逐项风险分流，不能为了让 CI 变绿粗暴强制更新依赖。
