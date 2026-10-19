@@ -175,6 +175,33 @@ jobs:
             ${{ runner.temp }}/cuoshi-audit-raw.json
             ${{ runner.temp }}/cuoshi-audit-summary.json
 
+  caddy_gateway:
+    name: Official Caddy offline config adaptation (synthetic)
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout Caddyfile and parser assertions
+        uses: actions/checkout@v4
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Adapt release Caddyfile with official pinned Caddy in network-isolated container
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker run --rm --network none --read-only --cap-drop ALL \
+            --user 65534:65534 \
+            -e CUOSHI_PUBLIC_DOMAIN=api.cuoshi.invalid \
+            -e CUOSHI_PRIVATE_PORT=18765 \
+            -e CUOSHI_EDGE_PROOF_HEX=$(printf 'a%.0s' {1..64}) \
+            -v "$PWD/future/server/deploy/Caddyfile:/etc/caddy/Caddyfile:ro" \
+            caddy:2.11.7-alpine adapt --config /etc/caddy/Caddyfile --adapter caddyfile --pretty \
+            > "$RUNNER_TEMP/cuoshi-caddy-adapt.json"
+          node tests/check-future-caddy-adapt.mjs "$RUNNER_TEMP/cuoshi-caddy-adapt.json"
+
   cloud_postgres:
     name: Real PostgreSQL cloud contract (isolated)
     runs-on: ubuntu-latest

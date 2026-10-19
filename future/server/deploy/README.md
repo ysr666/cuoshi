@@ -51,3 +51,8 @@
 5. 真实上电后只用无私人数据的 GET 探针及虚构测试记录做联调；验证 401 未认证拒绝、404 未知路径、防伪造请求头、限流、连接断开、被暂停的自动云授权、双机同步与注销。服务启动和操作事件日志必须屏蔽 AppSecret、用户简记、原始 openid 与 JWT。运行 `systemctl enable/start` 是**单独的实际授权操作**，当前仓库工具从未执行。
 
 `npm run test:future:systemd-deploy` 有 **22 项**纯静态检查，用于阻止任何修改把 root 运行、嵌入密钥、绕过编译入口或宽松 systemd 权限重新引入；**不能代替**目标 Linux 上的 systemd 原生命令验证和人工网络/防火墙评审。
+
+
+## 官方 Caddy 二进制的离线解析门禁（CI）
+
+为避免只通过模板字符串检查而遗漏真实语法/路由含义，GitHub Actions 新增 `Official Caddy offline config adaptation (synthetic)` Job：通过固定的官方 `caddy:2.11.7-alpine` 容器执行 `caddy adapt`，容器禁用网络、只读挂载 Caddyfile，输入**虚构**域名、端口和派生凭据。`tests/check-future-caddy-adapt.mjs` 解析 Caddy **真正生成的 JSON 配置**，检查管理 API 关闭、唯一 localhost 上游、八条路由、伪造内部头被剥离和重设、404 回退。若官方配置解析失败或与预期合同不符，CI 必须失败。这里无 TLS 申请、外网代理、真实域名注册或用户数据，不代表生产 Caddy 已实际启动；目标 Linux 仍须再做现场 `caddy validate`、域名、证书、负载均衡及网络隔离检查。
