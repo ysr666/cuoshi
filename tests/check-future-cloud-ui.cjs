@@ -93,8 +93,25 @@ const close=()=>new Promise(resolve=>server.close(resolve))
       await page.getByTestId('sync-now').click()
       check(await page.getByText('需要你确认的不同记录',{exact:true}).isVisible(),
         'Divergent remote history clearly pauses cloud sync')
+      await page.getByTestId('review-conflict').click()
+      check(await page.getByTestId('conflict-review').isVisible(),
+        'User can inspect a safe read-only comparison')
+      check(await page.getByText('本机已记录',{exact:true}).isVisible(),
+        'Conflict summary shows local recorded day count')
+      check(await page.getByText('云端已记录',{exact:true}).isVisible(),
+        'Conflict summary shows cloud recorded day count')
+      check(await page.getByText('两边的修改历史已有分叉',{exact:true}).isVisible(),
+        'Divergent event histories have a grounded label')
+      check(await page.getByText('2026-10-18',{exact:true}).isVisible(),
+        'Differing day appears by date')
+      check(await page.getByText('本机 3 件 · 1 条简记',{exact:true}).isVisible(),
+        'Local count and note count are shown')
+      check(await page.getByText('云端 2 件 · 2 条简记',{exact:true}).isVisible(),
+        'Cloud count and note count are shown')
+      check((await page.getByText('强制覆盖',{exact:true}).count())===0,
+        'No destructive overwrite control is offered')
       if(width===390)await page.screenshot({
-        path:'/tmp/cuoshi-future-cloud-conflict-390.png',fullPage:true
+        path:'/tmp/cuoshi-future-cloud-conflict-detail-390.png',fullPage:true
       })
       await page.evaluate(()=>window.__cuoshiDemo.conflict(false))
       await page.getByTestId('sync-now').click()

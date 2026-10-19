@@ -163,5 +163,25 @@ try{
  await ctrl2.confirm()
  yes(ctrl2.view.phase==='ready'&&j2.load().cursor.revision===2&&uploadOther===0,
    'Second device linked without overwriting cloud or uploading again')
+ const latestCloud=sim.readForOwner({...principal,deviceId:device},user)
+ const altered=m.cloneState(latestCloud.records)
+ m.setCount(altered,today,7)
+ yes(sim.propose({...principal,deviceId:device},{
+   baseRevision:latestCloud.revision,baseDigest:latestCloud.digest,
+   idempotencyKey:'otherdevedit0001',records:altered
+ }).kind==='accepted','Concurrent first device appends valid remote history')
+ const beforeReview=j2.load()
+ await ctrl2.syncNow()
+ yes(ctrl2.view.phase==='conflict','Second-device stale cursor blocks automatic upload')
+ await ctrl2.reviewConflict()
+ yes(ctrl2.view.conflictPreview?.historyRelation==='cloud_ahead'&&
+   ctrl2.view.conflictPreview?.differingDays===1,
+   'Real conflict UI reads difference without merging two devices')
+ yes(ctrl2.view.conflictPreview.days[0].cloudCount===7,
+   'Real difference displays fresh remote count')
+ yes(!JSON.stringify(ctrl2.view.conflictPreview).includes('去年很在意'),
+   'Review never contains historical private note body')
+ yes(JSON.stringify(j2.load())===JSON.stringify(beforeReview)&&uploadOther===0,
+   'Inspecting differences leaves queue, revision cursor, and HTTP PUT unchanged')
  console.log('PASS',n,'full controller → first link → sync → logout and second-device attach assertions')
 }finally{rmSync(temp,{recursive:true,force:true})}

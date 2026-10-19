@@ -40,6 +40,8 @@ jobs:
         run: npm run test:future:first-link-runtime
       - name: Settings controller and real first-link sync adapter integration
         run: npm run test:future:first-link-ui
+      - name: Non-destructive two-device cloud history difference review
+        run: npm run test:future:conflict-review
       - name: Durable opt-in background sync, retry and cross-device conflict
         run: npm run test:future:auto-sync
       - name: Future authenticated uni.request and durable local journal adapters

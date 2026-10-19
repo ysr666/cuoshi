@@ -40,6 +40,18 @@ const askTitle=computed(()=>{
     default:return ''
   }
 })
+const differenceLabel=(kind:string)=>kind==='local_only'?'仅本机':
+  kind==='cloud_only'?'仅云端':'两端不同'
+const countLabel=(count:number|null)=>count===null?'未记录':String(count)
+const historyLabel=computed(()=>{
+  switch(view.conflictPreview?.historyRelation){
+    case 'identical':return '修改历史目前一致'
+    case 'local_ahead':return '本机新增了修改历史'
+    case 'cloud_ahead':return '云端新增了修改历史'
+    case 'diverged':return '两边的修改历史已有分叉'
+    default:return '尚未取得完整云端历史'
+  }
+})
 const askDetail=computed(()=>{
   switch(view.confirmation){
     case 'enable':return '开启授权后，还需单独确认第一次上传。不会悄悄上传简记。'
@@ -86,6 +98,31 @@ const askDetail=computed(()=>{
       <span class="detail-value">{{view.syncedTime}}</span>
     </div>
 
+    <section v-if="view.conflictPreview" class="difference" aria-label="本机和云端记录差异" data-testid="conflict-review">
+      <div class="diff-intro">
+        <strong>两端记录核对</strong>
+        <p>这里只对照日期、数字和简记条数，不展示简记正文，也不修改任何记录。这是本次核对时的快照，之后的修改需要重新核对。</p>
+      </div>
+      <div class="diff-summary">
+        <div><span>本机已记录</span><b>{{view.conflictPreview.localDays}} 天 · {{view.conflictPreview.localEvents}} 次修改</b></div>
+        <div><span>云端已记录</span><b>{{view.conflictPreview.cloudDays}} 天 · {{view.conflictPreview.cloudEvents}} 次修改</b></div>
+        <div><span>不同日期</span><b>{{view.conflictPreview.differingDays}} 天</b></div>
+        <p>{{historyLabel}}</p>
+      </div>
+      <div v-for="day in view.conflictPreview.days" :key="day.date" class="diff-day">
+        <div class="diff-day-heading"><span>{{day.date}}</span><span>{{differenceLabel(day.kind)}}</span></div>
+        <div class="diff-values">
+          <span>本机 {{countLabel(day.localCount)}} 件 · {{day.localNotes}} 条简记</span>
+          <span>云端 {{countLabel(day.cloudCount)}} 件 · {{day.cloudNotes}} 条简记</span>
+        </div>
+        <p v-if="day.notesDiffer">简记内容或数量也不同</p>
+      </div>
+      <p v-if="view.conflictPreview.truncatedDays" class="diff-footnote">
+        这里只显示最近的部分不同日期，完整差异仍需要进一步核对。
+      </p>
+      <p class="diff-footnote">当前仅提供查看。请先分别保留两端记录；在安全合并流程上线前，不提供强制覆盖操作。</p>
+    </section>
+
     <div v-if="view.confirmation" class="confirm" role="group" aria-label="操作确认">
       <strong>{{askTitle}}</strong>
       <p>{{askDetail}}</p>
@@ -107,6 +144,9 @@ const askDetail=computed(()=>{
         <button v-if="view.remote.enabled&&view.remote.hasStoredBackup&&view.phase!=='review_cloud'"
           type="button" class="primary full" data-testid="sync-now" :disabled="view.busy"
           @click="controller.syncNow()">检查并同步</button>
+        <button v-if="view.remote.enabled&&(view.phase==='conflict'||view.phase==='review_cloud')"
+          type="button" class="secondary full" data-testid="review-conflict"
+          :disabled="view.busy" @click="controller.reviewConflict()">查看本机与云端差异</button>
         <button type="button" class="secondary full" data-testid="refresh"
           :disabled="view.busy" @click="controller.refresh()">刷新云端状态</button>
         <button type="button" class="quiet full" data-testid="toggle-consent" :disabled="view.busy"
@@ -173,6 +213,20 @@ button:focus-visible{outline:2px solid var(--cloud-text);outline-offset:3px}
 .gentle-notice{margin-top:12px;border-top:1px solid var(--cloud-line);padding:23px 0;
   font-size:13px;line-height:1.85;color:var(--cloud-muted)}
 .gentle-notice p{margin:0 0 9px}
+.difference{margin:19px 0 0;border:1px solid var(--cloud-line);border-radius:8px;
+  padding:17px 15px;font-size:13px;line-height:1.8}
+.diff-intro strong{font-family:"Songti SC","Noto Serif CJK SC",serif;font-weight:500;font-size:19px}
+.diff-intro p,.diff-footnote,.diff-day p{margin:7px 0;color:var(--cloud-muted);font-size:12px}
+.diff-summary{padding:11px 0;border-bottom:1px solid var(--cloud-line)}
+.diff-summary div{display:flex;align-items:center;justify-content:space-between;gap:10px;margin:9px 0}
+.diff-summary span{color:var(--cloud-muted)}
+.diff-summary b{font-weight:500;text-align:right}
+.diff-summary p{font-size:12px;margin:12px 0 1px;color:var(--cloud-text)}
+.diff-day{border-bottom:1px solid var(--cloud-line);padding:11px 0}
+.diff-day-heading{display:flex;justify-content:space-between;font-weight:500}
+.diff-day-heading span:last-child{color:var(--cloud-muted);font-size:12px}
+.diff-values{display:flex;flex-direction:column;color:var(--cloud-muted);font-size:12px;gap:2px;margin:7px 0 0}
+.diff-footnote{line-height:1.8;margin:12px 0 0}
 @media(max-width:340px){
   .detail-line{font-size:13px}
   h2{font-size:28px}

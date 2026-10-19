@@ -9,6 +9,7 @@ import {
   createFirstLinkRuntime,type FirstLinkPort
 } from '../cloud/firstLinkRuntime'
 import {INITIAL_MIGRATION_CONFIRMATION} from '../cloud/initialMigration'
+import {inspectCloudConflict} from '../cloud/conflictReview'
 import type {CloudSettingsAuth,CloudSettingsWork} from './cloudSettingsController'
 
 export function createCloudSettingsWork(args:{
@@ -30,6 +31,12 @@ export function createCloudSettingsWork(args:{
     hasVerifiedLink:(active)=>active===ownerId&&first.hasVerifiedLink(),
     hasUnsentChanges:(active)=>active!==ownerId||first.hasUnsentChanges(),
     reviewFirstBackup:()=>first.review(),
+    async reviewConflict(){
+      const identity=await auth.getVerifiedSession()
+      if(identity.ownerId!==ownerId)throw Error('wechat_session_account_changed')
+      if(!(await auth.getStatus()).enabled)throw Error('sync_consent_required')
+      return inspectCloudConflict({ownerId,port})
+    },
     firstBackup:()=>first.confirm(INITIAL_MIGRATION_CONFIRMATION),
     async syncNow(){
       const identity=await auth.getVerifiedSession()

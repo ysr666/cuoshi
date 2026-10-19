@@ -6,6 +6,7 @@ import {computed,readonly,ref} from 'vue'
 import type {FutureCloudStatus} from '../cloud/wechatSession'
 import type {SyncResult} from '../cloud/automaticSync'
 import type {InitialMigrationPreview} from '../cloud/initialMigration'
+import type {ConflictReview} from '../cloud/conflictReview'
 
 type Identity={ownerId:string;accessToken:string}
 export type CloudSettingsAuth={
@@ -17,6 +18,8 @@ export type CloudSettingsAuth={
 export type CloudSettingsWork={
   /** Returns metadata only, never copies the private notes into UI. */
   reviewFirstBackup():Promise<InitialMigrationPreview>
+  /** Metadata-only difference view, never destructive or a merge permission. */
+  reviewConflict():Promise<ConflictReview>
   /** Must enforce authenticated first-link preview, CAS and full readback. */
   firstBackup():Promise<SyncResult>
   /** Must use the durable journal and fail closed on remote divergence. */
@@ -59,6 +62,7 @@ export function createCloudSettingsController(deps:{
   const confirmation=ref<'enable'|'disable'|'first'|'logout'|null>(null)
   const pending=ref(false)
   const firstPreview=ref<InitialMigrationPreview|null>(null)
+  const conflictPreview=ref<ConflictReview|null>(null)
   const displayAccount=computed(()=>account.value
     ?'已连接 · '+account.value.slice(0,4)+'…'+account.value.slice(-4):'未登录')
   const syncedTime=computed(()=>remote.value.lastSuccessAt?remote.value.lastSuccessAt:'尚无成功云备份')
@@ -87,6 +91,7 @@ export function createCloudSettingsController(deps:{
       }
       const status=await deps.auth.getStatus()
       firstPreview.value=null
+      conflictPreview.value=null
       account.value=identity.ownerId
       remote.value=status
       phase.value=classify(status,identity.ownerId)
@@ -119,6 +124,23 @@ export function createCloudSettingsController(deps:{
       }
     })
   }
+  async function reviewConflict(){
+    if(!account.value||!remote.value.enabled||busy.value)return
+    await exclusive(async()=>{
+      const identity=await deps.auth.getVerifiedSession()
+      if(identity.ownerId!==account.value)
+        throw Error('wechat_session_account_changed')
+      const result=await deps.work.reviewConflict()
+      if(result.ownerId!==account.value)throw Error('conflict_review_wrong_owner')
+      conflictPreview.value=result
+      phase.value=result.kind==='identical'?'pending':'conflict'
+      message.value=result.kind==='identical'?
+        '两端当前内容一致。但还需要核对本机同步游标，才能确认后续同步。':
+        result.kind==='cloud_missing'?
+        '云端记录暂不可见，请核实授权和账号后再操作，勿覆盖本机数据。':
+        '以下仅展示两端差异摘要。请先分别保留数据，当前不会合并或覆盖。'
+    })
+  }
   function cancel(){confirmation.value=null}
   async function confirm(){
     const kind=confirmation.value
@@ -129,6 +151,7 @@ export function createCloudSettingsController(deps:{
       if(kind==='enable'||kind==='disable'){
         remote.value=await deps.auth.setCloudConsent(kind==='enable',deps.noticeVersion)
         firstPreview.value=null
+        conflictPreview.value=null
         // Consent toggles must not implicitly call the uploader.
         phase.value=classify(remote.value,owner)
         message.value=kind==='enable'?'已开启云备份授权。本机记录尚未自动上传。':
@@ -148,6 +171,7 @@ export function createCloudSettingsController(deps:{
         await deps.auth.logoutCurrentDevice()
         account.value=null
         firstPreview.value=null
+        conflictPreview.value=null
         remote.value={...statusEmpty}
         phase.value='signed_out'
         message.value='已退出当前设备，服务端会话已撤销。本机记录仍保留。'
@@ -156,6 +180,7 @@ export function createCloudSettingsController(deps:{
   }
   async function apply(result:SyncResult,owner:string){
     if(result.kind==='synced'){
+      conflictPreview.value=null
       const status=await deps.auth.getStatus()
       remote.value=status
       // No optimistic success: only trusted status plus journal confirmation.
@@ -206,11 +231,12 @@ export function createCloudSettingsController(deps:{
     if(!account.value||busy.value)return
     await exclusive(async()=>{
       remote.value=await deps.auth.getStatus()
+      conflictPreview.value=null
       phase.value=classify(remote.value,account.value!)
       message.value='已更新云备份状态。云端有记录不代表本机所有修改已同步。'
     })
   }
   const view=readonly({phase,busy,account,remote,message,confirmation,
-    firstPreview,pending,displayAccount,syncedTime})
-  return {view,connect,ask,reviewFirst,cancel,confirm,syncNow,refresh}
+    firstPreview,conflictPreview,pending,displayAccount,syncedTime})
+  return {view,connect,ask,reviewFirst,reviewConflict,cancel,confirm,syncNow,refresh}
 }

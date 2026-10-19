@@ -37,6 +37,24 @@ const work:CloudSettingsWork={
       cloudEventCount:cloudSaved?8:0
     }
   },
+  async reviewConflict(){
+    if(offline)throw Error('wechat_session_cloud_unavailable')
+    return {
+      kind:conflict?'different':'identical',
+      ownerId:currentAccount,
+      cloudRevision:cloudSaved?2:null,
+      localDigest:'b'.repeat(64),cloudDigest:cloudSaved?'c'.repeat(64):null,
+      historyRelation:conflict?'diverged':'identical',
+      localEvents:10,cloudEvents:9,localDays:5,cloudDays:5,
+      differingDays:conflict?2:0,truncatedDays:false,
+      days:conflict?[
+        {date:'2026-10-18',kind:'different',localCount:3,cloudCount:2,
+          localNotes:1,cloudNotes:2,notesDiffer:true},
+        {date:'2026-10-17',kind:'local_only',localCount:0,cloudCount:null,
+          localNotes:1,cloudNotes:0,notesDiffer:true}
+      ]:[]
+    } as import('../cloud/conflictReview').ConflictReview
+  },
   hasVerifiedLink:owner=>linked&&owner===currentAccount,
   hasUnsentChanges:()=>unsent,
   async firstBackup(){
