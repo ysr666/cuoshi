@@ -67,6 +67,18 @@ jobs:
       - name: Build WeChat Mini Program
         run: npm run build:mp-weixin
 
+      - name: Compile isolated v0.5 native WeChat package (no production AppID)
+        run: npm run build:future:mp-weixin
+      - name: Verify native pages, privacy gate, package hygiene and typecheck
+        run: npm run test:future:mp-weixin
+      - name: Upload isolated v0.5 developer-package (not for release)
+        uses: actions/upload-artifact@v4
+        with:
+          name: cuoshi-v05-wechat-dev-${{ github.run_id }}
+          path: future/.generated-mp/dist/build/mp-weixin/
+          if-no-files-found: error
+          retention-days: 7
+
       - name: Ensure future cloud code cannot enter v0.4 bundles
         run: npm run test:future:isolation
 

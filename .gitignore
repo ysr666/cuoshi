@@ -12,3 +12,4 @@ qa-*.png
 .vscode/
 coverage/
 future/preview-dist/
+future/.generated-mp/

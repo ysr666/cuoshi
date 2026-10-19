@@ -243,3 +243,13 @@
 **可核验证据**：`npm run test:future:record-actions` 为 **42 项**计数、过去日期、撤销、简记草稿私有化、旧文本、两个账号隔离、写入失败与重启恢复测试。使用真实 Chrome 320、390、430px 的 `npm run test:future:cloud-ui` 增至 **114 项**，验证真实页面点击加号、减号、编辑数字、简记添加/修改/删除、过去日期记 0、今日修改过去记录摘要、断网真实按钮点击、联网后自动补传、页面布局无横向溢出。所有云和账号仍为隔离测试里的虚构数据，生产账号无任何访问。
 
 **交付边界**：Vue 页面目前在 `future/preview` 作为 v0.5 独立 H5 交互原型运行，尚未挂载到正式微信小程序原生页面；小程序的生产云 URL、实际 AppID、存储方式、账号登录态、相关隐私与备案仍需实机完成。主仓库 `src/` v0.4 页面及其微信/H5 构建不受本轮影响；不合并、不上线、不让真实用户上传私人数据。
+
+## 2026-10-19 · 独立 v0.5 原生微信小程序构建（非生产包）
+
+`npm run build:future:mp-weixin` 新增 **真实 uni-app 编译到微信小程序原生 WXML/JS/WXSS 的独立构建**：生成目录为 `future/.generated-mp/dist/build/mp-weixin`，只包含「今天」与「设置」两个 v0.5 原生页面。完整开发入口为 `future/miniapp/pages/today/index.vue`、`future/miniapp/pages/settings/index.vue`、`future/miniapp/runtime.ts`，从 `future/cloud/` 引入微信登录、受认证账户存储、云端优先同步及原有修改事件领域模型。通过中间 staging 目录复制与替换页面配置，**不改动 v0.4 的 `src/pages.json`、`src/main.ts`、原本 5 页和构建产物**。
+
+独立原生包支持微信开发者工具导入验证，呈现暖纸白、中央大数字、每日计数、过去记录、简记、历史列表、首次隐私告知及断网同步状态。首次隐私确认前不调用微信登录，随后以服务端校验的账号标识创建账号隔离存储并接入平台回调。设备标识和幂等请求号使用微信平台 `getRandomValues` 的安全随机数功能，若该 API 不可用或随机数预分配耗尽，**不退化到 `Math.random`**，未上传记录仍留在本机待后续重试。进入页面前两次微信会话验证需同一 owner，避免在错误登录态下呈现另一账号的私人历史。
+
+默认**没有真实云服务域名/微信 AppID**，生成的 project.config 是 `touristappid`：该包会显示尚未接入并拒绝登录或上传，不能视为正式云同步已上线。只有由已授权的生产/测试环境显式设置 `CUOSHI_V05_CLOUD_ORIGIN`，同时获得合法的 AppID、微信服务器 request 域名、有效云端 HTTPS 服务和适用隐私文本后才能继续联网真机验收；AppSecret 不可放进小程序。通过 `npm run test:future:mp-weixin` 验证小程序配置、WXML/native 页面、正式入口隔离、无配置时 fail-closed 和全源码 Vue 类型检查。CI 单独提供 **v0.5 developer-package** artifact，不混进 v0.4 正式包。
+
+未完成：真实 AppID/中国大陆主体备案、真实微信客户端 `getRandomValues` 兼容性测试、云端合法域名和生产配置、实机跨设备登录/数据同步与离线重启/清理数据、隐私合规和发布审核。仍是 Draft PR #4 技术验证成果，未合并、未部署。
