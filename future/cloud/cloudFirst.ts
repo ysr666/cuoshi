@@ -31,6 +31,8 @@ export function createCloudFirst(args:{
  pendingFirstConsent?:boolean
  /** Called after authoritative server status confirms consent. */
  onServerConsentConfirmed?:()=>void
+ /** Called only after server-authenticated account matches ownerId. */
+ onVerifiedIdentity?:()=>Promise<void>|void
  /** MUST atomically compare expected on-disk digest and preserve drafts.
   * Reject changes during network read; resolve only after durable readback. */
  replaceCleanLocal:(records:Records,expectedDigest:string)=>Promise<void>
@@ -91,6 +93,7 @@ export function createCloudFirst(args:{
    set({phase:'checking',message:'正在同步…'})
    const identity=await auth.getVerifiedSession()
    if(identity.ownerId!==ownerId)throw Error('cloud_first_account_changed')
+   await args.onVerifiedIdentity?.()
    let status=await auth.getStatus()
    if(!status.enabled){
      // Server-side consent was revoked: NEVER silently re-enable it based on

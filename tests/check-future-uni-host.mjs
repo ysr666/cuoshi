@@ -213,8 +213,22 @@ try{
  ok(consent===false&&host.cloud.state().phase==='attention',
    'Server-revoked backup consent is never silently enabled from remembered local notice')
  host.stop()
- // B account on same device must never inherit A's private history.
+ // Never claim the old unscoped data before the real authenticated server
+ // owner matches the ownerId the caller supplied for the cloud host.
+ const rememberedLegacyOwner=storage.get('cuoshi-future-v05-legacy-owner-v1')
+ storage.delete('cuoshi-future-v05-legacy-owner-v1')
  currentOwner='account0002';consent=false
+ const misbound=createUniCloudHost(config('account0004'))
+ misbound.start()
+ await misbound.acceptNotice()
+ await flush(()=>misbound.cloud.state().phase==='attention')
+ ok(!storage.has('cuoshi-future-v05-legacy-owner-v1'),
+   'Mismatched signed login never claims legacy private history for an unverified owner')
+ ok(misbound.store.read().events.length===0,
+   'Wrong-account host cannot import or upload unscoped private notes')
+ misbound.stop()
+ storage.set('cuoshi-future-v05-legacy-owner-v1',rememberedLegacyOwner)
+ // B account on same device must never inherit A's private history.
  const secondHost=createUniCloudHost(config('account0002'))
  secondHost.start()
  await flush(()=>secondHost.cloud.state().phase==='notice')

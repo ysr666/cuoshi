@@ -84,6 +84,13 @@ export function createUniCloudHost(options:UniCloudHostOptions){
     },
     replaceCleanLocal:records.replaceCleanLocal,
     finishCloudAdoption:records.finalizeAdoption,
+    onVerifiedIdentity:()=>{
+      try{records.claimLegacyOnce()}
+      catch(e){
+        if(!(e instanceof Error&&
+          e.message==='cloud_records_legacy_owned_by_another_account'))throw e
+      }
+    },
     onChange:options.onState
   })
   let off:()=>void=()=>{}
@@ -113,13 +120,9 @@ export function createUniCloudHost(options:UniCloudHostOptions){
   async function acceptNotice(){
     // User sees an explicit disclosure explaining cloud storage and history.
     // The legacy v0.4 records are NOT imported from an unrelated account.
-    // Legacy storage is unscoped. Never inherit another account's history,
-    // and do not prevent an unrelated account from using its empty partition.
-    try{records.claimLegacyOnce()}
-    catch(e){
-      if(!(e instanceof Error&&
-        e.message==='cloud_records_legacy_owned_by_another_account'))throw e
-    }
+    // Do not assign legacy private notes before trusted wx.login confirms
+    // the intended account. The callback after verified identity performs
+    // that one-time claim. Offline consent is safely remembered until login.
     platform.setStorageSync(remembered,noticeVersion+':pending')
     if(platform.getStorageSync(remembered)!==noticeVersion+':pending')
       throw Error('cloud_host_notice_not_durable')
