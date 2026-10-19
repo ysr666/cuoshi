@@ -63,3 +63,10 @@
 ## 官方 Caddy 二进制的离线解析门禁（CI）
 
 为避免只通过模板字符串检查而遗漏真实语法/路由含义，GitHub Actions 新增 `Official Caddy offline config adaptation (synthetic)` Job：通过固定的官方 `caddy:2.11.7-alpine` 容器执行 `caddy adapt`，容器禁用网络、只读挂载 Caddyfile，输入**虚构**域名、端口和派生凭据。`tests/check-future-caddy-adapt.mjs` 解析 Caddy **真正生成的 JSON 配置**，检查管理 API 关闭、唯一 localhost 上游、八条路由、伪造内部头被剥离和重设、404 回退。若官方配置解析失败或与预期合同不符，CI 必须失败。这里无 TLS 申请、外网代理、真实域名注册或用户数据，不代表生产 Caddy 已实际启动；目标 Linux 仍须再做现场 `caddy validate`、域名、证书、负载均衡及网络隔离检查。
+
+
+## 真实运行依赖不可遗漏（2026-10-20）
+
+已经编译出的 `future/server/.private-build/future/server/src/privateMain.js` **并不内置 PostgreSQL 驱动**。正式 Linux 主机必须从 `future/server/package-lock.json` 另行执行 `npm ci --prefix future/server --omit=dev --ignore-scripts --registry=https://registry.npmjs.org`，核实产物位于 `/opt/cuoshi/current/future/server/node_modules/pg`；绝对不能把根项目的前端开发依赖作为生产服务依赖安装，或只复制 `.private-build` 就启动服务。服务端 `pg` 模块由编译后的入口逐级向上解析到其独立 `future/server/node_modules`，并按后端独立锁文件固定版本。
+
+`npm run test:future:private-runtime-package` 在实际编译之后，用**真实 Node 模块解析和已安装的 pg 驱动**验证 Linux systemd 入口路径、锁文件版本、独立依赖位置、`sslmode=verify-full` 的 TLS 模式、PostgreSQL startup schema 参数以及没有部署密钥时的启动拒绝。该检查已加入真实 PostgreSQL CI，**没有联网查询微信，也没有监听生产端口**。原来仅靠 `tsc --noEmit` 与模拟 PostgreSQL 的测试不足以证明独立模块真实可加载。若这个测试失败，禁止制作正式服务器发布包。

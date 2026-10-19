@@ -181,3 +181,8 @@ SQL 的审计禁止修改触发器只是**附加防线**，拥有数据库所有
 ### 生产启动自检与真实 PostgreSQL 使用同一代码（2026-10-20）
 
 `src/privateReadiness.ts` 提取了 `privateMain` 在绑定 127.0.0.1 端口之前必须运行的数据库自检：四个互异、非提权且不拥有私有表的登录角色，四条连接都选中指定 schema，微信登录限流函数和账号注销过程完整存在。真实 PostgreSQL CI 使用**同一个函数**在四条真实受限连接上验证，并验证复用角色、迁移 owner、错误 schema 或缺少连接时均拒绝启动；不是另写一套模仿生产的测试 SQL。验证全通过后才允许私有 Node 监听端口，不能靠放宽运行账号权限或迁移到 `public` 来绕过失败。
+
+
+### 私有运行时依赖验证（2026-10-20）
+
+编译私有 Cloud 入口之后需要安装独立 `future/server` 的生产锁定依赖 `pg`（不能只拷贝 `.private-build`）。`npm run test:future:private-runtime-package` 会从**编译产物实际 Node 模块解析路径**加载 `pg`，核对生产 `package-lock.json`、PostgreSQL TLS 和 schema 参数、systemd 启动路径，以及无密钥时是否安全拒绝启动；真实 PostgreSQL CI 在独立 `npm ci --prefix future/server` 后执行，禁止缺少生产模块仍将构建成功误当为可部署。

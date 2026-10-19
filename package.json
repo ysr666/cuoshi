@@ -14,6 +14,7 @@
     "test:future:proxy-deploy": "node tests/check-future-proxy-deploy.mjs",
     "test:future:migration-render": "node tests/check-future-migration-render.mjs",
     "test:future:systemd-deploy": "node tests/check-future-systemd-deploy.mjs",
+    "test:future:private-runtime-package": "node tests/check-future-private-runtime-package.mjs",
     "prepare:future:migrations": "node future/server/deploy/render-migrations.mjs",
     "check:future:public-edge": "node future/server/check-public-edge.mjs",
     "test:future:mp-weixin": "node future/miniapp/check-build.mjs && vue-tsc --noEmit -p future/.generated-mp/tsconfig.json && node future/miniapp/check-runtime.mjs && node future/miniapp/check-history-view.mjs",

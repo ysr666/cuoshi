@@ -238,6 +238,8 @@ jobs:
         run: npm run check:types --prefix future/server
       - name: Compile private-loopback cloud executable (no credentials)
         run: npm run build:private --prefix future/server
+      - name: Boot-check compiled private runtime and isolated PostgreSQL production dependency
+        run: npm run test:future:private-runtime-package
       - name: Migrate and test disposable PostgreSQL schema
         env:
           CUOSHI_TEST_POSTGRES_URL: postgresql://postgres:ci_only_disposable@127.0.0.1:5432/postgres
