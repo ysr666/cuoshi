@@ -5,6 +5,7 @@
 import {computed,readonly,ref} from 'vue'
 import type {FutureCloudStatus} from '../cloud/wechatSession'
 import type {SyncResult} from '../cloud/automaticSync'
+import type {InitialMigrationPreview} from '../cloud/initialMigration'
 
 type Identity={ownerId:string;accessToken:string}
 export type CloudSettingsAuth={
@@ -14,6 +15,8 @@ export type CloudSettingsAuth={
   logoutCurrentDevice():Promise<void>
 }
 export type CloudSettingsWork={
+  /** Returns metadata only, never copies the private notes into UI. */
+  reviewFirstBackup():Promise<InitialMigrationPreview>
   /** Must enforce authenticated first-link preview, CAS and full readback. */
   firstBackup():Promise<SyncResult>
   /** Must use the durable journal and fail closed on remote divergence. */
@@ -55,6 +58,7 @@ export function createCloudSettingsController(deps:{
   const message=ref('')
   const confirmation=ref<'enable'|'disable'|'first'|'logout'|null>(null)
   const pending=ref(false)
+  const firstPreview=ref<InitialMigrationPreview|null>(null)
   const displayAccount=computed(()=>account.value
     ?'已连接 · '+account.value.slice(0,4)+'…'+account.value.slice(-4):'未登录')
   const syncedTime=computed(()=>remote.value.lastSuccessAt?remote.value.lastSuccessAt:'尚无成功云备份')
@@ -82,6 +86,7 @@ export function createCloudSettingsController(deps:{
         throw Error('wechat_session_account_changed')
       }
       const status=await deps.auth.getStatus()
+      firstPreview.value=null
       account.value=identity.ownerId
       remote.value=status
       phase.value=classify(status,identity.ownerId)
@@ -91,8 +96,28 @@ export function createCloudSettingsController(deps:{
     if(busy.value||!account.value)return
     if(kind==='enable'&&remote.value.enabled)return
     if(kind==='disable'&&!remote.value.enabled)return
-    if(kind==='first'&&(!remote.value.enabled||remote.value.hasStoredBackup))return
+    if(kind==='first'&&(!remote.value.enabled||!firstPreview.value||
+       !['upload_local','already_on_cloud'].includes(firstPreview.value.status)))return
     confirmation.value=kind
+  }
+  async function reviewFirst(){
+    if(!account.value||!remote.value.enabled||busy.value)return
+    await exclusive(async()=>{
+      const identity=await deps.auth.getVerifiedSession()
+      if(identity.ownerId!==account.value)
+        throw Error('wechat_session_account_changed')
+      const preview=await deps.work.reviewFirstBackup()
+      firstPreview.value=preview
+      if(preview.status==='upload_local'||preview.status==='already_on_cloud'){
+        confirmation.value='first'
+      }else{
+        phase.value=preview.status==='restore_cloud_separately'?'review_cloud':
+          preview.status==='manual_conflict'?'conflict':'first_backup'
+        message.value=preview.status==='nothing_to_migrate'?
+          '本机还没有需要备份的记录，先放心地使用吧。':
+          '两端记录需要分别核对，不能自动覆盖或合并。'
+      }
+    })
   }
   function cancel(){confirmation.value=null}
   async function confirm(){
@@ -103,13 +128,15 @@ export function createCloudSettingsController(deps:{
       const owner=account.value!
       if(kind==='enable'||kind==='disable'){
         remote.value=await deps.auth.setCloudConsent(kind==='enable',deps.noticeVersion)
+        firstPreview.value=null
         // Consent toggles must not implicitly call the uploader.
         phase.value=classify(remote.value,owner)
         message.value=kind==='enable'?'已开启云备份授权。本机记录尚未自动上传。':
           '已关闭后续云备份。已经保存的云端记录不会因此被删除。'
       }else if(kind==='first'){
-        if(remote.value.hasStoredBackup||!remote.value.enabled)
-          throw Error('sync_cloud_integrity')
+        if(!remote.value.enabled||!firstPreview.value||
+           !['upload_local','already_on_cloud'].includes(firstPreview.value.status))
+          throw Error('first_link_preview_required')
         const result=await deps.work.firstBackup()
         await apply(result,owner)
       }else{
@@ -120,6 +147,7 @@ export function createCloudSettingsController(deps:{
         }
         await deps.auth.logoutCurrentDevice()
         account.value=null
+        firstPreview.value=null
         remote.value={...statusEmpty}
         phase.value='signed_out'
         message.value='已退出当前设备，服务端会话已撤销。本机记录仍保留。'
@@ -133,10 +161,19 @@ export function createCloudSettingsController(deps:{
       // No optimistic success: only trusted status plus journal confirmation.
       if(!status.hasStoredBackup||!status.enabled||!deps.work.hasVerifiedLink(owner))
         throw Error('sync_cloud_integrity')
+      if(deps.work.hasUnsentChanges(owner)){
+        pending.value=true
+        phase.value='pending'
+        message.value='云端已确认保存，但本机又有新的记录，仍待继续同步。'
+        return
+      }
       pending.value=false
       phase.value='ready'
       message.value='这台设备的记录已完成云端核对。'
     }else if(result.kind==='pending_local_changes'){
+      // First upload completed but user kept editing while it was running.
+      // Update cloud existence for the next manual incremental retry.
+      remote.value=await deps.auth.getStatus()
       pending.value=true;phase.value='pending'
       message.value='部分记录已备份，还有新的本机修改等待同步。'
     }else if(result.kind==='manual_conflict'){
@@ -174,6 +211,6 @@ export function createCloudSettingsController(deps:{
     })
   }
   const view=readonly({phase,busy,account,remote,message,confirmation,
-    pending,displayAccount,syncedTime})
-  return {view,connect,ask,cancel,confirm,syncNow,refresh}
+    firstPreview,pending,displayAccount,syncedTime})
+  return {view,connect,ask,reviewFirst,cancel,confirm,syncNow,refresh}
 }

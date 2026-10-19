@@ -64,6 +64,11 @@ const close=()=>new Promise(resolve=>server.close(resolve))
       await page.getByTestId('first-backup').click()
       check(await page.getByText('首次上传本机完整历史？',{exact:true}).isVisible(),
         'First upload explicitly describes private history transfer')
+      check(await page.getByText(/本机记录 4 天，含 8 条完整修改历史/).isVisible(),
+        'First upload includes accurate non-sensitive reviewed counts')
+      if(width===390)await page.screenshot({
+        path:'/tmp/cuoshi-future-cloud-first-review-390.png',fullPage:true
+      })
       await page.getByTestId('confirm-action').click()
       check(await page.getByText('已同步',{exact:true}).isVisible(),
         'Verified first-link result rendered')

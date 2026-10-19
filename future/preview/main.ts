@@ -28,6 +28,15 @@ const auth:CloudSettingsAuth={
   }
 }
 const work:CloudSettingsWork={
+  async reviewFirstBackup(){
+    return {
+      status:cloudSaved?'already_on_cloud':'upload_local',
+      ownerId:currentAccount,localDigest:'a'.repeat(64),
+      cloudRevision:cloudSaved?1:0,cloudDigest:cloudSaved?'a'.repeat(64):null,
+      localRecordedDays:4,localEventCount:8,cloudRecordedDays:cloudSaved?4:0,
+      cloudEventCount:cloudSaved?8:0
+    }
+  },
   hasVerifiedLink:owner=>linked&&owner===currentAccount,
   hasUnsentChanges:()=>unsent,
   async firstBackup(){

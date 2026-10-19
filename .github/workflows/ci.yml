@@ -36,6 +36,10 @@ jobs:
         run: npm run test:future:recovery
       - name: First account link must migrate complete local history safely
         run: npm run test:future:first-link
+      - name: Durable first-link queue, restart and idempotent server replay
+        run: npm run test:future:first-link-runtime
+      - name: Settings controller and real first-link sync adapter integration
+        run: npm run test:future:first-link-ui
       - name: Durable opt-in background sync, retry and cross-device conflict
         run: npm run test:future:auto-sync
       - name: Future authenticated uni.request and durable local journal adapters

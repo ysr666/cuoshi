@@ -34,7 +34,8 @@ const askTitle=computed(()=>{
   switch(view.confirmation){
     case 'enable':return '开启云备份？'
     case 'disable':return '关闭后续云备份？'
-    case 'first':return '首次上传本机完整历史？'
+    case 'first':return view.firstPreview?.status==='already_on_cloud'?
+      '关联这台设备？':'首次上传本机完整历史？'
     case 'logout':return '退出当前设备？'
     default:return ''
   }
@@ -43,7 +44,12 @@ const askDetail=computed(()=>{
   switch(view.confirmation){
     case 'enable':return '开启授权后，还需单独确认第一次上传。不会悄悄上传简记。'
     case 'disable':return '停止后续自动备份。以前保存在云端的记录不会被此操作删除。'
-    case 'first':return '包括日期数字、简记、历次修改前后的文字和操作时间。云端如已有不同记录，会暂停而不覆盖。'
+    case 'first':return view.firstPreview?
+      `本机记录 ${view.firstPreview.localRecordedDays} 天，含 ${view.firstPreview.localEventCount} 条完整修改历史。`+
+      (view.firstPreview.status==='already_on_cloud'?
+        '已核对云端内容完全相同，只建立设备关联，不重复上传。':
+        '包括修改前后文字与时间。确认后才开始上传；云端有不同记录则不会覆盖。'):
+      '需要先核对本机和云端历史。'
     case 'logout':return '仅退出当前设备并撤销本次服务端会话。本机记录保留；如果有未同步修改，会阻止退出。'
     default:return ''
   }
@@ -95,10 +101,10 @@ const askDetail=computed(()=>{
       <template v-else>
         <button v-if="!view.remote.enabled" type="button" class="primary full" data-testid="enable"
           :disabled="view.busy" @click="controller.ask('enable')">开启云备份</button>
-        <button v-if="view.remote.enabled&&!view.remote.hasStoredBackup" type="button" class="primary full"
+        <button v-if="view.remote.enabled&&(!view.remote.hasStoredBackup||view.phase==='review_cloud')" type="button" class="primary full"
           data-testid="first-backup" :disabled="view.busy"
-          @click="controller.ask('first')">确认首次备份</button>
-        <button v-if="view.remote.enabled&&view.remote.hasStoredBackup"
+          @click="controller.reviewFirst()">{{view.remote.hasStoredBackup?'核对并关联这台设备':'查看首次备份内容'}}</button>
+        <button v-if="view.remote.enabled&&view.remote.hasStoredBackup&&view.phase!=='review_cloud'"
           type="button" class="primary full" data-testid="sync-now" :disabled="view.busy"
           @click="controller.syncNow()">检查并同步</button>
         <button type="button" class="secondary full" data-testid="refresh"
