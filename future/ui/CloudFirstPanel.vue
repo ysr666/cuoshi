@@ -24,11 +24,11 @@ const detail=computed(()=>props.state.phase==='notice'?
 </script>
 
 <template>
- <section class="cloud-first" aria-label="云端同步">
-  <div class="eyebrow">错事 / 数据</div>
-  <h2>云端同步</h2>
-  <p class="subtitle">记下就好，剩下的交给错事。</p>
-  <p v-if="demonstration" class="demo" role="note">v0.5 交互预览 · 全部为虚构数据，无真实网络连接</p>
+ <section class="cloud-first" :class="{compact:state.phase!=='notice'}" aria-label="云端同步">
+  <div v-if="state.phase==='notice'" class="eyebrow">错事 / 数据</div>
+  <h2 v-if="state.phase==='notice'">云端同步</h2>
+  <p v-if="state.phase==='notice'" class="subtitle">记下就好，剩下的交给错事。</p>
+  <p v-if="demonstration&&state.phase==='notice'" class="demo" role="note">v0.5 交互预览 · 全部为虚构数据，无真实网络连接</p>
   <div class="status" aria-live="polite" aria-atomic="true">
    <div class="status-title">
     <span class="dot" :class="state.phase"></span>
@@ -46,18 +46,23 @@ const detail=computed(()=>props.state.phase==='notice'?
    <button v-if="state.phase==='offline'||state.phase==='pending'" type="button"
     class="secondary" data-testid="retry-cloud" :disabled="busy" @click="onRetry()">立即重试</button>
   </div>
-  <div class="detail-rows">
+  <div v-if="state.phase==='notice'" class="detail-rows">
    <div><span>保存方式</span><strong>云端自动同步</strong></div>
    <div><span>本机记录</span><strong>{{state.pendingLocal?'尚有待同步内容':'保持可用'}}</strong></div>
    <div><span>网络异常</span><strong>提示并自动重试</strong></div>
   </div>
-  <p class="closing">一次错误，不必一直放在心上。</p>
+  <p v-if="state.phase==='notice'" class="closing">一次错误，不必一直放在心上。</p>
  </section>
 </template>
 <style scoped>
 .cloud-first{color:var(--ink,#292723);font-family:"PingFang SC","Noto Sans CJK SC","Microsoft YaHei",sans-serif;
  max-width:440px;margin:0 auto;padding:20px 0 28px}
 .cloud-first *{box-sizing:border-box}
+.cloud-first.compact{padding:5px 0 12px}
+.compact .status{border-top:0;padding:6px 0 12px}
+.compact .status-title{font-family:inherit;font-size:13px}
+.compact .status p{font-size:12px;margin:4px 0 0}
+.compact .actions{padding:8px 0 0}
 .eyebrow{font-size:12px;letter-spacing:.12em;color:#81786e}
 h2{font-family:"Songti SC","Noto Serif CJK SC",Georgia,serif;font-size:29px;
  font-weight:500;margin:13px 0 7px;line-height:1.35}

@@ -64,6 +64,81 @@ const srv=createServer((req,res)=>{
    ok((await page.getByTestId('retry-cloud').count())===0,
      'No redundant manual sync action in healthy state')
    if(width===390)await page.screenshot({path:'/tmp/cuoshi-cloud-first-online-390.png',fullPage:true})
+   ok(await page.getByTestId('cloud-today').isVisible(),
+     'Real record page appears after single cloud notice')
+   ok((await page.getByTestId('count-display').innerText()).trim()==='2',
+     'Existing recorded amount rendered through account-specific store')
+   await page.getByTestId('plus').click()
+   await page.waitForFunction(()=>window.__cuoshiDemo.snapshot().cloudRevision===3)
+   ok((await page.getByTestId('count-display').innerText()).trim()==='3',
+     'Clicking real plus writes an append-only count and auto uploads')
+   await page.getByTestId('minus').click()
+   await page.waitForFunction(()=>window.__cuoshiDemo.snapshot().cloudRevision===4)
+   ok((await page.getByTestId('count-display').innerText()).trim()==='2',
+     'Clicking real minus updates account count and cloud revision')
+   await page.getByTestId('count-display').click()
+   ok(await page.getByTestId('number-input').isVisible(),
+     'Large number opens simple numeric edit dialog')
+   await page.getByTestId('number-input').fill('0')
+   await page.getByTestId('number-save').click()
+   await page.waitForFunction(()=>window.__cuoshiDemo.snapshot().cloudRevision===5)
+   ok((await page.getByTestId('count-display').innerText()).trim()==='0',
+     'Direct number input saves explicit zero rather than unrecorded')
+   const initialNotes=await page.evaluate(()=>window.__cuoshiDemo.account.read().events.length)
+   await page.getByTestId('note-draft').fill('仅用于浏览器测试的简记')
+   ok((await page.evaluate(()=>window.__cuoshiDemo.account.read().events.length))===initialNotes,
+     'Draft remains local and is not an event/upload')
+   await page.getByTestId('save-note').click()
+   await page.waitForFunction(()=>window.__cuoshiDemo.snapshot().cloudRevision===6)
+   ok(await page.getByText('仅用于浏览器测试的简记',{exact:true}).isVisible(),
+     'Clicking save writes optional note into actual durable account store')
+   await page.getByTestId('edit-note').click()
+   await page.getByTestId('edit-note-input').fill('重新看待这件事')
+   await page.getByTestId('save-note-edit').click()
+   await page.waitForFunction(()=>window.__cuoshiDemo.snapshot().cloudRevision===7)
+   ok(await page.getByText('重新看待这件事',{exact:true}).isVisible(),
+     'Note edit appears in actual record view')
+   ok(await page.getByText('修改简记（保留旧文）',{exact:true}).isVisible(),
+     'Visible history includes note edit ledger')
+   const oldText=await page.evaluate(()=>window.__cuoshiDemo.account.read().events
+      .some(e=>e.type==='note_edit'&&e.oldText==='仅用于浏览器测试的简记'))
+   ok(oldText,'Previous note text remains in authoritative event ledger')
+   await page.getByTestId('previous-day').click()
+   ok(await page.getByTestId('mark-zero').isVisible(),
+     'Past date remains truly unrecorded before explicitly recording')
+   await page.getByTestId('mark-zero').click()
+   await page.waitForFunction(()=>window.__cuoshiDemo.snapshot().cloudRevision===8)
+   ok((await page.getByTestId('count-display').innerText()).trim()==='0',
+     'Past date explicit zero saved and uploaded with full opDate')
+   await page.getByTestId('back-today').click()
+   ok(await page.getByTestId('past-change-summary').isVisible(),
+     'Today displays modification of past record after backdating')
+   if(width===390)await page.screenshot({
+     path:'/tmp/cuoshi-cloud-first-real-today-390.png',fullPage:true
+   })
+   await page.getByTestId('edit-note').click()
+   await page.getByTestId('remove-note').click()
+   await page.waitForFunction(()=>window.__cuoshiDemo.snapshot().cloudRevision===9)
+   ok((await page.getByText('重新看待这件事',{exact:true}).count())===0,
+     'Deleting the note removes current text from rendered view')
+   ok(await page.getByText('删除简记（保留旧文）',{exact:true}).isVisible(),
+     'Deleting note appends a deletion event, retaining prior text')
+   ok(await page.evaluate(()=>window.__cuoshiDemo.account.read().events
+      .some(e=>e.type==='note_delete'&&e.oldText==='重新看待这件事')),
+     'Complete old private note text survives delete in durable history')
+   await page.evaluate(()=>window.__cuoshiDemo.offline(true))
+   await page.getByTestId('plus').click()
+   await page.getByTestId('cloud-status').getByText('暂未同步').waitFor()
+   ok((await page.getByTestId('count-display').innerText()).trim()==='1',
+     'Offline real plus button saves locally and visibly updates the count')
+   ok((await page.evaluate(()=>window.__cuoshiDemo.snapshot())).cloudRevision===9,
+     'Offline real page interaction leaves cloud revision unchanged')
+   await page.evaluate(()=>window.__cuoshiDemo.online())
+   await page.getByTestId('cloud-status').getByText('已同步').waitFor()
+   ok((await page.evaluate(()=>window.__cuoshiDemo.snapshot())).cloudRevision===10,
+     'Connection restoration syncs offline edit from real page event')
+   const eventCount=await page.evaluate(()=>window.__cuoshiDemo.account.read().events.length)
+   ok(eventCount>=8,'Real view produces complete count/note/past-date event ledger')
    ok(!errors.length,'No Vue runtime errors: '+errors.join(' | '))
    ok(await page.evaluate(()=>document.documentElement.scrollWidth)<=width+1,
      'No viewport overflow at '+width+'px')
