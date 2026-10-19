@@ -821,7 +821,7 @@ try{
   const extraWxToken=userToken(wxLogin.userId,'device0008',nowSeconds(),1)
   await service.logoutUser(extraWxToken)
   check(Number((await pool.query('SELECT count(*) AS n FROM cloud_revoked_backup_tokens WHERE subject_id=$1',
-    [wxLogin.userId])).rows[0].n)===1,'Account-linked revoked nonce exists before cancellation')
+    [wxLogin.userId])).rows[0].n)===2,'Both HTTP logout and second-device revoked nonces exist before cancellation')
   const beforeStat=await pool.query('SELECT COALESCE(sum(accounts_deleted),0) AS n FROM cloud_account_deletion_totals')
   const result=await service.cancelAccount(wxToken,ACCOUNT_DELETE_CONFIRMATION)
   check(result.deleted&&result.privateBackupErased&&result.redactedAuditRows===1,
