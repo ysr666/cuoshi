@@ -11,7 +11,7 @@ type Actions=ReturnType<typeof createCloudRecordActions>
 export const state=reactive({
  stage:'notice' as 'notice'|'connecting'|'ready'|'blocked'|'offline',
  message:'数字、选填简记和历次修改历史默认自动存入云端。首次使用请确认。',
- sync:'',consentRequired:false,date:localDate(),revision:0
+ sync:'',consentRequired:false,cloudPaused:false,pausePending:false,date:localDate(),revision:0
 })
 const NOTICE='cuoshi-future-v05-miniapp-disclosure'
 const DEVICE='cuoshi-future-v05-miniapp-device-id'
@@ -168,16 +168,24 @@ function update(){
    '微信账号验证已失效，本机安全锁写入失败；请勿退出程序，先修复本机存储。'
   state.stage='blocked'
   state.consentRequired=false
+  state.cloudPaused=false
+  state.pausePending=false
   state.sync='账号需要重新验证'
   state.revision++
   return
  }
- state.consentRequired=data.consentRequired===true
- state.sync=data.consentRequired?'需要重新确认云端存储':
+ const pause=host?.pauseStatus()
+ state.cloudPaused=pause!==null
+ state.pausePending=pause==='pending'
+ state.consentRequired=data.consentRequired===true&&!state.cloudPaused
+ state.sync=state.cloudPaused?'云端上传已暂停':data.consentRequired?'需要重新确认云端存储':
   data.phase==='synced'?'已同步':data.phase==='offline'?'暂未同步':
   data.phase==='checking'?'正在同步':data.phase==='notice'?'需要确认云端存储':
   data.phase==='attention'?'部分记录暂未同步':'等待同步'
- state.message=data.message
+ state.message=state.cloudPaused?
+  state.pausePending?'本机自动上传已暂停，但服务器关闭授权尚未确认；联网后可再试。原有云记录不删除。':
+   '已关闭该账号云端上传授权；可以继续在本机记录。重新确认后再自动上传。':
+  data.message
  state.revision++
 }
 async function connect(){
@@ -313,7 +321,7 @@ export async function consent(){
  // Explicit user gesture only. Revoked server consent is NEVER restored by
  // auto-reconnect, foreground refresh, or remembered global notice.
  if(host&&(host.cloud.state().phase==='notice'||
-    host.cloud.state().consentRequired===true)){
+    host.cloud.state().consentRequired===true||host.pauseStatus()!==null)){
   await host.acceptNotice();update();return
  }
  const isFirst=!accepted()
@@ -327,6 +335,13 @@ export async function consent(){
   await host.acceptNotice()
   update()
  }
+}
+/** Server opt-out is explicit; local upload stops durably first. */
+export async function pauseCloudSaving(){
+ if(!host||offlineLocal||state.stage!=='ready'||task||cancellationTask)
+  throw Error('请先完成联网账号验证后再关闭云端保存')
+ await host.pauseUploads()
+ update()
 }
 /** Pending deletion must survive process restarts; the original signed
  * JWT is held in memory only, never put into wx persistent storage. A

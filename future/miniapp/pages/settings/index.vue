@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import {onShow} from '@dcloudio/uni-app'
 import {ref} from 'vue'
-import {state,start,retry,consent,cancelAccount,accountWasCancelled,restartAfterCancellation,cancellationOutcomePending,restartAfterUnconfirmedCancellation,recheckCancellationOutcome} from '../../../future/miniapp/runtime'
+import {state,start,retry,consent,cancelAccount,accountWasCancelled,restartAfterCancellation,cancellationOutcomePending,restartAfterUnconfirmedCancellation,recheckCancellationOutcome,pauseCloudSaving} from '../../../future/miniapp/runtime'
 import {ACCOUNT_CANCELLATION_CONFIRMATION} from '../../../future/cloud/wechatSession'
 onShow(()=>{void start()})
 function back(){uni.navigateBack()}
@@ -23,6 +23,28 @@ function resolveUnconfirmed(){
    catch(e){deletionFeedback.value=e instanceof Error?e.message:'重新开始失败'}
   }
  })
+}
+const pauseBusy=ref(false),pauseError=ref('')
+function requestPause(){
+ if(pauseBusy.value||state.cloudPaused||state.stage!=='ready')return
+ uni.showModal({title:'暂停自动云端保存？',
+  content:'现有云端记录不会删除。暂停后仍可在本机记录，但新修改不再自动上传；再次主动确认后才会继续同步。',
+  confirmText:'暂停上传',confirmColor:'#a04c3c',
+  success:async result=>{
+   if(!result.confirm||pauseBusy.value)return
+   pauseBusy.value=true;pauseError.value=''
+   try{await pauseCloudSaving()}
+   catch{pauseError.value='本机已停止自动上传，但服务器关闭授权尚未确认。请联网后重试。'}
+   finally{pauseBusy.value=false}
+  }
+ })
+}
+async function retryPause(){
+ if(pauseBusy.value)return
+ pauseBusy.value=true;pauseError.value=''
+ try{await pauseCloudSaving()}
+ catch{pauseError.value='服务器仍未确认关闭云端授权；本机自动上传保持暂停。'}
+ finally{pauseBusy.value=false}
 }
 const confirmError=ref('')
 const deletionOpen=ref(false),deletionInput=ref(''),deletionBusy=ref(false),deletionFeedback=ref('')
@@ -65,7 +87,14 @@ async function confirmAgain(){
  <view class="row"><text>保存方式</text><text>云端自动同步</text></view>
  <view class="row"><text>当前状态</text><text>{{state.sync||'未连接'}}</text></view>
  <text class="help">{{state.message}}</text>
- <view v-if="state.consentRequired" class="reauthorize">
+ <view v-if="state.cloudPaused" class="reauthorize">
+  <text>本机自动上传已暂停。云端已有记录不会因此删除，未同步的本机记录仍会保留。</text>
+  <text v-if="state.pausePending">服务器尚未确认关闭授权，请联网后重试。恢复上传前需要你再次确认。</text>
+  <button class="button" v-if="state.pausePending" :disabled="pauseBusy" @click="retryPause">重试关闭云端授权</button>
+  <button class="button" :disabled="pauseBusy" @click="confirmAgain">重新开启自动云端保存</button>
+  <text v-if="confirmError" class="confirm-error">{{confirmError}}</text>
+ </view>
+ <view v-else-if="state.consentRequired" class="reauthorize">
   <text>云端保存授权已关闭。你的数字、简记与每次修改历史仍然保留；只有你主动重新确认，才会恢复自动上传。</text>
   <button class="button" @click="confirmAgain">重新确认自动云端保存</button>
   <text v-if="confirmError" class="confirm-error">{{confirmError}}</text>
@@ -76,6 +105,11 @@ async function confirmAgain(){
  </view>
  <button v-else-if="accountWasCancelled()" class="button" @click="restartNewAccount">重新开始（创建新账号）</button>
  <button v-else class="button" @click="retry">检查连接状态</button>
+ <view v-if="state.stage==='ready'&&!state.cloudPaused&&!state.consentRequired" class="data-control">
+  <text>自动保存默认开启。你也可以主动暂停上传，原有云端内容不会被删除。</text>
+  <button class="button" :disabled="pauseBusy||state.sync!=='已同步'" @click="requestPause">暂停自动云端保存</button>
+ </view>
+ <text v-if="pauseError" class="confirm-error">{{pauseError}}</text>
  <view class="privacy">
  <text class="label">隐私与数据</text>
  <text>记录的数字、可选简记及每次修改历史在首次明确同意后自动上云。
@@ -114,6 +148,9 @@ async function confirmAgain(){
 .reauthorize{padding:28rpx 0;font-size:26rpx;line-height:1.8;color:#6c675e}
 .reauthorize text{display:block}
 .reauthorize .confirm-error{color:#9c604f;margin-top:16rpx}
+.data-control{margin-top:35rpx;font-size:26rpx;color:#6c675e;line-height:1.8}
+.data-control text{display:block}
+.confirm-error{display:block;margin-top:18rpx;font-size:24rpx;color:#9c4e3f}
 .privacy{border-top:1rpx solid #ded8ce;margin-top:90rpx;padding-top:32rpx}
 .privacy text{display:block;font-size:26rpx;line-height:2;color:#6c675e;margin-bottom:25rpx}
 .privacy .label{color:#292723;font-size:30rpx}

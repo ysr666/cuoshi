@@ -159,6 +159,63 @@ try{
  app.getActions().changeCount(records.localDate(),2,true)
  await until(()=>cloud.readForOwner(principal(),owner)?.records.days[records.localDate()]?.count===2)
  ok(uploads===1,'Actual v0.5 native entry count edit automatically uploaded')
+ // A deliberate stop disables server consent without erasing its snapshot.
+ // The device keeps an account-scoped durable stop across process restarts.
+ await app.pauseCloudSaving()
+ ok(app.state.cloudPaused&& !app.state.pausePending&&!serverConsent,
+   'User pause disables cloud consent and marks local uploads stopped')
+ const pausedUploads=uploads
+ app.getActions().adjustCount(records.localDate(),1,true)
+ await until(()=>app.state.cloudPaused)
+ ok(app.getActions().day().count===3&&uploads===pausedUploads&&
+   cloud.readForOwner({...principal(),cloudBackupEnabled:true},owner)?.records.days[records.localDate()]?.count===2,
+   'Local count stays editable while original server snapshot stays unchanged')
+ networkListeners.clear()
+ delete require.cache[require.resolve(runtimeModule)]
+ app=require(runtimeModule)
+ await app.start()
+ await until(()=>app.state.stage==='ready'&&app.state.cloudPaused)
+ ok(app.getActions().day().count===3&&uploads===pausedUploads,
+   'Cold restart preserves local upload-pause and unsent record without transfer')
+ online=false
+ await app.consent()
+ ok(app.state.cloudPaused&&uploads===pausedUploads,
+   'Failed offline resume cannot remove durable local upload stop')
+ online=true
+ app.onForeground()
+ await until(()=>app.state.cloudPaused)
+ ok(uploads===pausedUploads,
+   'Background reconnect after failed resume cannot silently auto-enable backup')
+ await app.consent()
+ await until(()=>app.state.sync==='已同步'&&
+   cloud.readForOwner(principal(),owner)?.records.days[records.localDate()]?.count===3)
+ ok(!app.state.cloudPaused&&serverConsent&&uploads===pausedUploads+1,
+   'Only explicit renewed consent restores queued cloud upload exactly once')
+ app.getActions().adjustCount(records.localDate(),-1,true)
+ await until(()=>app.state.sync==='已同步'&&
+   cloud.readForOwner(principal(),owner)?.records.days[records.localDate()]?.count===2)
+ // Network fails DURING opt-out: local pause must still stop all uploads.
+ const beforeFailedPause=uploads
+ online=false
+ await assert.rejects(()=>app.pauseCloudSaving())
+ ok(app.state.cloudPaused&&app.state.pausePending&&uploads===beforeFailedPause,
+   'A failed server opt-out still persists a local fail-closed upload stop')
+ app.getActions().adjustCount(records.localDate(),1,true)
+ online=true
+ app.onForeground()
+ await until(()=>app.state.cloudPaused)
+ ok(uploads===beforeFailedPause&&serverConsent,
+   'Reconnect cannot upload even before remote opt-out has been confirmed')
+ await app.pauseCloudSaving()
+ ok(!app.state.pausePending&&!serverConsent,
+   'Manual retry confirms opt-out at server without clearing local stop')
+ await app.consent()
+ await until(()=>app.state.sync==='已同步'&&
+   cloud.readForOwner(principal(),owner)?.records.days[records.localDate()]?.count===3)
+ app.getActions().adjustCount(records.localDate(),-1,true)
+ await until(()=>app.state.sync==='已同步'&&
+   cloud.readForOwner(principal(),owner)?.records.days[records.localDate()]?.count===2)
+ const uploadsBeforeOffline=uploads
  online=false
  app.getActions().adjustCount(records.localDate(),1,true)
  await until(()=>app.state.sync==='暂未同步')
@@ -184,7 +241,7 @@ try{
    'Connectivity restoration verifies account then automatically uploads offline edits')
  ok(networkListeners.size===1,
    'Temporary offline listener replaced by one live cloud-host listener')
- ok(uploads===2,'Offline edits uploaded once without duplicate revisions')
+ ok(uploads===uploadsBeforeOffline+1,'Offline edits uploaded once without duplicate revisions')
  ok(uniCSPRNG===0,'No insecure crypto fallback after reconnect')
  // Live session revocation / account switch: an old page must NOT keep the
  // account A actions exposed when the backend returns HTTP 401 for its JWT.
@@ -221,7 +278,7 @@ try{
  await until(()=>app.state.stage==='ready'&&app.state.sync==='需要确认云端存储')
  ok(app.getActions().day().count===null,
    'New verified account never inherits previous owner history')
- ok(uploads===2,'Switching accounts cannot upload first account old records')
+ ok(uploads===uploadsBeforeOffline+1,'Switching accounts cannot upload first account old records')
  ok(!storage.has('cuoshi-future-v05-miniapp-last-verified-owner'),
    'Verified account switch invalidates prior account offline access immediately')
  ok(storage.get('cuoshi-future-v05-miniapp-offline-reverification-required')===true,

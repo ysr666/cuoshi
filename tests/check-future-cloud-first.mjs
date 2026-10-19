@@ -33,7 +33,7 @@ try{
  const storage={getStorageSync:key=>storageMap.get(key)??'',
    setStorageSync:(key,value)=>storageMap.set(key,value)}
  const journal=createDurableJournalStore({storage,ownerId,deviceId})
- let current=m.fresh(),online=true,consent=false,account=ownerId,loginLimited=false
+ let current=m.fresh(),online=true,consent=false,account=ownerId,loginLimited=false,paused=false
  let uploaded=0,pullCount=0,requestNo=0,lost=false,failLocal=false
  const auth={
    getVerifiedSession:async()=>{if(loginLimited)throw Error('wechat_session_rate_limited')
@@ -62,6 +62,7 @@ try{
  const notifications=[]
  const build=()=>createCloudFirst({ownerId,deviceId,auth,port,
    noticeVersion:'privacy-v1',
+   pausedLocally:()=>paused,onServerConsentConfirmed:()=>{paused=false},
    onChange:s=>notifications.push(s),
    replaceCleanLocal:async(records,expected)=>{
      if(failLocal)throw Error('local_storage_failed')
@@ -104,6 +105,21 @@ try{
  ok(uploaded===uploadsBeforeRevocation&&
    sim.readForOwner(who,ownerId).records.days[prior].notes.length===1,
    'Re-consent does not duplicate uploads or delete original notes')
+ paused=true
+ const beforePaused=uploaded
+ m.setCount(current,prior,1)
+ state=await ctl.onLocalSaved()
+ ok(state.uploadPaused===true&&state.phase==='attention'&&uploaded===beforePaused,
+   'Durable local cloud-pause blocks automatic uploads even when server is online')
+ state=await ctl.onNetworkRestored()
+ ok(state.uploadPaused===true&&uploaded===beforePaused,
+   'Reconnect never silently overrides a user cloud-upload pause')
+ state=await ctl.acceptCloudNotice()
+ ok(!paused&&!state.uploadPaused&&state.phase==='synced',
+   'Only renewed explicit consent can unblock saved local upload stop gate')
+ ok(uploaded===beforePaused+1&&
+   sim.readForOwner(who,ownerId).records.days[prior].count===1,
+   'Resuming uploads pending local changes exactly once, with original note retained')
  online=false
  m.setCount(current,day,3)
  state=await ctl.onLocalSaved()
@@ -115,7 +131,7 @@ try{
  state=await ctl.onNetworkRestored()
  ok(state.phase==='synced'&&!state.pendingLocal,
    'Reconnect auto retries previously saved data')
- ok(journal.load()?.cursor.revision===2,'Recovered upload durable at new revision')
+ ok(journal.load()?.cursor.revision===3,'Recovered upload durable at new revision')
  lost=true
  m.appendNote(current,day,'服务端写入但回执丢失')
  state=await ctl.onLocalSaved()

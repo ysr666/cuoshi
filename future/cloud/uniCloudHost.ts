@@ -38,6 +38,8 @@ export type UniCloudHostOptions={
 }
 const noticeKey=(ownerId:string,version:string)=>
   'cuoshi-future-v05-cloud-consent-v1:'+sha256(stableJson([ownerId,version]))
+const pauseKey=(ownerId:string,version:string)=>
+  'cuoshi-future-v05-cloud-upload-paused-v1:'+sha256(stableJson([ownerId,version]))
 export function createUniCloudHost(options:UniCloudHostOptions){
   const {platform,ownerId,deviceId,noticeVersion}=options
   if(typeof options.onForeground!=='function'||
@@ -55,6 +57,15 @@ export function createUniCloudHost(options:UniCloudHostOptions){
   // connecting background event callbacks.
   records.recoverAdoption(createDurableJournalStore({storage,ownerId,deviceId}).load())
   const remembered=noticeKey(ownerId,noticeVersion)
+  const stopKey=pauseKey(ownerId,noticeVersion)
+  function pauseStatus():null|'pending'|'confirmed'{
+    const value=platform.getStorageSync(stopKey)
+    if(value===undefined||value===null||value==='')return null
+    if(value==='pending'||value==='confirmed')return value
+    // Corrupt or unexpected state must fail closed, not restart uploads.
+    throw Error('cloud_host_pause_state_invalid')
+  }
+  pauseStatus()
   const lastChoice=platform.getStorageSync(remembered)
   const approved=lastChoice===noticeVersion
   const consentPending=lastChoice===noticeVersion+':pending'
@@ -77,10 +88,15 @@ export function createUniCloudHost(options:UniCloudHostOptions){
     ownerId,deviceId,auth:session,port:{...sync,storage},
     noticeVersion,previouslyAcknowledged:approved,
     pendingFirstConsent:consentPending,
+    pausedLocally:()=>pauseStatus()!==null,
     onServerConsentConfirmed(){
       platform.setStorageSync(remembered,noticeVersion)
       if(platform.getStorageSync(remembered)!==noticeVersion)
         throw Error('cloud_host_consent_ack_not_durable')
+      if(pauseStatus()!==null){
+        platform.removeStorageSync(stopKey)
+        if(pauseStatus()!==null)throw Error('cloud_host_pause_resume_not_durable')
+      }
     },
     replaceCleanLocal:records.replaceCleanLocal,
     finishCloudAdoption:records.finalizeAdoption,
@@ -117,6 +133,28 @@ export function createUniCloudHost(options:UniCloudHostOptions){
     off()
     off=()=>{}
   }
+  async function pauseUploads(){
+    // Local fail-closed stop marker is durable BEFORE contacting the server.
+    // An outage is never allowed to fall back to auto-upload on reconnect.
+    const already=pauseStatus()
+    if(already==='confirmed')return
+    if(!already){
+      platform.setStorageSync(stopKey,'pending')
+      if(pauseStatus()!=='pending')throw Error('cloud_host_pause_not_durable')
+    }
+    await cloud.onForeground()
+    try{
+      const identity=await session.getVerifiedSession()
+      if(identity.ownerId!==ownerId)throw Error('cloud_host_pause_owner_changed')
+      const response=await session.setCloudConsent(false,noticeVersion)
+      if(response.enabled!==false||(await session.getStatus()).enabled!==false)
+        throw Error('cloud_host_pause_not_confirmed')
+      platform.setStorageSync(stopKey,'confirmed')
+      if(pauseStatus()!=='confirmed')throw Error('cloud_host_pause_not_durable')
+    }finally{
+      await cloud.onForeground()
+    }
+  }
   async function acceptNotice(){
     // User sees an explicit disclosure explaining cloud storage and history.
     // The legacy v0.4 records are NOT imported from an unrelated account.
@@ -133,6 +171,8 @@ export function createUniCloudHost(options:UniCloudHostOptions){
     cloud,
     session,
     acceptNotice,
+    pauseUploads,
+    pauseStatus,
     start,
     stop
   }

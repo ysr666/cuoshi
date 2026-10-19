@@ -30,6 +30,11 @@ const todayScript=read('pages/today/index.js')
 check(todayScript.includes('展开全部')&&todayScript.includes('收起历史'),
  'Native history offers expandable complete ledger rather than silently hiding older events')
 check(settings.includes('云端自动同步'),'Native settings explain cloud-first storage')
+check(settings.includes('暂停自动云端保存')&&settings.includes('重试关闭云端授权')&&
+ settings.includes('重新开启自动云端保存'),
+ 'Native data management exposes opt-out, uncertain-retry and explicit resume')
+check(read('pages/settings/index.js').includes('暂停自动云端保存？'),
+ 'Native pause requires final confirmation and discloses that cloud data remains')
 check(read('pages/today/index.js').includes('重新确认自动云端保存'),
  'Native today page offers an explicit restore action after revoked cloud consent')
 check(today.includes('重新核验注销结果')&&settings.includes('重新核验注销结果'),

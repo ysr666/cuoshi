@@ -15,7 +15,7 @@ const digest=(r:Records)=>sha256(stableJson(r))
 const empty=(r:Records)=>r.theme==='paper'&&Object.keys(r.days).length===0&&r.events.length===0
 const clone=<T>(v:T):T=>JSON.parse(JSON.stringify(v))
 export type CloudPhase='notice'|'checking'|'synced'|'pending'|'offline'|'attention'
-export type CloudState={phase:CloudPhase;message:string;pendingLocal:boolean;hasCloudBackup:boolean;identityInvalid?:boolean;consentRequired?:boolean}
+export type CloudState={phase:CloudPhase;message:string;pendingLocal:boolean;hasCloudBackup:boolean;identityInvalid?:boolean;consentRequired?:boolean;uploadPaused?:boolean}
 export type CloudFirstAuth={
  getVerifiedSession():Promise<{ownerId:string;accessToken:string}>
  getStatus():Promise<{enabled:boolean;hasStoredBackup:boolean}>
@@ -29,6 +29,8 @@ export function createCloudFirst(args:{
  previouslyAcknowledged?:boolean
  /** Explicitly accepted while offline, before the server could persist it. */
  pendingFirstConsent?:boolean
+ /** Locally persisted per-owner stop gate; checked BEFORE network or upload. */
+ pausedLocally?:()=>boolean
  /** Called after authoritative server status confirms consent. */
  onServerConsentConfirmed?:()=>void
  /** Called only after server-authenticated account matches ownerId. */
@@ -49,7 +51,7 @@ export function createCloudFirst(args:{
     !/^[a-zA-Z0-9._-]{3,64}$/.test(args.noticeVersion))
    throw Error('cloud_first_dependencies_required')
  let approved=args.previouslyAcknowledged===true||args.pendingFirstConsent===true,busy=false,rerun=false
- let consentJustAcknowledged=args.pendingFirstConsent===true
+ let consentJustAcknowledged=args.pendingFirstConsent===true,resumeExplicitly=false
  let state:CloudState={phase:'notice',message:'开始使用前，请了解记录与简记将自动保存在云端。',pendingLocal:false,hasCloudBackup:false}
  const set=(next:Partial<CloudState>)=>{state={...state,...next};args.onChange?.({...state})}
  const first=createFirstLinkRuntime({ownerId,deviceId,port,
@@ -99,6 +101,11 @@ export function createCloudFirst(args:{
  async function cycle(){
    // No wx.login, temporary code or private upload before first notice.
    if(!approved){set({phase:'notice',message:'请先阅读并同意云端自动保存说明。'});return}
+   if(args.pausedLocally?.()&&!resumeExplicitly){
+     set({phase:'attention',uploadPaused:true,consentRequired:false,
+       message:'已暂停本机自动上传；原有云记录保留，恢复前不会自动补传。',pendingLocal:true})
+     return
+   }
    set({phase:'checking',message:'正在同步…'})
    const identity=await auth.getVerifiedSession()
    if(identity.ownerId!==ownerId)throw Error('cloud_first_account_changed')
@@ -121,7 +128,7 @@ export function createCloudFirst(args:{
    }
    // The server has confirmed consent or the current user explicitly renewed
    // it; never clear the re-consent gate on a mere retry or network return.
-   if(state.consentRequired)set({consentRequired:false})
+   if(state.consentRequired||state.uploadPaused)set({consentRequired:false,uploadPaused:false})
    const remote=await readCloud()
    const journal=port.load(),local=port.readLocal();validate(local)
    const localDigest=digest(local)
@@ -186,7 +193,19 @@ export function createCloudFirst(args:{
  return {
    state:()=>({...state}),
    /** Once at first-use onboarding; never ask again for each edit. */
-   acceptCloudNotice:async()=>{approved=true;consentJustAcknowledged=true;return tick()},
+   acceptCloudNotice:async()=>{
+     approved=true;consentJustAcknowledged=true
+     const paused=args.pausedLocally?.()===true
+     // Only this explicit user invocation may bypass the on-disk stop flag.
+     // A failed attempt must never let a later background tick silently
+     // re-enable cloud consent or upload unsent local edits.
+     if(paused)resumeExplicitly=true
+     try{return await tick()}
+     finally{
+       if(paused){resumeExplicitly=false
+         if(args.pausedLocally?.())consentJustAcknowledged=false}
+     }
+   },
    onLocalSaved:tick,onForeground:tick,onNetworkRestored:tick
  }
 }
