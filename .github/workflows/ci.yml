@@ -85,6 +85,8 @@ jobs:
         run: npm run test:future:migration-render
       - name: Verify scheduled maintenance service and hourly retention timer (static)
         run: node tests/check-future-maintenance-static.mjs
+      - name: Verify read-only HTTPS health probe and nonsecret monitoring timer
+        run: npm run test:future:health-monitor
       - name: Validate private backend systemd service and restricted Caddy startup template
         run: npm run test:future:systemd-deploy
       - name: Compile isolated v0.5 native WeChat package (no production AppID)
@@ -246,7 +248,10 @@ jobs:
         run: npm run test:future:private-health
       - name: Verify hourly privacy maintenance worker and independent service safety
         run: npm run test:future:maintenance
-      - name: Migrate and test disposable PostgreSQL schema
+      - name: Validate offline disaster-recovery test cannot address production
+        run: node tests/check-future-restore-drill.mjs
+      - name: Migrate, dump and restore disposable PostgreSQL schema
         env:
+          CUOSHI_TEST_RESTORE_DRILL: SYNTHETIC_POSTGRES_ONLY
           CUOSHI_TEST_POSTGRES_URL: postgresql://postgres:ci_only_disposable@127.0.0.1:5432/postgres
         run: npm test --prefix future/server

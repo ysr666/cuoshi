@@ -7,6 +7,7 @@ import {tmpdir} from 'node:os'
 import {join,resolve} from 'node:path'
 import {fileURLToPath} from 'node:url'
 import {validateMigrationConfig,renderMigration} from '../deploy/render-migrations.mjs'
+import {checkRealPostgresRestore} from './check-restore-drill.mjs'
 import crypto from 'node:crypto'
 import {createServer} from 'node:http'
 const root=fileURLToPath(new URL('../../../',import.meta.url))
@@ -687,6 +688,22 @@ try{
   check(linkedReadback.records.days[yesterday].count===0&&
     linkedReadback.records.events[1].newText.includes('旧简记正文'),
     'Postgres JSONB preserved explicit zero and previous private note text')
+  if(process.env.CUOSHI_TEST_RESTORE_DRILL==='SYNTHETIC_POSTGRES_ONLY'){
+    const testOwner='restorefixture0001'
+    // Seed strictly synthetic content, never dump user data or test credentials.
+    await pool.query(`INSERT INTO cloud_users
+      (user_id,backup_enabled,consent_version,consent_at)
+      VALUES ($1,TRUE,'privacy-v1',clock_timestamp())`,[testOwner])
+    await pool.query(`INSERT INTO cloud_snapshots (user_id,revision,digest,records)
+      VALUES($1,$2,$3,$4::jsonb)`,[testOwner,1,'e'.repeat(64),JSON.stringify(importedLocal)])
+    const restoredChecks=await checkRealPostgresRestore({source,schema,
+      owner:testOwner,expectedRevision:1,expectedDigest:'e'.repeat(64),
+      expectedEvents:importedLocal.events.length,expectedZeroDate:yesterday,
+      ack:'SYNTHETIC_POSTGRES_ONLY'})
+    check(restoredChecks===7,
+      'Official PostgreSQL pg_dump/pg_restore preserved count-zero and full history in a second empty DB')
+    await pool.query('DELETE FROM cloud_users WHERE user_id=$1',[testOwner])
+  }
   const secondLinkToken=userToken(linkUser.userId,'device0041')
   const lostRace=await service.upload(secondLinkToken,{
     ...firstLinkPrepared.request,idempotencyKey:'firstlink0002'

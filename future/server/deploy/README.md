@@ -93,3 +93,18 @@
 `npm run test:future:private-health` 已用真实 HTTP 监听、数据库失败、恢复、并发请求与超时模拟验证响应；真实 PostgreSQL CI 另校验四个正式数据库角色的可达性。这是**在线应用就绪度**，不保证微信外部服务商随时可用，也不证明物理备份可以恢复。生产接入后还必须配置有可达通知通道的外部可用性告警，验证故障、维护任务上次成功时间和备份年龄；当前仓库**没有接入真实告警接收人或正式监控平台**。
 
 每小时维护程序现在同时执行三个现有受控 SQL 函数：过期登录限流窗口、注销超过安全期的账号墓碑、过期的一次性微信登录代码及已撤销会话摘要。仅执行限定的 `SECURITY DEFINER` 函数，依然**无用户记录或表级删除读取权限**。每种保留有独立 SQL 截止时间；断网、停机、timer 没启用时无法保证精确期限。生产数据库物理备份、WAL、异地副本和云厂商自动快照不由该程序删除，必须另外设置实际保留与销毁策略并完成恢复演练。
+
+
+## CI 原生 pg_dump / pg_restore 恢复演练（不会产生用户导出功能）
+
+GitHub 真实 PostgreSQL Job 在完成 7 份正式 schema 迁移并上传**合成**零件数/简记修改历史后，使用与数据库版本一致的官方 `postgres:16-alpine` 客户端、非 root 容器运行 `pg_dump --format custom`，将测试 schema 备份到 CI 宿主的私有临时目录，再以 `pg_restore --exit-on-error` **恢复至另一座新建的空数据库**。恢复后核验：JSONB 中显式 0、完整历史事件数量、原 revision 和 digest、所有者授权以及原库不被更改；还校验 `PGDMP` 文件头及备份 SHA-256 未变，最后删除测试恢复库与临时文件。额外静态校验禁止生产域名、其他数据库名、异常 SQL schema 和非合成 owner ID。
+
+这个演练**只在 GitHub Actions `CI=true`、`GITHUB_ACTIONS=true`、`CUOSHI_TEST_RESTORE_DRILL=SYNTHETIC_POSTGRES_ONLY` 及回环地址的临时测试库允许执行**。测试备份不可包含生产个人信息，且**不会上传到 CI Artifacts**，不存在对用户开放的数据导出或设备恢复功能。
+
+**非常重要**：`pg_dump -Fc` 是 PostgreSQL 的自定义格式，**不是加密备份**。生产环境必须使用经批准的云数据库加密备份、受限密钥管理、独立安全备份账户、备份不可变/保留策略，以及灾难恢复演练；历史物理备份和 WAL 中可能仍含已经注销的个人数据。必须明确这部分的保留、访问和销毁策略，不得声称账号注销后全部历史备份立即物理清零。
+
+## 只读 HTTPS 五分钟巡检（尚未启用、未连接告警通道）
+
+`deploy/check-public-health.mjs` 仅接受规范的非内网、非保留域名字符串，以系统 HTTPS 客户端向备案的 `https://<域名>/healthz` 发起一次无凭据的 GET。只有 HTTP 204 算正常；TLS 证书/域名校验失败、超时、跳转、200 或 503 一律使脚本非零退出，且日志只打印固定错误代号，不包含服务端密钥或用户记录。`systemd/cuoshi-health.service` 用独立 `cuoshi-monitor` 低权限身份与 `/etc/cuoshi/monitor.env`（仅含公开域名），定时器 `systemd/cuoshi-health.timer` 每五分钟执行，错误可通过 `systemctl status`、`journalctl` 被运维监控检测。单独的 `monitor.env.example` 是**不可直接用于正式运行的模板**。
+
+`npm run test:future:health-monitor` 以模拟 HTTPS 返回和实际 Node 启动验证错误状态、域名限制、独立 systemd 配置。**仓库尚未接入实际运维通知接收人，脚本失败并不自动发送短信或微信消息**；在真实云开通后须由账号主体确认通知人员，配置云平台服务监控/告警策略并通过断网、数据库暂停、证书错误三类现场演练。切勿因为 CI 的合成健康检查成功就认为已配置监控或正式备份。

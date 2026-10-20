@@ -16,6 +16,8 @@
     "test:future:systemd-deploy": "node tests/check-future-systemd-deploy.mjs",
     "test:future:private-runtime-package": "node tests/check-future-private-runtime-package.mjs",
     "test:future:maintenance": "node tests/check-future-maintenance.mjs",
+    "test:future:restore-drill": "node tests/check-future-restore-drill.mjs",
+    "test:future:health-monitor": "node tests/check-future-health-monitor.mjs",
     "test:future:private-health": "node tests/check-future-private-health.mjs",
     "prepare:future:migrations": "node future/server/deploy/render-migrations.mjs",
     "check:future:public-edge": "node future/server/check-public-edge.mjs",
