@@ -10,7 +10,7 @@ const root=resolve('.')
 const entry=resolve(root,'future/server/.private-build/future/server/src/privateMaintenance.js')
 check(existsSync(entry),'Real independently compiled maintenance entry exists')
 const req=createRequire(entry)
-const {parsePrivateMaintenanceConfig,prunePrivateLoginWindows}=req('./privateMaintenance.js')
+const {parsePrivateMaintenanceConfig,prunePrivateLoginWindows,runPrivateRetentionCycle}=req('./privateMaintenance.js')
 const pg=req('pg')
 check(typeof pg.Pool==='function','Actual runtime pg module resolvable from scheduler entry')
 const env={CUOSHI_MAINTENANCE_ACK:'PRUNE_LOGIN_WINDOWS_ONLY',
@@ -64,6 +64,49 @@ await assert.rejects(prunePrivateLoginWindows(pool(role,capability,-1),'cuoshi_p
  /maintenance_result_invalid/);count++
 await assert.rejects(prunePrivateLoginWindows(pool(role,capability,'1'),'cuoshi_prod'),
  /maintenance_result_invalid/);count++
+const allowed={tombstones:true,auth:true,user_read:false,user_delete:false,
+ code_read:false,code_delete:false}
+const createCyclePool=(caps=allowed,counts={tombstones:2,auth_artifacts:5})=>{
+ const calls=[]
+ const db={async query(sql){
+   calls.push(sql)
+   if(sql.includes('FROM pg_roles'))return {rows:[role]}
+   if(sql.includes('current_schema()'))return {rows:[capability]}
+   if(sql==='SELECT cloud_prune_wechat_login_windows() AS removed')
+     return {rows:[{removed:3}]}
+   if(sql.includes('has_function_privilege(current_user,\'cloud_purge_old_tombstones'))
+     return {rows:[caps]}
+   if(sql.includes('cloud_purge_old_tombstones() AS tombstones'))
+     return {rows:[counts]}
+   throw Error('unexpected_retention_sql')
+ }}
+ return {db,calls}
+}
+const cycle=createCyclePool()
+const results=await runPrivateRetentionCycle(cycle.db,'cuoshi_prod')
+check(results.loginWindows===3&&results.tombstones===2&&results.authArtifacts===5,
+ 'One maintenance job covers all three PostgreSQL retention functions')
+check(cycle.calls.length===5&&
+ cycle.calls[4].includes('cloud_purge_old_tombstones()')&&
+ cycle.calls[4].includes('cloud_purge_expired_auth_artifacts()'),
+ 'No missing account tombstone or session digest pruning path')
+check(!cycle.calls.join(' ').includes('SELECT * FROM cloud_users')&&
+ !cycle.calls.join(' ').includes('SELECT * FROM cloud_consumed_wechat_codes'),
+ 'New retention duties only use restricted SQL functions, never direct user reads')
+for(const bad of [{...allowed,tombstones:false},{...allowed,auth:false},
+ {...allowed,user_read:true},{...allowed,user_delete:true},
+ {...allowed,code_read:true},{...allowed,code_delete:true}]){
+ const t=createCyclePool(bad)
+ await assert.rejects(runPrivateRetentionCycle(t.db,'cuoshi_prod'),
+ /maintenance_scope_unsafe/);count++
+ check(t.calls.length===4,'Illegal role cannot run any tombstone or auth digest purge')
+}
+for(const invalid of [{tombstones:-1,auth_artifacts:2},
+ {tombstones:0,auth_artifacts:'2'}]){
+ const t=createCyclePool(allowed,invalid)
+ await assert.rejects(runPrivateRetentionCycle(t.db,'cuoshi_prod'),
+ /maintenance_result_invalid/);count++
+}
 const run=spawnSync(process.execPath,[entry],{
  cwd:root,env:{PATH:process.env.PATH||''},encoding:'utf8',timeout:7000})
 check(run.status===1&&run.stderr.includes('private_cloud_maintenance_ack_required'),

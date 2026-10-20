@@ -15,6 +15,8 @@ for(const x of ['OnCalendar=hourly','Persistent=true','Unit=cuoshi-login-prune.s
 check(!unit.includes('cloud.env')&&!unit.includes('APP_SECRET'),
  'No app/provider credentials in maintenance unit')
 check(worker.includes('SELECT cloud_prune_wechat_login_windows() AS removed')&&
+ worker.includes('cloud_purge_old_tombstones() AS tombstones')&&
+ worker.includes('cloud_purge_expired_auth_artifacts() AS auth_artifacts')&&
  !worker.includes('SELECT * FROM cloud_snapshots'),
  'Worker only invokes bounded cleanup SQL')
 console.log('PASS',n,'static isolated expiry job and production schedule')

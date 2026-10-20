@@ -72,7 +72,8 @@ try{
   const {createTrustedEdgeBoundary}=require(join(out,'future/server/src/trustedEdge.js'))
   const {privatePoolConnectionOptions}=require(join(out,'future/server/src/privateConfig.js'))
   const {checkPrivateDatabaseReadiness}=require(join(out,'future/server/src/privateReadiness.js'))
-  const {prunePrivateLoginWindows}=require(join(out,'future/server/src/privateMaintenance.js'))
+  const {prunePrivateLoginWindows,runPrivateRetentionCycle}=require(join(out,'future/server/src/privateMaintenance.js'))
+  const {createPrivateHealthProbe}=require(join(out,'future/server/src/privateHealth.js'))
   const {createPostgresWechatLoginLimiter}=require(join(out,'future/server/src/loginRateLimiter.js'))
   const repository=require(join(out,'future/server/src/repository.js'))
   const admin=require(join(out,'future/server/src/adminRepository.js'))
@@ -145,6 +146,14 @@ try{
   check(bounded.rows[0].statement==='15s'&&
     bounded.rows[0].lock==='4s'&&bounded.rows[0].idle_tx==='10s',
     'Real PostgreSQL honors the production deadline, lock and idle transaction caps')
+  const liveHealth=createPrivateHealthProbe([
+    identityPool,backupPool,adminPool,deletionPool])
+  check(await liveHealth()===true,
+    'Production /healthz verifies four actual limited PostgreSQL pools')
+  const brokenHealth=createPrivateHealthProbe([
+    identityPool,backupPool,adminPool,{query:async()=>{throw Error('db unavailable')}}])
+  check(await brokenHealth()===false,
+    'Real PostgreSQL readiness refuses success if even one backend role goes away')
   const runtimeRoles={identityDb:identityPool,backupDb:backupPool,
     staffDb:adminPool,cancellationDb:deletionPool}
   await checkPrivateDatabaseReadiness(runtimeRoles,schema)
@@ -1155,14 +1164,15 @@ try{
 
   // No early cleanup: only an authorized maintenance account may erase
   // account-id tombstones after they are safely older than bearer-token TTL.
-  const justDeletedPurge=await maintenancePool.query('SELECT cloud_purge_old_tombstones() AS n')
-  check(Number(justDeletedPurge.rows[0].n)===0,'Newly deleted user ID retained temporarily to invalidate old tokens')
+  const justDeletedPurge=await runPrivateRetentionCycle(maintenancePool,schema)
+  check(justDeletedPurge.tombstones===0,
+    'One real maintenance cycle preserves recent account tombstones and auth digests')
   check((await pool.query('SELECT deleted_at FROM cloud_users WHERE user_id=$1',[wxLogin.userId])).rows.length===1,
     'Account tombstone survives early purge attempt')
   await pool.query("UPDATE cloud_users SET deleted_at=clock_timestamp()-interval '25 hours' WHERE user_id=$1",
     [wxLogin.userId])
-  check(Number((await maintenancePool.query('SELECT cloud_purge_old_tombstones() AS n')).rows[0].n)===1,
-    'Authorized maintenance removes old account tombstone after safety delay')
+  check((await runPrivateRetentionCycle(maintenancePool,schema)).tombstones===1,
+    'Production hourly cycle removes old account tombstone after 24h safety delay')
   check((await pool.query('SELECT * FROM cloud_users WHERE user_id=$1',[wxLogin.userId])).rows.length===0,
     'Former internal user ID purged after session expiry window')
   check((await readAnonymousDeletionSummary(reportingPool)).length>=1,
@@ -1173,14 +1183,13 @@ try{
   const activeCodeCount=Number((await pool.query(
     'SELECT count(*) AS n FROM cloud_consumed_wechat_codes')).rows[0].n)
   check(activeCodeCount>0,'Temporary login-code digests exist before lifecycle cleanup')
-  check(Number((await maintenancePool.query('SELECT cloud_purge_expired_auth_artifacts() AS n')).rows[0].n)===0,
-    'Recent session hashes and one-use login code digests cannot be erased prematurely')
+  check((await runPrivateRetentionCycle(maintenancePool,schema)).authArtifacts===0,
+    'Production hourly cycle retains recent session and one-use code digests')
   await pool.query("UPDATE cloud_consumed_wechat_codes SET used_at=clock_timestamp()-interval '25 hours'")
   await pool.query("UPDATE cloud_revoked_backup_tokens SET expires_at=clock_timestamp()-interval '2 hours'")
   await pool.query("UPDATE cloud_revoked_staff_tokens SET expires_at=clock_timestamp()-interval '2 hours'")
-  check(Number((await maintenancePool.query(
-    'SELECT cloud_purge_expired_auth_artifacts() AS n')).rows[0].n)>=activeCodeCount,
-    'Maintenance role expires old login codes and revoked-token digests')
+  check((await runPrivateRetentionCycle(maintenancePool,schema)).authArtifacts>=activeCodeCount,
+    'Hourly maintenance expires old login codes and revoked-token digests')
   check((await pool.query('SELECT count(*) AS n FROM cloud_consumed_wechat_codes')).rows[0].n==='0',
     'Expired provider login code hashes physically cleared')
   check((await pool.query('SELECT count(*) AS n FROM cloud_revoked_backup_tokens')).rows[0].n==='0',

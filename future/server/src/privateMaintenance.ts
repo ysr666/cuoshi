@@ -37,14 +37,45 @@ export async function prunePrivateLoginWindows(pool:PoolLike,schema:string):Prom
  return removed
 }
 
+/** One hourly run covers ALL existing identity-retention obligations.
+ * Each bounded SQL function is idempotent, so a partial failure exits nonzero
+ * and a subsequent hourly run safely retries the remaining cleanup.
+ */
+export async function runPrivateRetentionCycle(pool:PoolLike,schema:string){
+ const loginWindows=await prunePrivateLoginWindows(pool,schema)
+ const capabilities=await pool.query(`SELECT
+   has_function_privilege(current_user,'cloud_purge_old_tombstones()','EXECUTE') AS tombstones,
+   has_function_privilege(current_user,'cloud_purge_expired_auth_artifacts()','EXECUTE') AS auth,
+   has_table_privilege(current_user,'cloud_users','SELECT') AS user_read,
+   has_table_privilege(current_user,'cloud_users','DELETE') AS user_delete,
+   has_table_privilege(current_user,'cloud_consumed_wechat_codes','SELECT') AS code_read,
+   has_table_privilege(current_user,'cloud_consumed_wechat_codes','DELETE') AS code_delete`)
+ const flags=capabilities.rows[0]
+ if(!flags||flags.tombstones!==true||flags.auth!==true||
+    flags.user_read!==false||flags.user_delete!==false||
+    flags.code_read!==false||flags.code_delete!==false)
+   throw Error('private_cloud_maintenance_scope_unsafe')
+ const result=await pool.query(`SELECT
+   cloud_purge_old_tombstones() AS tombstones,
+   cloud_purge_expired_auth_artifacts() AS auth_artifacts`)
+ const tombstones=result.rows[0]?.tombstones
+ const authArtifacts=result.rows[0]?.auth_artifacts
+ if(!Number.isSafeInteger(tombstones)||tombstones<0||
+    !Number.isSafeInteger(authArtifacts)||authArtifacts<0)
+   throw Error('private_cloud_maintenance_result_invalid')
+ return {loginWindows,tombstones,authArtifacts}
+}
+
 async function main(){
  const config=parsePrivateMaintenanceConfig(process.env)
  const localRequire=createRequire(__filename)
  const {Pool}=localRequire('pg') as {Pool:new(opts:Record<string,unknown>)=>PoolLike}
  const pool=new Pool(privatePoolConnectionOptions(config.url,config.schema,1))
  try{
-   const removed=await prunePrivateLoginWindows(pool,config.schema)
-   process.stdout.write('Cuoshi private login window prune completed; rows='+removed+'\n')
+   const result=await runPrivateRetentionCycle(pool,config.schema)
+   process.stdout.write('Cuoshi private retention cycle completed; login_windows='+
+     result.loginWindows+' tombstones='+result.tombstones+
+     ' auth_artifacts='+result.authArtifacts+'\n')
  }finally{await pool.end()}
 }
 if(require.main===module){

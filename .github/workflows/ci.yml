@@ -242,6 +242,8 @@ jobs:
         run: npm run build:private --prefix future/server
       - name: Boot-check compiled private runtime and isolated PostgreSQL production dependency
         run: npm run test:future:private-runtime-package
+      - name: Check production database readiness, outage and protected HTTP health status
+        run: npm run test:future:private-health
       - name: Verify hourly privacy maintenance worker and independent service safety
         run: npm run test:future:maintenance
       - name: Migrate and test disposable PostgreSQL schema

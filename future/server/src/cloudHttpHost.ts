@@ -12,7 +12,8 @@ import type {CloudRequestHandler,createTrustedEdgeBoundary} from './trustedEdge'
 import type {AuthenticatedCloudService} from './authenticatedService'
 
 type BackupService=Pick<AuthenticatedCloudService,'readBackup'|'upload'>
-export type CloudHttpDependencies={account:AccountHttpDependencies;backup:BackupService}
+export type CloudHttpDependencies={account:AccountHttpDependencies;backup:BackupService;
+  readiness?:()=>Promise<boolean>}
 const accountRoutes=new Set([
   '/v1/auth/wechat','/v1/auth/logout','/v1/account/cancel',
   '/v1/account/cancel/status',
@@ -32,8 +33,15 @@ export function createCloudHttpRouter(deps:CloudHttpDependencies){
     const pathname=req.url??''
     if(pathname==='/v1/backup/snapshot')return backup(req,res)
     if(accountRoutes.has(pathname))return account(req,res)
-    // A liveness check does not claim DB, WeChat or upload readiness.
-    if(pathname==='/healthz'&&req.method==='GET')return answer(res,204)
+    // Production readiness checks the four restricted DB pools through the
+    // trusted proxy. Synthetic QA may omit it to keep fixtures in-memory.
+    if(pathname==='/healthz'&&req.method==='GET'){
+      if(!deps.readiness)return answer(res,204)
+      let ready=false
+      try{ready=await deps.readiness()}catch{}
+      return ready?answer(res,204):
+        answer(res,503,{error:'cloud_temporarily_unavailable'})
+    }
     return answer(res,404,{error:'not_found'})
   }
 }

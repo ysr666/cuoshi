@@ -50,6 +50,8 @@ const noTls=new Params({connectionString:url.replace('verify-full','disable')})
 check(noTls.ssl===false,
  'TLS test can distinguish secure and insecure pg connection modes')
 const local=runtimeRequire('./privateConfig.js')
+check(typeof runtimeRequire('./privateHealth.js').createPrivateHealthProbe==='function',
+ 'compiled private production readiness checker loads independently')
 check(typeof runtimeRequire('./privateMaintenance.js').prunePrivateLoginWindows==='function',
  'compiled one-shot data-retention worker loads independently')
 check(typeof local.privatePoolConnectionOptions==='function'&&

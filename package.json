@@ -16,6 +16,7 @@
     "test:future:systemd-deploy": "node tests/check-future-systemd-deploy.mjs",
     "test:future:private-runtime-package": "node tests/check-future-private-runtime-package.mjs",
     "test:future:maintenance": "node tests/check-future-maintenance.mjs",
+    "test:future:private-health": "node tests/check-future-private-health.mjs",
     "prepare:future:migrations": "node future/server/deploy/render-migrations.mjs",
     "check:future:public-edge": "node future/server/check-public-edge.mjs",
     "test:future:mp-weixin": "node future/miniapp/check-build.mjs && vue-tsc --noEmit -p future/.generated-mp/tsconfig.json && node future/miniapp/check-runtime.mjs && node future/miniapp/check-history-view.mjs",

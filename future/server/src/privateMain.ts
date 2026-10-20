@@ -13,6 +13,7 @@ import {makeWechatCodeExchanger,loginWithWechatCode} from './wechatIdentity'
 import {AuthenticatedCloudService} from './authenticatedService'
 import type {DbPool} from './repository'
 import {checkPrivateDatabaseReadiness} from './privateReadiness'
+import {createPrivateHealthProbe} from './privateHealth'
 
 async function main(){
  const config=parsePrivateCloudConfig(process.env)
@@ -46,7 +47,8 @@ async function main(){
        backupSigningKey:config.backupSigningKey,
        nowSeconds:()=>Math.floor(Date.now()/1000)
      },exchange,login:loginWithWechatCode,account:service,permitLogin:limiter},
-     backup:service
+     backup:service,
+     readiness:createPrivateHealthProbe(pools)
    },edge,config.port)
    // No DB URLs, passwords, user identities, appSecret or JWTs in logs.
    process.stdout.write('Cuoshi private cloud listening on 127.0.0.1:'+config.port+' (trusted edge required)\n')
