@@ -19,6 +19,7 @@
     "test:future:restore-drill": "node tests/check-future-restore-drill.mjs",
     "test:future:health-monitor": "node tests/check-future-health-monitor.mjs",
     "test:future:private-health": "node tests/check-future-private-health.mjs",
+    "test:future:patched-build-deps": "node tests/check-future-patched-build-deps.mjs",
     "prepare:future:migrations": "node future/server/deploy/render-migrations.mjs",
     "check:future:public-edge": "node future/server/check-public-edge.mjs",
     "test:future:mp-weixin": "node future/miniapp/check-build.mjs && vue-tsc --noEmit -p future/.generated-mp/tsconfig.json && node future/miniapp/check-runtime.mjs && node future/miniapp/check-history-view.mjs",
@@ -83,5 +84,15 @@
     "typescript": "5.8.3",
     "vite": "5.2.8",
     "vue-tsc": "3.0.4"
+  },
+  "overrides": {
+    "@dcloudio/uni-mp-weixin": {
+      "ws": "8.22.0"
+    },
+    "source-map-js": "1.2.2",
+    "adm-zip": "0.6.1",
+    "@dcloudio/uni-nvue-styler": {
+      "postcss": "8.5.31"
+    }
   }
 }

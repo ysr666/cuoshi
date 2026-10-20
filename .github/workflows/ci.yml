@@ -93,6 +93,8 @@ jobs:
         run: npm run build:future:mp-weixin
       - name: Verify native pages, privacy gate, package hygiene and typecheck
         run: npm run test:future:mp-weixin
+      - name: Block reintroduced vulnerable build dependencies in actual native WeChat package
+        run: npm run test:future:patched-build-deps
       - name: Test native wx crypto, verified-offline restart and automatic reconnect
         run: npm run test:future:mp-weixin:offline
       - name: Upload isolated v0.5 developer-package (not for release)

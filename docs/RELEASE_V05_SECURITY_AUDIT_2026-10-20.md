@@ -38,3 +38,22 @@ npm audit --registry=https://registry.npmjs.org --omit=dev --json
 ## 自动化阻断规则更新
 
 独立 PostgreSQL 云后端的 GitHub CI 在 `npm ci --prefix future/server` 后，现直接执行 `npm audit --prefix future/server --omit=dev --audit-level=high --registry=https://registry.npmjs.org`；**任何 backend high/critical 报告或官方审计端点错误都会令数据库 Job 失败**，不会把网络无法审计当成 0 风险。根包的 uni-app/Vue 依赖保留既有完整 advisory 库存与上文逐项风险分流，不能为了让 CI 变绿粗暴强制更新依赖。
+
+## 2026-10-20 同日新增：四项定向补丁与实际安装验证（Draft PR #4）
+
+以保持 DCloud 主版本、`vue@3.4.21`、Vite 编译器对端不变为前提，根 `package.json` 对几个间接构建依赖增加明确 `overrides` 并用官方 npm Registry 重新安装固定的 `package-lock.json`：
+
+| 依赖/入口 | 原先 | 修补后 | 措施 |
+| --- | --- | --- | --- |
+| DCloud 微信构建工具引入的 `ws` | 8.18.0 | 8.22.0 | 针对 `@dcloudio/uni-mp-weixin` 仅覆盖对应 WebSocket 解析库 |
+| `source-map-js` | 根目录 1.2.1，其他位置部分 1.2.2 | 所有解析副本 1.2.2 | 锁文件去掉重复旧版本，防止 source-map 解析 DoS 回归 |
+| `adm-zip` | 0.5.16 | 0.6.1 | 构建工具解析压缩包的安全修补，防止旧版 ZIP 风险重入 |
+| NVue 样式处理的 `postcss` | 8.4.45（根目录本来是已修补的 8.5.30） | NVue 8.5.31、根目录 8.5.30 | 仅替换有漏洞的嵌套副本；不重写根项目 Vue / DCloud 版本 |
+
+在当前官方 npm advisory 快照（`npm audit --omit=dev --registry=https://registry.npmjs.org --json`）下，**受影响包**由 **44（27 high / 11 moderate / 6 low）下降到 39（22 high / 9 moderate / 8 low）**；低危受影响包数量有所上升，不应将整体解释为全覆盖解决。`ws`、`source-map-js`、`adm-zip`、`postcss`、`@dcloudio/uni-nvue-styler` 不再出现在当次漏洞对象中，具体引用的漏洞报告取决于 npm advisory 数据库变动。
+
+CI 新增 `npm run test:future:patched-build-deps`，核对**锁文件所有嵌套副本**都高于审计公布的受影响范围，真实 `@dcloudio/uni-mp-weixin`/NVue 运行时解析到修补后的库，并检查微信原生打包 JS 不直接引用这些 Node 专用构建库。**没有把 Node 构建库未出现在小程序 JS 解释成完整安全认证**：仍需要确认由 DCloud 生成的 Vue runtime/模板是否有可达的 XSS 路径。
+
+**未修复、必须保留为上线阻断的依赖风险**：`vue@3.4.21`、`@vue/server-renderer`、`@intlify` 旧子包、`vite@5.2.8`、DCloud 相关包以及其余构建工具链依赖。尤其 `@dcloudio/vite-plugin-uni@3.0.0-4080720251210001` 的 `peerDependencies.vite` **精确指定为 5.2.8**，直接改成新版 Vite 会违反插件的兼容合同，所以此轮**没有**强制升级 Vite、Vue 或 DCloud。下一次根框架升级需要单独隔离分支、完整兼容实验与两台真实微信设备验收，不能将 `npm audit fix --force` 当作可靠修复。
+
+**因此仍未通过发布安全签核**。本次只是减少了已知暴露面，并建立针对性的版本回归门禁；SCA inventory Job 成功仍然只是采集成功。
