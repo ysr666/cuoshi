@@ -59,7 +59,8 @@ try{
     resolve(root,'future/server/src/loginRateLimiter.ts'),
     resolve(root,'future/server/src/privateConfig.ts'),
     resolve(root,'future/server/src/privateReadiness.ts'),
-    resolve(root,'future/server/src/privateMaintenance.ts')
+    resolve(root,'future/server/src/privateMaintenance.ts'),
+    resolve(root,'future/server/src/privateHealth.ts')
   ],{cwd:root,stdio:'pipe'})
   const m=require(join(out,'src/core/model.js'))
   const {
