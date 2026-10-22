@@ -24,7 +24,6 @@
     "check:future:public-edge": "node future/server/check-public-edge.mjs",
     "test:future:mp-weixin": "node future/miniapp/check-build.mjs && vue-tsc --noEmit -p future/.generated-mp/tsconfig.json && node future/miniapp/check-runtime.mjs && node future/miniapp/check-history-view.mjs",
     "test:future:mp-weixin:offline": "CUOSHI_V05_CLOUD_ORIGIN=https://test.cuoshi.invalid node future/miniapp/build.mjs && node future/miniapp/check-offline-restart.mjs && CUOSHI_V05_CLOUD_ORIGIN= node future/miniapp/build.mjs && npm run test:future:mp-weixin",
-    "dev:app": "uni -p app",
     "test:core": "node tests/check-core.mjs",
     "test:v04": "node tests/check-v04.mjs",
     "test:store": "node tests/check-store.mjs",
@@ -68,12 +67,10 @@
   },
   "dependencies": {
     "@dcloudio/uni-app": "3.0.0-4080720251210001",
-    "@dcloudio/uni-app-plus": "3.0.0-4080720251210001",
     "@dcloudio/uni-components": "3.0.0-4080720251210001",
     "@dcloudio/uni-h5": "3.0.0-4080720251210001",
     "@dcloudio/uni-mp-weixin": "3.0.0-4080720251210001",
-    "vue": "3.4.21",
-    "vue-i18n": "9.14.5"
+    "vue": "3.4.21"
   },
   "devDependencies": {
     "@dcloudio/types": "3.4.19",

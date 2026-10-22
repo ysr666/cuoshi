@@ -80,3 +80,8 @@ CI 新增官方 `pg_dump` → 空数据库 `pg_restore` 合成记录恢复演练
 #### 前端依赖安全进展（2026-10-20）
 
 已为 DCloud 工具链的 ws、source-map-js、adm-zip、PostCSS 4 项间接依赖加入明确安全补丁和 CI 回归，官方 npm 审计由 44 项受影响包降至 39 项（高危 27 降至 22）。完整见 [依赖审计分流](RELEASE_V05_SECURITY_AUDIT_2026-10-20.md#2026-10-20-同日新增四项定向补丁与实际安装验证draft-pr-4)。仍存在 Vue、Intlify、Vite、DCloud 等框架风险，正式上线的安全签核**没有完成**。
+
+
+#### 2026-10-22 安全风险库存更新（Draft PR #4）
+
+前述 2026-10-20 的 44→39 是历史风险基线，**不是当前剩余数量**。五项间接依赖定向补丁与移除非首发直接依赖后，官方 npm `--omit=dev` 当次复核为 **25 个受影响包（19 High、6 Moderate、0 Low、0 Critical）**，后端独立生产依赖当次为 **0 项**。完整审计明细见 [更新后的技术分流](RELEASE_V05_SECURITY_AUDIT_2026-10-20.md#2026-10-22--第二轮定向构建依赖修补draft-pr-4)。仍存在 DCloud、Vue、Vite、`braces` 等风险；**发布关口 D 继续 BLOCKED**，所有生产条件和双真机要求不变。

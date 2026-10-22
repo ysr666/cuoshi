@@ -66,3 +66,10 @@ CI 新增 `npm run test:future:patched-build-deps`，核对**锁文件所有嵌�
 `npm audit --registry=https://registry.npmjs.org --omit=dev --json` 的同机对照：**39（22 High、9 Moderate、8 Low）→ 29（21 High、8 Moderate、0 Low）**，Critical 仍为 0。计数表示 npm 判定的受影响包数量，不代表消除了 10 条独立漏洞，更不代表整个前端安全通过。相关测试在 `tests/check-future-patched-build-deps.mjs` 校验全锁文件嵌套版本与实际安装版本；构建需保留 DCloud 的精确 Vite 5.2.8 peer 契约。
 
 **仍阻断真实上线**：`braces`（当前 npm 公告覆盖现有 3.x）、`@vue/server-renderer` / Vue、`@intlify`、Vite 与 DCloud 间接依赖，以及最终微信 JS 可达性和供应链风险的人工审查。前端 CI SCA SUCCESS 表示完成审计采集，不能用作安全签字。发布必须等真实 AppID/备案/合法域名、国内云监控备份及两台真机完成。
+
+
+### 2026-10-22 · 移除非首发依赖（v0.5 安全与体积收敛）
+
+经源码引用检查与隔离构建验证，删除根包未用于 H5/微信端的 `@dcloudio/uni-app-plus`、显式 `vue-i18n` 直接依赖，以及未纳入首发范围的原生 App 调试脚本 `dev:app`。未来如果需要正式原生 App，应在独立产品范围和验证下恢复，不向首发小程序追加功能。没有改变微信/云端业务数据格式，v0.4 / PR #5 完全未修改。
+
+在相同 npm Registry 版本快照下，从上一补丁的 **29（21 High / 8 Moderate / 0 Low）** 进一步减为 **25（19 High / 6 Moderate / 0 Low）**；这是传递依赖影响范围缩小，不是宣称修复了 4 条独立安全公告。剩余依赖风险仍待人工签核；修补后 H5、v0.4 编译隔离、v0.5 原生运行、核心数据测试及 GitHub CI 必须继续通过。

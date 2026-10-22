@@ -10,6 +10,9 @@ let count=0
 const check=(value,name)=>{assert.ok(value,name);count++}
 const read=(name)=>JSON.parse(readFileSync(name,'utf8'))
 const pkg=read('package.json'),lock=read('package-lock.json')
+check(!Object.hasOwn(pkg.dependencies,'@dcloudio/uni-app-plus')&&
+ !Object.hasOwn(pkg.dependencies,'vue-i18n')&&!Object.hasOwn(pkg.scripts,'dev:app'),
+ 'Unused native App and direct i18n dependencies remain out of v0.5 builds')
 const patched={
  'ws':{minimum:'8.22.0',parent:'@dcloudio/uni-mp-weixin'},
  'source-map-js':{minimum:'1.2.2'},
