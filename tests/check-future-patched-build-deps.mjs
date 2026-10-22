@@ -14,7 +14,12 @@ const patched={
  'ws':{minimum:'8.22.0',parent:'@dcloudio/uni-mp-weixin'},
  'source-map-js':{minimum:'1.2.2'},
  'adm-zip':{minimum:'0.6.1'},
- 'postcss':{minimum:'8.5.23',reviewed:'8.5.31',parent:'@dcloudio/uni-nvue-styler'}
+ 'postcss':{minimum:'8.5.23',reviewed:'8.5.31',parent:'@dcloudio/uni-nvue-styler'},
+ '@babel/core':{minimum:'7.29.6'},
+ 'jpeg-js':{minimum:'0.4.4'},
+ 'phin':{minimum:'3.7.1'},
+ 'postcss-selector-parser':{minimum:'7.1.6'},
+ 'esbuild':{minimum:'0.25.12'}
 }
 const nodes=[]
 for(const [path,definition] of Object.entries(lock.packages)){
@@ -50,6 +55,10 @@ check(fromNvue('postcss/package.json').version==='8.5.31',
  'Real DCloud NVue styler resolves patched PostCSS parser')
 check(createRequire(resolve('package.json'))('adm-zip/package.json').version==='0.6.1',
  'Real builder resolves patched ZIP parser')
+for(const name of ['@babel/core','jpeg-js','phin','postcss-selector-parser','esbuild']){
+ check(createRequire(resolve('package.json'))(name+'/package.json').version===patched[name].minimum,
+  'Real root installation resolves explicitly reviewed patch: '+name)
+}
 const viteVersion=read('node_modules/vite/package.json').version
 const uniPeer=read('node_modules/@dcloudio/vite-plugin-uni/package.json').peerDependencies.vite
 check(viteVersion===uniPeer&&pkg.devDependencies.vite===viteVersion,

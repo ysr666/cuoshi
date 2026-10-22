@@ -93,6 +93,11 @@
     "adm-zip": "0.6.1",
     "@dcloudio/uni-nvue-styler": {
       "postcss": "8.5.31"
-    }
+    },
+    "@babel/core": "7.29.6",
+    "jpeg-js": "0.4.4",
+    "phin": "3.7.1",
+    "postcss-selector-parser": "7.1.6",
+    "esbuild": "0.25.12"
   }
 }

@@ -57,3 +57,12 @@ CI 新增 `npm run test:future:patched-build-deps`，核对**锁文件所有嵌�
 **未修复、必须保留为上线阻断的依赖风险**：`vue@3.4.21`、`@vue/server-renderer`、`@intlify` 旧子包、`vite@5.2.8`、DCloud 相关包以及其余构建工具链依赖。尤其 `@dcloudio/vite-plugin-uni@3.0.0-4080720251210001` 的 `peerDependencies.vite` **精确指定为 5.2.8**，直接改成新版 Vite 会违反插件的兼容合同，所以此轮**没有**强制升级 Vite、Vue 或 DCloud。下一次根框架升级需要单独隔离分支、完整兼容实验与两台真实微信设备验收，不能将 `npm audit fix --force` 当作可靠修复。
 
 **因此仍未通过发布安全签核**。本次只是减少了已知暴露面，并建立针对性的版本回归门禁；SCA inventory Job 成功仍然只是采集成功。
+
+
+## 2026-10-22 · 第二轮定向构建依赖修补（Draft PR #4）
+
+在独立干净的 `design/editorial-ui-v04-preview` 工作区中，对五个**间接构建依赖**补充可独立验证的锁定：`@babel/core@7.29.6`（GHSA-4x5r-pxfx-6jf8）、`jpeg-js@0.4.4`（GHSA-xvf7-4v9q-58w6）、`phin@3.7.1`（GHSA-x565-32qp-m3vf）、`postcss-selector-parser@7.1.6`（GHSA-rj75-hqrm-r3gf）及 `esbuild@0.25.12`（GHSA-67mh-4wv8-2f99）。不改变已冻结的 DCloud、Vue、Vite 主包；`npm audit fix --force` **未使用**。
+
+`npm audit --registry=https://registry.npmjs.org --omit=dev --json` 的同机对照：**39（22 High、9 Moderate、8 Low）→ 29（21 High、8 Moderate、0 Low）**，Critical 仍为 0。计数表示 npm 判定的受影响包数量，不代表消除了 10 条独立漏洞，更不代表整个前端安全通过。相关测试在 `tests/check-future-patched-build-deps.mjs` 校验全锁文件嵌套版本与实际安装版本；构建需保留 DCloud 的精确 Vite 5.2.8 peer 契约。
+
+**仍阻断真实上线**：`braces`（当前 npm 公告覆盖现有 3.x）、`@vue/server-renderer` / Vue、`@intlify`、Vite 与 DCloud 间接依赖，以及最终微信 JS 可达性和供应链风险的人工审查。前端 CI SCA SUCCESS 表示完成审计采集，不能用作安全签字。发布必须等真实 AppID/备案/合法域名、国内云监控备份及两台真机完成。
