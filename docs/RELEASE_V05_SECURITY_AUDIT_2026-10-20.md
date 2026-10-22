@@ -77,3 +77,9 @@ CI 新增 `npm run test:future:patched-build-deps`，核对**锁文件所有嵌�
 ### 2026-10-22 · npm 10 / npm 11 跨版本锁文件一致性修复
 
 第一次移除非首发直接依赖后，macOS npm 11 的 `npm ci` 通过，但 GitHub Node 22 / npm 10.9.9 的 `npm ci` 因旧版 DCloud NVue 的精确 `postcss@8.4.45` 嵌套锁解析失败（`EUSAGE`）。该失败并非业务测试通过，也不能被忽略。现把原仅针对 NVue 的 `postcss@8.5.31` 安全覆盖改为**统一传递依赖覆盖**，并使用 CI 同款 npm 10.9.9 重建 `package-lock.json`；必须分别通过 npm 10 清洁安装、实际根/嵌套 PostCSS 版本检查、H5/微信双端构建及 v0.5 原生离线测试后，才能推送。PostCSS 不升级至新的主版本，也不改写 DCloud 或 Vite 的精确 peer 约束。首发安全审核仍为 BLOCKED。
+
+### 2026-10-22 · DCloud Intlify 传递依赖安全更新
+
+对 `@dcloudio/uni-cli-shared` 仍精确要求的 `@intlify/*@9.1.9` 旧链添加**七个组件统一 9.14.5** 的 npm `overrides`：`core-base`、`message-compiler`、`message-resolver`、`runtime`、`vue-devtools`、`shared` 与 `devtools-if`。旧版本包含 `GHSA-p2ph-7g93-hw3m`（消息解析相关）及 `GHSA-x8qp-wqqm-57ph`（core-base）公告；新版锁文件确保它们不再存在于安装树。仅更新传递构建依赖，不更改 uni-app、Vue、Vite 主框架、私人记录格式或小程序产品功能。
+
+锁文件由 GitHub CI 同款 npm 10.9.9 重建并清洁安装，`tests/check-future-patched-build-deps.mjs` 新增实装/嵌套版本的防回退断言，H5、原生微信编译、原生包安全及离线同步模拟检查均已通过。**仍有未完成安全风险**，尤其 Vue SSR、Vite、`braces` 的独立漏洞与编译器链攻击面需要持续评估。不能因构建通过而授予正式发布资格；npm 官方实时风险总数需要以本轮 GitHub Actions 采集报告为准，不能用离线估算代替。

@@ -93,6 +93,13 @@
     "phin": "3.7.1",
     "postcss-selector-parser": "7.1.6",
     "esbuild": "0.25.12",
-    "postcss": "8.5.31"
+    "postcss": "8.5.31",
+    "@intlify/core-base": "9.14.5",
+    "@intlify/message-compiler": "9.14.5",
+    "@intlify/message-resolver": "9.14.5",
+    "@intlify/runtime": "9.14.5",
+    "@intlify/vue-devtools": "9.14.5",
+    "@intlify/shared": "9.14.5",
+    "@intlify/devtools-if": "9.14.5"
   }
 }

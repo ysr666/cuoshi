@@ -33,6 +33,24 @@ for(const [path,definition] of Object.entries(lock.packages)){
  if(!name)continue
  nodes.push({path,name,version:definition.version})
 }
+// DCloud pins obsolete Intlify 9.1.9 transitive versions. The compatible
+// 9.14.5 line removes vulnerable message-resolver and runtime copies; never
+// silently reintroduce old compiler/runtime packages in the lockfile.
+const reviewedIntlify=['core-base','message-compiler','message-resolver',
+ 'runtime','vue-devtools','shared','devtools-if'].map(x=>'@intlify/'+x)
+for(const name of reviewedIntlify){
+ check(pkg.overrides?.[name]==='9.14.5',
+  'Intlify 9.14.5 security pin remains explicit: '+name)
+ const copies=nodes.filter(x=>x.name===name)
+ check(copies.every(x=>x.version==='9.14.5'),
+  'No stale nested Intlify package may enter the build: '+name)
+}
+check(nodes.some(x=>x.name==='@intlify/core-base'&&x.version==='9.14.5'),
+ 'Patched Intlify core remains present in DCloud compiler')
+check(nodes.some(x=>x.name==='@intlify/message-compiler'&&x.version==='9.14.5'),
+ 'Patched Intlify message compiler remains present')
+check(!nodes.some(x=>x.name.startsWith('@intlify/')&&x.version==='9.1.9'),
+ 'Known vulnerable DCloud Intlify 9.1.9 tree cannot return')
 const semver=(value)=>value.split('.').map(x=>Number(x))
 const atLeast=(candidate,min)=>{
  const a=semver(candidate),b=semver(min)
