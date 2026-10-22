@@ -73,3 +73,7 @@ CI 新增 `npm run test:future:patched-build-deps`，核对**锁文件所有嵌�
 经源码引用检查与隔离构建验证，删除根包未用于 H5/微信端的 `@dcloudio/uni-app-plus`、显式 `vue-i18n` 直接依赖，以及未纳入首发范围的原生 App 调试脚本 `dev:app`。未来如果需要正式原生 App，应在独立产品范围和验证下恢复，不向首发小程序追加功能。没有改变微信/云端业务数据格式，v0.4 / PR #5 完全未修改。
 
 在相同 npm Registry 版本快照下，从上一补丁的 **29（21 High / 8 Moderate / 0 Low）** 进一步减为 **25（19 High / 6 Moderate / 0 Low）**；这是传递依赖影响范围缩小，不是宣称修复了 4 条独立安全公告。剩余依赖风险仍待人工签核；修补后 H5、v0.4 编译隔离、v0.5 原生运行、核心数据测试及 GitHub CI 必须继续通过。
+
+### 2026-10-22 · npm 10 / npm 11 跨版本锁文件一致性修复
+
+第一次移除非首发直接依赖后，macOS npm 11 的 `npm ci` 通过，但 GitHub Node 22 / npm 10.9.9 的 `npm ci` 因旧版 DCloud NVue 的精确 `postcss@8.4.45` 嵌套锁解析失败（`EUSAGE`）。该失败并非业务测试通过，也不能被忽略。现把原仅针对 NVue 的 `postcss@8.5.31` 安全覆盖改为**统一传递依赖覆盖**，并使用 CI 同款 npm 10.9.9 重建 `package-lock.json`；必须分别通过 npm 10 清洁安装、实际根/嵌套 PostCSS 版本检查、H5/微信双端构建及 v0.5 原生离线测试后，才能推送。PostCSS 不升级至新的主版本，也不改写 DCloud 或 Vite 的精确 peer 约束。首发安全审核仍为 BLOCKED。

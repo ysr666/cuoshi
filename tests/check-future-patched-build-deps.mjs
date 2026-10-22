@@ -17,7 +17,7 @@ const patched={
  'ws':{minimum:'8.22.0',parent:'@dcloudio/uni-mp-weixin'},
  'source-map-js':{minimum:'1.2.2'},
  'adm-zip':{minimum:'0.6.1'},
- 'postcss':{minimum:'8.5.23',reviewed:'8.5.31',parent:'@dcloudio/uni-nvue-styler'},
+ 'postcss':{minimum:'8.5.23',reviewed:'8.5.31'},
  '@babel/core':{minimum:'7.29.6'},
  'jpeg-js':{minimum:'0.4.4'},
  'phin':{minimum:'3.7.1'},
