@@ -83,3 +83,15 @@ CI 新增 `npm run test:future:patched-build-deps`，核对**锁文件所有嵌�
 对 `@dcloudio/uni-cli-shared` 仍精确要求的 `@intlify/*@9.1.9` 旧链添加**七个组件统一 9.14.5** 的 npm `overrides`：`core-base`、`message-compiler`、`message-resolver`、`runtime`、`vue-devtools`、`shared` 与 `devtools-if`。旧版本包含 `GHSA-p2ph-7g93-hw3m`（消息解析相关）及 `GHSA-x8qp-wqqm-57ph`（core-base）公告；新版锁文件确保它们不再存在于安装树。仅更新传递构建依赖，不更改 uni-app、Vue、Vite 主框架、私人记录格式或小程序产品功能。
 
 锁文件由 GitHub CI 同款 npm 10.9.9 重建并清洁安装，`tests/check-future-patched-build-deps.mjs` 新增实装/嵌套版本的防回退断言，H5、原生微信编译、原生包安全及离线同步模拟检查均已通过。**仍有未完成安全风险**，尤其 Vue SSR、Vite、`braces` 的独立漏洞与编译器链攻击面需要持续评估。不能因构建通过而授予正式发布资格；npm 官方实时风险总数需要以本轮 GitHub Actions 采集报告为准，不能用离线估算代替。
+
+#### 2026-10-22 · 官方 npm 实时审计与网络重试边界
+
+安装七项补丁后使用联网 npm Registry 的 `npm audit --omit=dev --fetch-retries=0 --fetch-timeout=12000 --json` 查询，前端受影响包为 **20 个（20 High、0 Moderate、0 Low、0 Critical）**；上一次为 25 个（19 High、6 Moderate）。计数变动不能等同于修复了五个独立漏洞，且新严重程度分类由官方数据决定；Intlify 不再出现在受影响对象清单。
+
+这次发现 GitHub 和 Mac 的 npm 审计请求可能长时间卡住，因此对仓库 CI 的前端报告与独立后端审计都设置了**一次网络重试、每请求 15 秒超时**。仍保持失败即阻断：前端需要机器可解析的无接口错误的真实报告，后端 High/Critical 或审计失败仍是 Job 失败。不要将 `npm audit --offline` 可能返回的零值冒充真实的安全结论；也不因这里的审计结果解除发布阻断。
+
+#### GitHub PostgreSQL Job 官方安全审计兼容性修复
+
+CI 在 Node 22 / 默认 npm 10.9.9 下使用 `npm audit --prefix future/server`，等待五分钟后被 npm Registry 旧版 `/-/npm/v1/security/audits/quick` 端点以 HTTP 400「Invalid package tree」拒绝。此处是安全审计接口失败，**绝不能**当作后端零漏洞或放宽检查。该错误发生在正式数据库集成步骤之前，并不是 PostgreSQL 断言失败。
+
+本轮将这个独立 Job 的审计进程切换到精确版本 `npm@11.7.0`，在 `future/server` 工作目录执行，并继续使用官方 Registry、High/Critical 非零退出及有界重试。`npm ci` 和生产部署仍使用独立后端锁文件，不把 npm 11 工具包添加到产品依赖树。真实审计端点不可达、报告无效或出现高危仍使 CI 失败，不提供强制放行。

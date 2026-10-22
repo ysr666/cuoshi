@@ -165,7 +165,7 @@ jobs:
         shell: bash
         run: |
           set +e
-          npm audit --omit=dev --registry=https://registry.npmjs.org --json > "$RUNNER_TEMP/cuoshi-audit-raw.json"
+          npm audit --omit=dev --registry=https://registry.npmjs.org --fetch-retries=1 --fetch-timeout=15000 --json > "$RUNNER_TEMP/cuoshi-audit-raw.json"
           audit_exit=$?
           set -e
           echo "npm audit exit code: $audit_exit (nonzero is expected for known vulnerabilities)"
@@ -239,7 +239,7 @@ jobs:
       - name: Install isolated PostgreSQL client
         run: npm ci --prefix future/server --ignore-scripts --no-audit
       - name: Block high and critical vulnerabilities in private production backend
-        run: npm audit --prefix future/server --omit=dev --audit-level=high --registry=https://registry.npmjs.org
+        run: cd future/server && npx --yes npm@11.7.0 audit --omit=dev --audit-level=high --registry=https://registry.npmjs.org --fetch-retries=1 --fetch-timeout=15000
       - name: Typecheck isolated backend
         run: npm run check:types --prefix future/server
       - name: Compile private-loopback cloud executable (no credentials)
