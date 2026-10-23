@@ -205,6 +205,18 @@ try{
  ok(journal2.load().cursor.revision===sim.readForOwner(who,ownerId).revision,
    'Hydrated device persisted correct remote cursor')
  ok(writes2===0,'New device never overwrote cloud with empty local')
+ // A backend/proxy response carrying another owner's valid-looking snapshot
+ // must quarantine the session, NOT become an ordinary sync conflict/offline.
+ const normalReadCloud=port.readCloud
+ const countBeforeForeign=uploaded
+ port.readCloud=async()=>({...sim.readForOwner(who,ownerId),ownerId:'account0002'})
+ const untrusted=build()
+ state=await untrusted.acceptCloudNotice()
+ ok(state.phase==='attention'&&state.identityInvalid===true,
+   'Foreign-owner remote snapshot revokes account entitlement immediately')
+ ok(uploaded===countBeforeForeign,
+   'Foreign-owner response is not uploaded or reconciled with private local data')
+ port.readCloud=normalReadCloud
  // Host lifecycle events automatically invoke the sync trigger after
  // durable record write, foreground and connectivity restoration.
  const callbacks={saved:null,foreground:null,connected:null}

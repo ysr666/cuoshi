@@ -21,7 +21,7 @@ try{
   ],{cwd:root,stdio:'inherit'})
   const m=require(join(out,'src/core/model.js'))
   const {CloudContractSimulator}=require(join(out,'future/cloud/snapshotContract.js'))
-  const {createLinkedJournal,runAutomaticSyncOnce}=require(join(out,'future/cloud/automaticSync.js'))
+  const {createLinkedJournal,runAutomaticSyncOnce,isSyncAuthenticationFailure}=require(join(out,'future/cloud/automaticSync.js'))
   const {localSyncKey,createDurableJournalStore,createAuthenticatedBackupHttpBridge,
     createFutureSyncPort,createUniRequestTransport}=require(join(out,'future/cloud/clientAdapters.js'))
   const user='account0001',device='device0001',other='account0002'
@@ -105,6 +105,44 @@ try{
   const bridge=createAuthenticatedBackupHttpBridge({
     origin,http,ownerId:user,authentication:{getVerifiedSession:async()=>({ownerId:sessionOwner,accessToken:token})}
   })
+  // A structurally valid but cross-account HTTP response must be rejected
+  // at the transport boundary, never handed to a page or sync controller.
+  const ownCloud=sim.readForOwner(principal,user)
+  const ownReceipt={...seed.receipt,idempotencyKey:'security0001'}
+  const securityRequest={baseRevision:0,baseDigest:null,
+    idempotencyKey:'security0001',records:local}
+  let injectedRead={...ownCloud,ownerId:other}
+  let injectedWrite={kind:'accepted',snapshot:ownCloud,
+    receipt:{...ownReceipt,ownerId:other}}
+  const guarded=createAuthenticatedBackupHttpBridge({
+    origin,ownerId:user,
+    authentication:{getVerifiedSession:async()=>({ownerId:user,accessToken:token})},
+    http:{request:async input=> input.method==='GET'?
+      {statusCode:200,data:injectedRead}:{statusCode:200,data:injectedWrite}}
+  })
+  await rejects(()=>guarded.readCloud(),/sync_cloud_owner_mismatch/)
+  ok(isSyncAuthenticationFailure(Error('sync_cloud_owner_mismatch')),
+    'Foreign-owner cloud data is an authentication boundary violation, not offline')
+  injectedRead=ownCloud
+  ok((await guarded.readCloud()).ownerId===user,
+    'Correctly scoped cloud response remains readable')
+  await rejects(()=>guarded.upload(securityRequest),/sync_cloud_owner_mismatch/)
+  injectedWrite={kind:'accepted',snapshot:{...ownCloud,ownerId:other},
+    receipt:ownReceipt}
+  await rejects(()=>guarded.upload(securityRequest),/sync_cloud_owner_mismatch/)
+  injectedWrite={kind:'replayed',receipt:{...ownReceipt,ownerId:other}}
+  await rejects(()=>guarded.upload(securityRequest),/sync_cloud_owner_mismatch/)
+  injectedWrite={kind:'replayed',receipt:{...ownReceipt,idempotencyKey:'wrongkey0001'}}
+  await rejects(()=>guarded.upload(securityRequest),/sync_cloud_receipt_invalid/)
+  injectedWrite={kind:'accepted',snapshot:{...ownCloud,revision:2},
+    receipt:ownReceipt}
+  await rejects(()=>guarded.upload(securityRequest),/sync_cloud_upload_invalid/)
+  injectedWrite={kind:'accepted',snapshot:ownCloud,receipt:ownReceipt}
+  ok((await guarded.upload(securityRequest)).kind==='accepted',
+    'Valid accepted receipt and owner-matched snapshot still pass')
+  injectedWrite={kind:'replayed',receipt:ownReceipt}
+  ok((await guarded.upload(securityRequest)).kind==='replayed',
+    'Valid idempotent replay remains supported')
   throws(()=>createFutureSyncPort({
     ownerId:other,deviceId:device,storage,currentRecords:()=>local,
     http:bridge,secureRequestId:()=> 'request0000001'

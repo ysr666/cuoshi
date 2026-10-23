@@ -164,6 +164,9 @@ export function createAuthenticatedBackupHttpBridge(config:SyncHttpBridgeConfig)
          !Number.isSafeInteger(cloud.revision)||!validHash(cloud.digest)||
          !cloud.records||typeof cloud.records!=='object')
         throw Error('sync_cloud_read_invalid')
+      // Never expose another owner's snapshot even if a trusted backend or
+      // reverse proxy returns a structurally valid but misrouted response.
+      if(cloud.ownerId!==config.ownerId)throw Error('sync_cloud_owner_mismatch')
       return copy(cloud)
     },
     async upload(request:UploadRequest):Promise<UploadDecision>{
@@ -215,12 +218,20 @@ export function createAuthenticatedBackupHttpBridge(config:SyncHttpBridgeConfig)
          !Number.isSafeInteger(receipt.revision)||Number(receipt.revision)<1||
          !validHash(receipt.digest)||!validId(receipt.idempotencyKey))
         throw Error('sync_cloud_receipt_invalid')
+      if(receipt.ownerId!==config.ownerId)
+        throw Error('sync_cloud_owner_mismatch')
+      if(receipt.idempotencyKey!==request.idempotencyKey)
+        throw Error('sync_cloud_receipt_invalid')
       const typedReceipt=copy(receipt) as UploadReceipt
       if(body.kind==='accepted'){
         const snapshot=body.snapshot as CloudSnapshot|undefined
         if(!snapshot||!validId(snapshot.ownerId)||
            !Number.isSafeInteger(snapshot.revision)||!validHash(snapshot.digest)||
            !snapshot.records||typeof snapshot.records!=='object')
+          throw Error('sync_cloud_upload_invalid')
+        if(snapshot.ownerId!==config.ownerId)
+          throw Error('sync_cloud_owner_mismatch')
+        if(snapshot.revision!==receipt.revision||snapshot.digest!==receipt.digest)
           throw Error('sync_cloud_upload_invalid')
         return {kind:'accepted',snapshot:copy(snapshot),receipt:typedReceipt}
       }

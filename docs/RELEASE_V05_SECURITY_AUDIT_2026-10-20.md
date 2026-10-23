@@ -95,3 +95,11 @@ CI 新增 `npm run test:future:patched-build-deps`，核对**锁文件所有嵌�
 CI 在 Node 22 / 默认 npm 10.9.9 下使用 `npm audit --prefix future/server`，等待五分钟后被 npm Registry 旧版 `/-/npm/v1/security/audits/quick` 端点以 HTTP 400「Invalid package tree」拒绝。此处是安全审计接口失败，**绝不能**当作后端零漏洞或放宽检查。该错误发生在正式数据库集成步骤之前，并不是 PostgreSQL 断言失败。
 
 本轮将这个独立 Job 的审计进程切换到精确版本 `npm@11.7.0`，在 `future/server` 工作目录执行，并继续使用官方 Registry、High/Critical 非零退出及有界重试。`npm ci` 和生产部署仍使用独立后端锁文件，不把 npm 11 工具包添加到产品依赖树。真实审计端点不可达、报告无效或出现高危仍使 CI 失败，不提供强制放行。
+
+### 2026-10-24 · 账号隔离：服务端误路由响应必须在 HTTP 边界拒绝
+
+复查发现，自动同步的高层有 ownerId 与摘要校验，但底层已登录的备份 HTTP 适配器原先对**结构正确、归属却是另一个用户**的云端 GET 快照或上传成功回执仅做字段类型检查，仍可能将其交给后续调用者；而云优先控制器对部分归属异常可能仅提示一般同步故障，未持久撤销旧账号的离线许可。
+
+现将校验前移：GET 只允许返回当前已核验 owner 的快照；PUT 的 accepted/replayed 回执、accepted 快照都必须属于当前 owner，回执幂等键必须等于当前请求，accepted 的快照 revision/digest 必须与回执一致。若发生跨账号响应，一律抛出独立 `sync_cloud_owner_mismatch` 安全异常；自动同步及云优先控制器将其视为身份边界失效，而非网络中断，通知原生运行时锁定当前账号操作并持久隔离旧的离线权限，**不删除本地私人历史，也不将外账号记录写入本机**。
+
+合成双账号测试涵盖 GET 混入外账号、PUT accepted/replayed 外账号回执、快照归属错误、幂等键不匹配和回执/快照不一致，同时验证合法回执与自动补传不受影响。测试采用虚构身份，不代表已在正式微信账号、真实 HTTPS 后端或双真机上验收。尚未完成生产安全与隐私签核，发布保持阻断。

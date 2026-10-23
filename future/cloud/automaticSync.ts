@@ -17,7 +17,7 @@ const digest=(records:Records)=>sha256(stableJson(records))
 // Expired/revoked tokens and a changed account must NEVER be reported as
 // ordinary connectivity failures that still permit offline use of old data.
 export const isSyncAuthenticationFailure=(error:unknown):boolean=>
-  error instanceof Error&&/^(?:sync_(?:session_owner_changed|cloud_(?:authentication_required|access_denied))|wechat_session_(?:account_changed|authorization_required|access_denied|authentication_failed|abandoned))$/.test(error.message)
+  error instanceof Error&&/^(?:sync_(?:session_owner_changed|cloud_(?:authentication_required|access_denied|owner_mismatch))|wechat_session_(?:account_changed|authorization_required|access_denied|authentication_failed|abandoned))$/.test(error.message)
 type Cursor={revision:number;digest:string}
 type Pending={request:UploadRequest;expectedDigest:string;blocked?:boolean}
 export type SyncJournal={

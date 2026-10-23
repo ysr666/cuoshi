@@ -60,7 +60,8 @@ export function createCloudFirst(args:{
  async function readCloud(){
    const cloud=await port.readCloud()
    if(cloud){
-     if(cloud.ownerId!==ownerId||!Number.isSafeInteger(cloud.revision)||cloud.revision<1)
+     if(cloud.ownerId!==ownerId)throw Error('cloud_first_account_changed')
+     if(!Number.isSafeInteger(cloud.revision)||cloud.revision<1)
        throw Error('cloud_first_remote_invalid')
      validate(cloud.records)
      if(digest(cloud.records)!==cloud.digest)throw Error('cloud_first_remote_invalid')
@@ -174,7 +175,7 @@ export function createCloudFirst(args:{
          const reason=e instanceof Error?e.message:''
          // A remote 401/403 or a changed account is NOT offline. Quarantine
          // the old account until a newly verified login explicitly unlocks it.
-         const invalid=/^(?:wechat_session_(?:account_changed|authorization_required|access_denied|authentication_failed|abandoned|invalid_response)|cloud_first_account_changed|sync_(?:owner_mismatch|session_owner_changed|cloud_(?:authentication_required|access_denied))|cloud_first_wrong_account)$/.test(reason)
+         const invalid=/^(?:wechat_session_(?:account_changed|authorization_required|access_denied|authentication_failed|abandoned|invalid_response)|cloud_first_account_changed|sync_(?:owner_mismatch|session_owner_changed|cloud_(?:authentication_required|access_denied|owner_mismatch))|cloud_first_wrong_account)$/.test(reason)
          const rateLimited=reason==='wechat_session_rate_limited'
          const network=!invalid&&(rateLimited||/network|offline|timeout|unavailable|http/i.test(reason))
          set({phase:network?'offline':'attention',identityInvalid:invalid||state.identityInvalid,
