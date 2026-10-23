@@ -152,6 +152,10 @@ jobs:
         env:
           CHROME_PATH: ${{ steps.chrome.outputs.chrome-path }}
         run: npm run test:future:admin-preview
+      - name: Production-shaped protected staff console and MFA API Chrome checks
+        env:
+          CHROME_PATH: ${{ steps.chrome.outputs.chrome-path }}
+        run: npm run test:future:staff-console
       - name: H5 layout, typography, touch feedback and notes
         env:
           CHROME_PATH: ${{ steps.chrome.outputs.chrome-path }}

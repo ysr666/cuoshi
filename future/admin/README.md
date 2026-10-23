@@ -46,3 +46,11 @@ npm run test:future:admin-preview
 ## 独立管理员服务入口（仅代码，未部署）
 
 新增 `future/server/src/staffHttpHost.ts`，限定 127.0.0.1 与可信本机代理，只允许运营汇总及经审批的工单单日查询两个精确路径。普通微信登录和私人备份路由返回 404；它没有自动注册到小程序公开服务器。员工 MFA、独立正式管理域名及安全运维配置仍需生产资源。对应 `npm run test:future:staff-host` 做隔离回归。
+
+## 真实接口形态的独立员工管理网页（非演示页面）
+
+新增 `future/admin/live/`：这是与原先虚构数字的预览界面**完全分开**的真实接口管理界面源文件，使用 `future/server/src/staffHttpHost.ts#createStaffConsoleAssets(绝对路径)` 显式挂到**单独的可信代理保护的员工监听器**的 `/admin/`。它通过同源受保护的 `GET /internal/admin/overview` 读取准确的五项匿名汇总，通过 `POST /internal/admin/read-day` 严格按审批工单号、指定账号和指定日期执行一次只读查阅；不提供用户全局搜索、全量记录导出、后台任意写入或模拟统计回退。界面默认不展示私人记录，不把“最近七日快照更新”称为七日活跃用户，也不伪造同步成功率。
+
+所有凭证必须在**独立身份提供方完成真实 MFA 后**签发。网页仅接收短期员工 JWT，不生成 JWT、不会冒充 MFA、不会存储到 localStorage、sessionStorage、Cookie 或 URL；令牌仅存于当前网页内存，主动退出及离开页面会清除。使用 DOM `textContent` 而非拼接私人 JSON 到 HTML；异步请求经过 AbortController 与会话代际校验，退出后旧响应不会显示在新的会话中。静态资源同源、无外部字体/脚本/埋点、HTTPS 前置服务应设置严格 CSP、反框架嵌入与禁止缓存策略。
+
+`npm run test:future:staff-console`：使用虚构员工令牌和本机代理构造端到端 Chrome 验收，覆盖五项真实接口字段、禁止跨域资源、员工越权、无令牌、工单允许/拒绝、清理敏感数据、移动与桌面布局、无浏览器存储等。**真实员工账号与签发服务尚未部署**，因此生产网页目前也不能登录获取真实运营数据；不得把本地模拟验证当成生产授权测试。打包/部署时必须显式携带 `future/admin/live` 和其独立 CSS，不得复用 `future/admin/public` 的合成数据接口。

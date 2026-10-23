@@ -1,0 +1,124 @@
+/* Synthetic staff-console browser acceptance. No real employee accounts. */
+const assert=require('node:assert/strict')
+const {createRequire}=require('node:module')
+const {execFileSync}=require('node:child_process')
+const {mkdtempSync,mkdirSync,rmSync}=require('node:fs')
+const {tmpdir}=require('node:os')
+const {join,resolve}=require('node:path')
+const {randomBytes,createHash}=require('node:crypto')
+const {createServer,request}=require('node:http')
+const root=resolve('.'),temp=mkdtempSync(join(tmpdir(),'cuoshi-staff-ui-'))
+const requireLocal=createRequire(resolve('package.json'))
+const {chromium}=requireLocal('playwright-core')
+let checks=0
+const ok=(v,m)=>{assert.ok(v,m);checks++}
+const token='T'.repeat(140),unprivileged='U'.repeat(140)
+let staff,proxy,browser,overviewHits=0,dayHits=0
+;(async()=>{
+ const output=join(temp,'dist');mkdirSync(output)
+ execFileSync(resolve('node_modules/.bin/tsc'),[
+   '--strict','--target','ES2022','--module','CommonJS','--moduleResolution','node',
+   '--skipLibCheck','--rootDir',root,'--outDir',output,'future/server/src/staffHttpHost.ts'
+ ],{cwd:root,stdio:'inherit'})
+ const {listenStaffPrivateLoopback,createStaffConsoleAssets}=require(join(output,'future/server/src/staffHttpHost.js'))
+ const {createTrustedEdgeBoundary}=require(join(output,'future/server/src/trustedEdge.js'))
+ const sharedSecret=randomBytes(32),proof=createHash('sha256').update(sharedSecret).digest('hex')
+ const edge=createTrustedEdgeBoundary({sharedSecret})
+ const assets=createStaffConsoleAssets(resolve('future/admin/live'))
+ ok(assets.size===4,'Only four preapproved local files are served')
+ const deps={consoleAssets:assets,reporting:{async overview(key){overviewHits++
+   if(key===unprivileged)throw Error('operational_reporting_access_denied')
+   if(key!==token)throw Error('unauthorized')
+   return {totalAccounts:12,cloudEnabledAccounts:9,storedSnapshots:7,
+      snapshotsUpdatedLast7d:5,accountsCreatedLast7d:2}
+ }},privateDay:{async readPrivateDay(key,owner,day,caseId){dayHits++
+   if(key!==token)throw Error('unauthorized')
+   if(owner!=='account0001'||day!=='2026-10-24'||caseId!=='approved01')
+     return {allowed:false,day:null,events:[]}
+   return {allowed:true,day:{count:2,notes:[{text:'仅供测试的私人文字'}]},events:[{type:'count'}]}
+ }}}
+ staff=await listenStaffPrivateLoopback(deps,edge,0)
+ const privatePort=staff.server.address().port
+ const send=(req,res)=>{
+   // An isolated test-only emulation of TLS proxy header replacement.
+   // The real deployment must provide an equivalent trusted reverse proxy.
+   const headers={...req.headers,'x-cuoshi-edge-proof':proof,
+     'x-cuoshi-client-ip':'127.0.0.1'}
+   delete headers.connection
+   const upstream=request({hostname:'127.0.0.1',port:privatePort,path:req.url,method:req.method,headers},up=>{
+     res.writeHead(up.statusCode,up.headers);up.pipe(res)
+   })
+   upstream.on('error',()=>{res.writeHead(502);res.end()});req.pipe(upstream)
+ }
+ proxy=createServer(send)
+ await new Promise(resolve=>proxy.listen(0,'127.0.0.1',resolve))
+ const origin='http://127.0.0.1:'+proxy.address().port
+ ok((await fetch(staff.origin+'/admin/')).status===403,
+   'Cannot bypass trusted proxy to reach staff UI')
+ const pageRoute=await fetch(origin+'/admin/')
+ ok(pageRoute.status===200&&pageRoute.headers.get('content-security-policy')?.includes("default-src 'none'"),
+   'Strict CSP, protected staff UI via trusted proxy')
+ ok((await fetch(origin+'/admin/secrets')).status===404,
+   'No file path traversal or unknown static files')
+ ok((await fetch(origin+'/v1/backup/snapshot')).status===404,
+   'Even trusted staff edge cannot reach user backup API')
+ const chrome=process.env.CHROME_PATH||(process.platform==='darwin'?
+   '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome':'/usr/bin/google-chrome')
+ browser=await chromium.launch({headless:true,executablePath:chrome})
+ for(const width of [390,1280]){
+  const context=await browser.newContext({viewport:{width,height:850},locale:'zh-CN'})
+  const page=await context.newPage(),issues=[],foreign=[]
+  page.on('pageerror',e=>issues.push(e.message))
+  page.on('request',r=>{if(!r.url().startsWith(origin))foreign.push(r.url())})
+  await page.goto(origin+'/admin/')
+  await page.locator('#auth-form').waitFor({state:'visible'})
+  ok(await page.locator('#metrics').locator('.stat-card').count()===0,
+    width+' no metrics before signed staff session')
+  ok(await page.locator('#case-form').isHidden(),width+' case access hidden before login')
+  await page.locator('#staff-token').fill('x')
+  await page.locator('#auth-form button').click()
+  ok((await page.locator('#message').innerText()).includes('员工会话'),width+' invalid token locally refused')
+  await page.locator('#staff-token').fill(unprivileged)
+  await page.locator('#auth-form button').click()
+  await page.getByText('无权读取运营汇总',{exact:false}).waitFor()
+  ok(await page.locator('#metrics .stat-card').count()===0,width+' unauthorized staff receives no aggregate')
+  ok(!await page.evaluate(()=>localStorage.length||sessionStorage.length),width+' no staff token persisted')
+  await page.locator('#logout').click()
+  await page.locator('#staff-token').fill(token)
+  await page.locator('#auth-form button').click()
+  await page.locator('#metrics .stat-card').first().waitFor()
+  ok(await page.locator('#metrics .stat-card').count()===5,width+' all five real metrics rendered')
+  ok((await page.locator('#metrics').innerText()).includes('12'),width+' reads backend aggregate, not synthetic demo number')
+  ok(!(await page.locator('#metrics').innerText()).includes('99.4'),width+' never invents sync success rate')
+  if(process.env.CUOSHI_STAFF_UI_SCREENSHOT==='1')await page.screenshot({path:'/tmp/cuoshi-staff-live-'+width+'.png',fullPage:true})
+  await page.getByRole('button',{name:/工单核验/}).click()
+  await page.locator('#case-id').fill('approved01')
+  await page.locator('#owner-id').fill('account0001')
+  await page.locator('#day-key').fill('2026-10-24')
+  await page.locator('#case-form button[type=submit]').click()
+  await page.locator('#case-result').waitFor({state:'visible'})
+  ok((await page.locator('#private-day').innerText()).includes('仅供测试的私人文字'),width+' approved scoped day shown as text')
+  await page.locator('#clear-case').click()
+  ok(await page.locator('#case-result').isHidden()&&await page.locator('#private-day').innerText()==='',
+    width+' sensitive day cleared instantly')
+  await page.locator('#case-id').fill('wrongcase0')
+  await page.locator('#case-form button[type=submit]').click()
+  await page.getByText('未批准该工单',{exact:false}).waitFor()
+  ok(await page.locator('#case-result').isHidden(),width+' denied case returns no record')
+  await page.locator('#logout').click()
+  ok(await page.locator('#auth-card').isVisible()&&await page.locator('#metrics .stat-card').count()===0,
+    width+' logout removes credentials and operational metrics')
+  ok((await page.locator('#staff-token').inputValue())==='',width+' token field scrubbed')
+  ok(!await page.evaluate(()=>localStorage.length||sessionStorage.length),width+' session never in web storage')
+  const scroll=await page.evaluate(()=>document.documentElement.scrollWidth)
+  ok(scroll<=width+1,width+' responsive width fits screen')
+  ok(issues.length===0,width+' no JavaScript errors: '+issues.join(';'))
+  ok(foreign.length===0,width+' no external requests')
+  await context.close()
+ }
+ ok(overviewHits>=4&&dayHits>=4,'Browser exercised both protected backend routes')
+ console.log('PASS '+checks+' real-data staff console safety and Chrome interactions')
+})().catch(e=>{console.error(e);process.exitCode=1}).finally(async()=>{
+ await browser?.close();if(proxy)await new Promise(r=>proxy.close(r));await staff?.close()
+ rmSync(temp,{recursive:true,force:true})
+})

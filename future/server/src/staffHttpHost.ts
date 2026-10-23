@@ -1,6 +1,8 @@
 /** A separate, never-public employee API router; not mounted to cloudHttpHost. */
 import {createServer,type IncomingMessage,type ServerResponse,type Server} from 'node:http'
 import {type AddressInfo} from 'node:net'
+import {readFileSync} from 'node:fs'
+import {join} from 'node:path'
 import {answer} from './backupHttp'
 import {createPrivateAdminHttpHandler} from './adminHttp'
 import {createPrivateOperationalHttpHandler} from './operationalHttp'
@@ -10,7 +12,27 @@ import type {createStaffOperationalService} from './operationalService'
 
 type PrivateDayService=Pick<AuthenticatedCloudService,'readPrivateDay'>
 type ReportingService=ReturnType<typeof createStaffOperationalService>
-export type StaffHttpDependencies={privateDay:PrivateDayService;reporting:ReportingService}
+export type StaffHttpDependencies={
+  privateDay:PrivateDayService;reporting:ReportingService
+  // Assets are created from reviewed local files, never from HTTP path input.
+  consoleAssets?:ReadonlyMap<string,{content:Buffer;mime:string}>
+}
+const consoleAssetNames=new Map([
+  ['/admin/',['index.html','text/html; charset=utf-8']],
+  ['/admin/app.js',['app.js','text/javascript; charset=utf-8']],
+  ['/admin/style.css',['style.css','text/css; charset=utf-8']],
+  ['/admin/base.css',['../public/styles.css','text/css; charset=utf-8']]
+] as const)
+export function createStaffConsoleAssets(approvedDirectory:string){
+  if(typeof approvedDirectory!=='string'||!approvedDirectory.startsWith('/'))
+    throw Error('staff_console_directory_invalid')
+  const result=new Map<string,{content:Buffer;mime:string}>()
+  for(const [url,[file,mime]] of consoleAssetNames){
+    const content=readFileSync(join(approvedDirectory,file))
+    result.set(url,{content,mime})
+  }
+  return result
+}
 export function createStaffHttpRouter(deps:StaffHttpDependencies):CloudRequestHandler{
   if(typeof deps?.privateDay?.readPrivateDay!=='function'||
      typeof deps?.reporting?.overview!=='function')
@@ -20,6 +42,20 @@ export function createStaffHttpRouter(deps:StaffHttpDependencies):CloudRequestHa
   return async(req:IncomingMessage,res:ServerResponse)=>{
     if(req.url==='/internal/admin/read-day')return readDay(req,res)
     if(req.url==='/internal/admin/overview')return report(req,res)
+    const asset=deps.consoleAssets?.get(req.url??'')
+    if(asset){
+      if(req.method!=='GET')return answer(res,405,{error:'method_not_allowed'})
+      res.setHeader('Cache-Control','no-store, private')
+      res.setHeader('Referrer-Policy','no-referrer')
+      res.setHeader('X-Content-Type-Options','nosniff')
+      res.setHeader('X-Frame-Options','DENY')
+      res.setHeader('Content-Security-Policy',
+        "default-src 'none'; script-src 'self'; style-src 'self'; connect-src 'self'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'")
+      res.setHeader('Content-Type',asset.mime)
+      res.writeHead(200)
+      res.end(asset.content)
+      return
+    }
     return answer(res,404,{error:'not_found'})
   }
 }
