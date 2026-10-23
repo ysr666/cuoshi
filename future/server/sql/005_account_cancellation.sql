@@ -136,9 +136,15 @@ CREATE TABLE __SCHEMA__.cloud_reporting_audit (
   decision TEXT NOT NULL CHECK (decision IN ('allow','deny')),
   at TIMESTAMPTZ NOT NULL DEFAULT clock_timestamp()
 );
+CREATE FUNCTION __SCHEMA__.forbid_cloud_reporting_audit_mutation()
+RETURNS trigger LANGUAGE plpgsql SET search_path=pg_catalog,pg_temp AS $fn$
+BEGIN
+  RAISE EXCEPTION 'Reporting audit history is append-only';
+END;
+$fn$;
 CREATE TRIGGER cloud_reporting_audit_no_update_delete
 BEFORE UPDATE OR DELETE ON __SCHEMA__.cloud_reporting_audit
-FOR EACH ROW EXECUTE FUNCTION __SCHEMA__.forbid_cloud_audit_mutation();
+FOR EACH ROW EXECUTE FUNCTION __SCHEMA__.forbid_cloud_reporting_audit_mutation();
 
 -- One aggregate row for the operations dashboard. The reporting login gets
 -- EXECUTE only, NOT SELECT on cloud_users, snapshots, identity or note JSON.
