@@ -40,6 +40,9 @@ const {startH5TestServer}=require('./h5-built-server.cjs')
    await page.getByText('设置',{exact:true}).first().waitFor()
    await page.getByText('现代极简',{exact:true}).click()
    await page.reload({waitUntil:'domcontentloaded'})
+   // Vue hydration can finish after DOMContentLoaded. Wait for persisted
+   // theme to render, but still fail if it never survives the reload.
+   await page.locator('.screen.modern').waitFor({state:'visible',timeout:6000})
    assert.equal(await page.locator('.screen.modern').count(),1)
    assert.deepEqual(errors,[])
    console.log('PASS '+width+'px count / touch / tabs / modern reload')
