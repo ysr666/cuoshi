@@ -21,12 +21,8 @@ try{
  const token='a'.repeat(140),secret=randomBytes(32)
  const edge=createTrustedEdgeBoundary({sharedSecret:secret})
  const proof=createHash('sha256').update(secret).digest('hex')
- let opsReads=0,dayReads=0
- const deps={reporting:{async overview(bearer){opsReads++;if(bearer!==token)throw Error('unauthorized');return {totalAccounts:4}}},
-   privateDay:{async readPrivateDay(bearer,owner,date,caseId){dayReads++;
-     if(bearer!==token)throw Error('unauthorized')
-     return {allowed:owner==='account0001'&&date==='2026-10-24'&&caseId==='approved01',reason:'approved',day:null,events:[]}
-   }}}
+ let opsReads=0
+ const deps={reporting:{async overview(bearer){opsReads++;if(bearer!==token)throw Error('unauthorized');return {totalAccounts:4}}}}
  assert.throws(()=>createStaffHttpRouter({}),/dependencies_required/);n++
  await assert.rejects(()=>listenStaffPrivateLoopback(deps,null,0),/staff_private_edge_required/);n++
  const host=await listenStaffPrivateLoopback(deps,edge,0)
@@ -50,13 +46,10 @@ try{
      'No query/pagination/export path on staff host')
    check((await call('/internal/admin/overview',access,'POST')).status===405,
      'Operations metrics cannot be modified')
-   const body={ownerId:'account0001',dayKey:'2026-10-24',caseId:'approved01'}
-   const day=await call('/internal/admin/read-day',access,'POST',body)
-   check(day.status===200&&(await day.json()).events.length===0,
-     'Isolated approved case can read only one day')
    check((await call('/internal/admin/read-day',access,'POST',
-     {...body,caseId:'badcase00'})).status===403,'SQL-scope denial does not expose private day')
-   check(opsReads===1&&dayReads===2,'Only routes passing edge and token reach business services')
+     {ownerId:'account0001',dayKey:'2026-10-24',caseId:'approved01'})).status===404,
+     'Legacy multi-employee approval route is permanently unavailable')
+   check(opsReads===1,'Only protected owner overview enters business service')
  }finally{await host.close()}
  check(!host.server.listening,'Staff server releases listener after QA')
  console.log('PASS '+n+' separate staff ingress, proxy proof and exact route assertions')

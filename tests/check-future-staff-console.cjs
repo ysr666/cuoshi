@@ -13,7 +13,7 @@ const {chromium}=requireLocal('playwright-core')
 let checks=0
 const ok=(v,m)=>{assert.ok(v,m);checks++}
 const token='T'.repeat(140),unprivileged='U'.repeat(140)
-let staff,proxy,browser,overviewHits=0,dayHits=0
+let staff,proxy,browser,overviewHits=0
 ;(async()=>{
  const output=join(temp,'dist');mkdirSync(output)
  execFileSync(resolve('node_modules/.bin/tsc'),[
@@ -31,12 +31,6 @@ let staff,proxy,browser,overviewHits=0,dayHits=0
    if(key!==token)throw Error('unauthorized')
    return {totalAccounts:12,cloudEnabledAccounts:9,storedSnapshots:7,
       snapshotsUpdatedLast7d:5,accountsCreatedLast7d:2}
- }},privateDay:{async readPrivateDay(key,owner,day,caseId){dayHits++
-   if(key!==token)throw Error('unauthorized')
-   if(caseId==='slowcase0')await new Promise(r=>setTimeout(r,180))
-   if(owner!=='account0001'||day!=='2026-10-24'||caseId!=='approved01')
-     return {allowed:false,day:null,events:[]}
-   return {allowed:true,day:{count:2,notes:[{text:'仅供测试的私人文字'}]},events:[{type:'count'}]}
  }}}
  staff=await listenStaffPrivateLoopback(deps,edge,0)
  const privatePort=staff.server.address().port
@@ -62,7 +56,9 @@ let staff,proxy,browser,overviewHits=0,dayHits=0
  ok((await fetch(origin+'/admin/secrets')).status===404,
    'No file path traversal or unknown static files')
  ok((await fetch(origin+'/v1/backup/snapshot')).status===404,
-   'Even trusted staff edge cannot reach user backup API')
+   'Even trusted owner edge cannot reach user backup API')
+ ok((await fetch(origin+'/internal/admin/read-day',{method:'POST'})).status===404,
+   'Legacy multi-employee private-note route is disabled')
  const chrome=process.env.CHROME_PATH||(process.platform==='darwin'?
    '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome':'/usr/bin/google-chrome')
  browser=await chromium.launch({headless:true,executablePath:chrome})
@@ -75,13 +71,13 @@ let staff,proxy,browser,overviewHits=0,dayHits=0
   await page.locator('#auth-form').waitFor({state:'visible'})
   ok(await page.locator('#metrics').locator('.stat-card').count()===0,
     width+' no metrics before signed staff session')
-  ok(await page.locator('#case-form').isHidden(),width+' case access hidden before login')
+  ok(await page.locator('#case-form').count()===0,width+' multi-person cases not present in owner dashboard')
   await page.locator('#staff-token').fill('x')
   await page.locator('#auth-form button').click()
-  ok((await page.locator('#message').innerText()).includes('员工会话'),width+' invalid token locally refused')
+  ok((await page.locator('#message').innerText()).includes('唯一管理员'),width+' invalid token locally refused')
   await page.locator('#staff-token').fill(unprivileged)
   await page.locator('#auth-form button').click()
-  await page.getByText('无权读取运营汇总',{exact:false}).waitFor()
+  await page.getByText('没有管理员权限',{exact:false}).waitFor()
   ok(await page.locator('#metrics .stat-card').count()===0,width+' unauthorized staff receives no aggregate')
   ok(!await page.evaluate(()=>localStorage.length||sessionStorage.length),width+' no staff token persisted')
   await page.locator('#logout').click()
@@ -92,26 +88,12 @@ let staff,proxy,browser,overviewHits=0,dayHits=0
   ok((await page.locator('#metrics').innerText()).includes('12'),width+' reads backend aggregate, not synthetic demo number')
   ok(!(await page.locator('#metrics').innerText()).includes('99.4'),width+' never invents sync success rate')
   if(process.env.CUOSHI_STAFF_UI_SCREENSHOT==='1')await page.screenshot({path:'/tmp/cuoshi-staff-live-'+width+'.png',fullPage:true})
-  await page.getByRole('button',{name:/工单核验/}).click()
-  await page.locator('#case-id').fill('approved01')
-  await page.locator('#owner-id').fill('account0001')
-  await page.locator('#day-key').fill('2026-10-24')
-  await page.locator('#case-form button[type=submit]').click()
-  await page.locator('#case-result').waitFor({state:'visible'})
-  ok((await page.locator('#private-day').innerText()).includes('仅供测试的私人文字'),width+' approved scoped day shown as text')
-  await page.locator('#clear-case').click()
-  ok(await page.locator('#case-result').isHidden()&&await page.locator('#private-day').innerText()==='',
-    width+' sensitive day cleared instantly')
-  await page.locator('#case-id').fill('wrongcase0')
-  await page.locator('#case-form button[type=submit]').click()
-  await page.getByText('未批准该工单',{exact:false}).waitFor()
-  ok(await page.locator('#case-result').isHidden(),width+' denied case returns no record')
-  await page.locator('#case-id').fill('slowcase0')
-  await page.locator('#case-form button[type=submit]').click()
+  await page.getByRole('button',{name:/系统状态/}).click()
+  ok(await page.locator('#system').isVisible(),width+' system state visible to owner')
   await page.getByRole('button',{name:/运营概览/}).click()
-  await page.waitForTimeout(240)
-  ok(await page.locator('#private-day').innerText()==='',width+' late case callback cannot repopulate private day after navigation')
-  ok(await page.locator('#case-result').isHidden(),width+' old session result stays hidden')
+  ok(await page.locator('#overview').isVisible(),width+' owner overview navigation works')
+  ok(await page.locator('[data-view="cases"]').count()===0,
+    width+' no employee or second-approver workflow in the live UI')
   await page.locator('#logout').click()
   ok(await page.locator('#auth-card').isVisible()&&await page.locator('#metrics .stat-card').count()===0,
     width+' logout removes credentials and operational metrics')
@@ -125,7 +107,7 @@ let staff,proxy,browser,overviewHits=0,dayHits=0
   ok(foreign.length===0,width+' no external requests')
   await context.close()
  }
- ok(overviewHits>=4&&dayHits>=4,'Browser exercised both protected backend routes')
+ ok(overviewHits>=4,'Browser exercised sole-owner protected statistics route')
  console.log('PASS '+checks+' real-data staff console safety and Chrome interactions')
 })().catch(e=>{console.error(e);process.exitCode=1}).finally(async()=>{
  await browser?.close();if(proxy)await new Promise(r=>proxy.close(r));await staff?.close()

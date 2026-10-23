@@ -39,7 +39,7 @@ try{
      snapshots_updated_7d:'3',accounts_created_7d:'2'
    }]:[]}
  },release(){}}}}
- const ops=createStaffOperationalService(staffDb,reportingDb,staffKey,now)
+ const ops=createStaffOperationalService(staffDb,reportingDb,staffKey,now,'superadmin1')
  const handler=createPrivateOperationalHttpHandler(ops)
  server=createServer((req,res)=>{void handler(req,res)})
  await new Promise(r=>server.listen(0,'127.0.0.1',r))
@@ -60,8 +60,8 @@ try{
    'User-account bearer cannot query staff operations')
  ok(reportCalls===0,'Unauthorized token never reaches reporting SQL')
  const denied=await get('/internal/admin/overview',support)
- ok(denied.status===403&&(await denied.json()).error==='access_denied',
-   'Signed support worker has no aggregate reporting permission')
+ ok(denied.status===401&&(await denied.json()).error==='unauthorized',
+   'Second signed human identity is rejected before any database access')
  const response=await get('/internal/admin/overview',privileged)
  const data=await response.json()
  ok(response.status===200&&data.totalAccounts===8&&data.storedSnapshots===4,
@@ -74,7 +74,7 @@ try{
  revoke=true
  ok((await get('/internal/admin/overview',privileged)).status===401,
    'Staff revocation checked every time')
- ok(revocationCalls===3&&reportCalls===2,
-   'Only verified, non-revoked staff invoke reporting DB')
+ ok(revocationCalls===2&&reportCalls===1,
+   'Only sole-owner sessions invoke reporting DB')
  console.log('PASS '+checks+' staff-only reporting HTTP and signed MFA boundaries')
 }finally{if(server)await new Promise(r=>server.close(r));rmSync(temp,{recursive:true,force:true})}

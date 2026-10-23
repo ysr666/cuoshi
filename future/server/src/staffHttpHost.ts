@@ -1,19 +1,16 @@
-/** A separate, never-public employee API router; not mounted to cloudHttpHost. */
+/** Single-owner administration gateway; not mounted to cloudHttpHost. */
 import {createServer,type IncomingMessage,type ServerResponse,type Server} from 'node:http'
 import {type AddressInfo} from 'node:net'
 import {readFileSync} from 'node:fs'
 import {join} from 'node:path'
 import {answer} from './backupHttp'
-import {createPrivateAdminHttpHandler} from './adminHttp'
 import {createPrivateOperationalHttpHandler} from './operationalHttp'
 import type {createTrustedEdgeBoundary,CloudRequestHandler} from './trustedEdge'
-import type {AuthenticatedCloudService} from './authenticatedService'
 import type {createStaffOperationalService} from './operationalService'
 
-type PrivateDayService=Pick<AuthenticatedCloudService,'readPrivateDay'>
 type ReportingService=ReturnType<typeof createStaffOperationalService>
 export type StaffHttpDependencies={
-  privateDay:PrivateDayService;reporting:ReportingService
+  reporting:ReportingService
   // Assets are created from reviewed local files, never from HTTP path input.
   consoleAssets?:ReadonlyMap<string,{content:Buffer;mime:string}>
 }
@@ -34,13 +31,10 @@ export function createStaffConsoleAssets(approvedDirectory:string){
   return result
 }
 export function createStaffHttpRouter(deps:StaffHttpDependencies):CloudRequestHandler{
-  if(typeof deps?.privateDay?.readPrivateDay!=='function'||
-     typeof deps?.reporting?.overview!=='function')
+  if(typeof deps?.reporting?.overview!=='function')
     throw Error('staff_http_dependencies_required')
-  const readDay=createPrivateAdminHttpHandler(deps.privateDay)
   const report=createPrivateOperationalHttpHandler(deps.reporting)
   return async(req:IncomingMessage,res:ServerResponse)=>{
-    if(req.url==='/internal/admin/read-day')return readDay(req,res)
     if(req.url==='/internal/admin/overview')return report(req,res)
     const asset=deps.consoleAssets?.get(req.url??'')
     if(asset){

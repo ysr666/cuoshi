@@ -12,26 +12,25 @@
 <body>
 <div class="shell">
   <aside class="sidebar" aria-label="管理台导航">
-    <div class="identity"><div class="logomark">错</div><div><strong>错事</strong><small>受限管理台 / STAFF</small></div></div>
-    <div class="navtitle">管理工作台</div>
+    <div class="identity"><div class="logomark">错</div><div><strong>错事</strong><small>私人管理台 / OWNER</small></div></div>
+    <div class="navtitle">我的管理台</div>
     <nav aria-label="导航">
       <button class="nav-item active" type="button" data-view="overview" aria-current="page">◫　运营概览</button>
-      <button class="nav-item" type="button" data-view="cases">▤　工单核验</button>
       <button class="nav-item" type="button" data-view="system">⌁　系统状态</button>
     </nav>
     <div class="side-footer">隐私优先 · 最小权限<br><span>不提供全库记录浏览或导出</span></div>
   </aside>
   <main class="main">
-    <header class="topbar"><div class="crumb">CUOSHI <span>/</span> <span id="crumb">运营概览</span></div><div class="toolbar"><span class="environment">受限员工入口</span><button class="btn" id="logout" type="button" hidden>结束会话</button></div></header>
+    <header class="topbar"><div class="crumb">CUOSHI <span>/</span> <span id="crumb">运营概览</span></div><div class="toolbar"><span class="environment">仅限唯一管理员</span><button class="btn" id="logout" type="button" hidden>结束会话</button></div></header>
     <section class="content">
       <div class="intro"><div class="eyebrow" id="eyebrow">INTERNAL OPERATIONS</div><h1 id="heading">运营概览<span class="punct">.</span></h1><p id="subtitle">仅查询汇总数字；所有用户简记默认不可见。</p></div>
-      <div class="notice"><strong>身份与权限</strong><span>此入口不签发员工凭证。必须使用独立身份提供方完成 MFA，再提供短期员工会话；不会保存凭证到浏览器存储。</span></div>
+      <div class="notice"><strong>身份与权限</strong><span>后台只有一个管理员。身份验证仍需安全完成；不会设置员工账号，也不会把登录凭据写入浏览器存储。</span></div>
       <section class="panel" id="auth-card">
-        <h2>核验员工会话</h2>
-        <p class="section-desc">仅用于已批准的员工会话。请勿输入微信密码、AppSecret 或个人用户令牌。</p>
+        <h2>管理员登录</h2>
+        <p class="section-desc">当前为待对接正式身份验证的界面。只接受经后台签发的短期管理员会话；不要输入微信密码、AppSecret。</p>
         <form id="auth-form" class="input-grid" autocomplete="off">
-          <label class="field" for="staff-token">短期员工会话令牌<input id="staff-token" type="password" placeholder="仅接受已完成 MFA 的员工令牌" autocomplete="off" spellcheck="false" required></label>
-          <div class="actions"><button class="btn primary" type="submit">验证并查看概览</button></div>
+          <label class="field" for="staff-token">管理员会话令牌<input id="staff-token" type="password" placeholder="只有唯一管理员签发的令牌才能通过" autocomplete="off" spellcheck="false" required></label>
+          <div class="actions"><button class="btn primary" type="submit">验证身份</button></div>
         </form>
       </section>
       <div id="message" class="callout" role="status" aria-live="polite" hidden></div>
@@ -39,25 +38,12 @@
         <div class="stat-grid" id="metrics"></div>
         <section class="panel"><h2>统计口径</h2><p class="section-desc">“近七日更新快照账号”不是七日活跃用户，“成功同步率”当前未测量，不会虚构。</p><div id="updated-at" class="clock"></div><div class="actions cta"><button id="refresh" class="btn" type="button">重新读取真实汇总</button></div></section>
       </section>
-      <section id="cases" class="panel" hidden>
-        <h2>指定工单 · 指定账号 · 指定日期</h2>
-        <p class="section-desc">本页不提供搜索用户或申请授权功能；只有在服务端已有有效工单、独立批准和审计时，才能返回这一天的内容。</p>
-        <form id="case-form" autocomplete="off">
-          <div class="input-grid">
-            <label class="field" for="case-id">批准工单号<input id="case-id" required pattern="[a-zA-Z0-9_-]{8,128}" autocomplete="off"></label>
-            <label class="field" for="owner-id">指定账号标识<input id="owner-id" required pattern="[a-zA-Z0-9_-]{8,128}" autocomplete="off"></label>
-            <label class="field" for="day-key">指定日期<input id="day-key" type="date" required></label>
-          </div>
-          <div class="actions cta"><button class="btn primary" type="submit">按工单核验这一日</button><button id="clear-case" class="btn" type="button">清除已查看内容</button></div>
-        </form>
-        <div id="case-result" hidden><div class="divider-label">本次获准的单日记录（仅页面临时显示）</div><pre id="private-day" class="private-view"></pre><div id="private-events" class="clock"></div></div>
-      </section>
       <section id="system" class="panel" hidden>
         <h2>当前可验证状态</h2>
-        <div class="health-list"><div class="health-row"><span>页面来源</span><span>独立受保护后台</span></div><div class="health-row"><span>运营数据来源</span><span>受限 PostgreSQL 聚合接口</span></div><div class="health-row"><span>员工身份</span><span>外部 MFA 签发（未由本页提供）</span></div><div class="health-row"><span>同步成功率</span><span>暂无可信采样</span></div></div>
+        <div class="health-list"><div class="health-row"><span>页面来源</span><span>独立受保护后台</span></div><div class="health-row"><span>运营数据来源</span><span>受限 PostgreSQL 聚合接口</span></div><div class="health-row"><span>管理员身份</span><span>唯一管理员验证（未部署）</span></div><div class="health-row"><span>同步成功率</span><span>暂无可信采样</span></div></div>
       </section>
     </section>
-    <footer class="bottom">错事 · 克制地管理。<span class="footer-right">STAFF CONSOLE · SESSION MEMORY ONLY</span></footer>
+    <footer class="bottom">错事 · 克制地管理。<span class="footer-right">SOLE OWNER · SESSION MEMORY ONLY</span></footer>
   </main>
 </div>
 </body>

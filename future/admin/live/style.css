@@ -4,9 +4,5 @@
 #auth-form .actions{padding-bottom:2px}
 #staff-token{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;letter-spacing:1px}
 #metrics{grid-template-columns:repeat(3,minmax(0,1fr))}
-#cases .section-desc{margin:10px 0 25px}
-.divider-label{border-top:1px solid #e6e6e0;padding-top:20px;margin-top:25px;font-size:12px;color:#858880}
-.private-view{white-space:pre-wrap;overflow-wrap:anywhere;max-height:260px;overflow:auto;background:#f4f3ee;border:1px solid #e4e4dd;border-radius:5px;padding:17px;font:12px/1.8 ui-monospace,Menlo,monospace}
-#private-events{padding:7px 0 15px}
 [hidden]{display:none!important}
 @media(max-width:720px){#auth-form{grid-template-columns:1fr}#metrics{grid-template-columns:repeat(2,minmax(0,1fr))}}

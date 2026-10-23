@@ -7,7 +7,6 @@ import {checkPrivateStaffReadiness} from './privateStaffReadiness'
 import {createTrustedEdgeBoundary} from './trustedEdge'
 import {createStaffConsoleAssets,listenStaffPrivateLoopback} from './staffHttpHost'
 import {createStaffOperationalService} from './operationalService'
-import {createStaffDayService} from './staffDayService'
 import type {DbPool} from './repository'
 
 async function main(){
@@ -25,11 +24,11 @@ async function main(){
    const assets=createStaffConsoleAssets(resolve(process.cwd(),'future/admin/live'))
    const edge=createTrustedEdgeBoundary({sharedSecret:cfg.edgeSecret})
    host=await listenStaffPrivateLoopback({
-     privateDay:createStaffDayService(staffDb,cfg.signingKey),
-     reporting:createStaffOperationalService(staffDb,reportDb,cfg.signingKey),
+     reporting:createStaffOperationalService(staffDb,reportDb,cfg.signingKey,
+       ()=>Math.floor(Date.now()/1000),cfg.soleOwnerId),
      consoleAssets:assets
    },edge,cfg.port)
-   process.stdout.write('Cuoshi staff-only loopback ready (trusted edge required)\n')
+   process.stdout.write('Cuoshi sole-owner admin loopback ready (trusted edge required)\n')
    let stopping=false
    const stop=async()=>{
      if(stopping)return;stopping=true

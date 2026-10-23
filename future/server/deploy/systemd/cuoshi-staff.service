@@ -1,7 +1,7 @@
 # TEMPLATE ONLY — not installed, enabled, or deployed.
-# Separate operator-approved HTTPS staff edge and real MFA issuer REQUIRED.
+# Sole project owner only. Dedicated HTTPS admin edge and owner MFA REQUIRED.
 [Unit]
-Description=Cuoshi private staff console and operations API
+Description=Cuoshi sole-owner private admin console and operations API
 Wants=network-online.target
 After=network-online.target
 
