@@ -33,6 +33,7 @@ let staff,proxy,browser,overviewHits=0,dayHits=0
       snapshotsUpdatedLast7d:5,accountsCreatedLast7d:2}
  }},privateDay:{async readPrivateDay(key,owner,day,caseId){dayHits++
    if(key!==token)throw Error('unauthorized')
+   if(caseId==='slowcase0')await new Promise(r=>setTimeout(r,180))
    if(owner!=='account0001'||day!=='2026-10-24'||caseId!=='approved01')
      return {allowed:false,day:null,events:[]}
    return {allowed:true,day:{count:2,notes:[{text:'仅供测试的私人文字'}]},events:[{type:'count'}]}
@@ -105,10 +106,18 @@ let staff,proxy,browser,overviewHits=0,dayHits=0
   await page.locator('#case-form button[type=submit]').click()
   await page.getByText('未批准该工单',{exact:false}).waitFor()
   ok(await page.locator('#case-result').isHidden(),width+' denied case returns no record')
+  await page.locator('#case-id').fill('slowcase0')
+  await page.locator('#case-form button[type=submit]').click()
+  await page.getByRole('button',{name:/运营概览/}).click()
+  await page.waitForTimeout(240)
+  ok(await page.locator('#private-day').innerText()==='',width+' late case callback cannot repopulate private day after navigation')
+  ok(await page.locator('#case-result').isHidden(),width+' old session result stays hidden')
   await page.locator('#logout').click()
   ok(await page.locator('#auth-card').isVisible()&&await page.locator('#metrics .stat-card').count()===0,
     width+' logout removes credentials and operational metrics')
   ok((await page.locator('#staff-token').inputValue())==='',width+' token field scrubbed')
+  await page.evaluate(()=>window.dispatchEvent(new Event('pagehide')))
+  ok(await page.locator('#auth-card').isVisible(),width+' browser pagehide resets to login without lingering authorized UI')
   ok(!await page.evaluate(()=>localStorage.length||sessionStorage.length),width+' session never in web storage')
   const scroll=await page.evaluate(()=>document.documentElement.scrollWidth)
   ok(scroll<=width+1,width+' responsive width fits screen')

@@ -18,6 +18,7 @@ function endSession(notice=''){session=null;epoch++;controller?.abort();controll
   message(notice);switchView('overview')
 }
 function switchView(next){if(!(next in titles))return
+  if(view!==next)controller?.abort()
   view=next;clearPrivate();for(const name of Object.keys(titles))el(name).hidden=!session||name!==next
   for(const item of document.querySelectorAll('[data-view]')){
     const on=item.dataset.view===next;item.classList.toggle('active',on)
@@ -100,11 +101,12 @@ el('case-form').addEventListener('submit',async event=>{
   try{
     const outcome=await call('/internal/admin/read-day','POST',{caseId,ownerId,dayKey})
     if(!Array.isArray(outcome?.events)||!(outcome.day===null||typeof outcome.day==='object'))throw Error('invalid_response')
+    if(view!=='cases'||!session)return
     el('private-day').textContent=JSON.stringify(outcome.day,null,2).slice(0,30000)
     el('private-events').textContent='授权记录事件数：'+outcome.events.length+'。内容仅在页面会话中临时显示，不写入本地存储。'
     el('case-result').hidden=false;message('仅显示本次获准的单日结果；离开或结束会话时将清除。')
   }catch(error){clearPrivate();if(error.message==='stale_session')return
     message(error.message==='access_denied'?'服务端未批准该工单与日期的读取，未返回任何私人内容。':'工单读取失败；不保留或猜测任何记录。')}
 })
-window.addEventListener('pagehide',()=>{controller?.abort();clearPrivate();clearMetrics();session=null})
+window.addEventListener('pagehide',()=>endSession())
 })()
