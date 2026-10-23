@@ -117,8 +117,26 @@ jobs:
           path: dist/build/mp-weixin/
           if-no-files-found: error
           retention-days: 7
-      - name: Install Chinese font fallback for visual review
-        run: sudo apt-get update -qq && sudo apt-get install -y -qq fonts-noto-cjk
+      - name: Ensure Chinese font fallback for visual review (bounded)
+        shell: bash
+        run: |
+          set -euo pipefail
+          # APT repository refresh stalled until the entire 15-minute job was
+          # cancelled. Prefer the preinstalled font; avoid an unbounded update.
+          fc-list :lang=zh-cn family > "$RUNNER_TEMP/cuoshi-cjk-families.txt"
+          if [[ ! -s "$RUNNER_TEMP/cuoshi-cjk-families.txt" ]]; then
+            sudo timeout 120s apt-get \
+              -o Acquire::Retries=1 -o Acquire::http::Timeout=20 \
+              install -y -qq --no-install-recommends fonts-noto-cjk
+            fc-cache -f
+          fi
+          fc-list :lang=zh-cn family > "$RUNNER_TEMP/cuoshi-cjk-families.txt"
+          # Fail if Chinese glyphs are unavailable: never skip visual QA.
+          if [[ ! -s "$RUNNER_TEMP/cuoshi-cjk-families.txt" ]]; then
+            echo 'No CJK font installed; H5 visual review cannot be trusted' >&2
+            exit 1
+          fi
+          fc-match -f 'CJK rendering font: %{family}\n' ':lang=zh-cn'
       - name: Set up Chrome for real H5 browser checks
         id: chrome
         uses: browser-actions/setup-chrome@v2

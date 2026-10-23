@@ -85,3 +85,8 @@ CI 新增官方 `pg_dump` → 空数据库 `pg_restore` 合成记录恢复演练
 #### 2026-10-22 安全风险库存更新（Draft PR #4）
 
 前述 2026-10-20 的 44→39 是历史风险基线，**不是当前剩余数量**。五项间接依赖定向补丁与移除非首发直接依赖后，官方 npm `--omit=dev` 当次复核为 **25 个受影响包（19 High、6 Moderate、0 Low、0 Critical）**，后端独立生产依赖当次为 **0 项**。完整审计明细见 [更新后的技术分流](RELEASE_V05_SECURITY_AUDIT_2026-10-20.md#2026-10-22--第二轮定向构建依赖修补draft-pr-4)。仍存在 DCloud、Vue、Vite、`braces` 等风险；**发布关口 D 继续 BLOCKED**，所有生产条件和双真机要求不变。
+
+
+#### 2026-10-24 · H5 中文字体预检与 CI 超时修复
+
+GitHub Actions #39990745284 的前三个 Job 通过，前端 Job 在执行 `apt-get update -qq && apt-get install fonts-noto-cjk` 期间被 15 分钟 Job 超时取消；Chrome 视觉回归没有运行，因此**不能把该次 CI 记录为通过**。将字体步骤改为：优先检查 runner 是否已有支持中文的字体；如无则在**120 秒上限内**使用缓存 APT 索引安装 Noto CJK，并再次检查可用性。没有绕过 Chrome 验收或把截图步骤改成可选；如字体仍不可用，明确失败，需另行解决。这项修改不涉及生产发布和 AppID。
