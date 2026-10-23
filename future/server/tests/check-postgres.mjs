@@ -219,18 +219,31 @@ try{
   await attempt(reportingPool,'SELECT * FROM cloud_admin_audit')
   await attempt(reportingPool,'SELECT * FROM cloud_wechat_identities')
   await attempt(reportingPool,'SELECT * FROM cloud_users')
-  await attempt(backupPool,'SELECT * FROM cloud_reporting_overview()')
-  await attempt(adminPool,'SELECT * FROM cloud_reporting_overview()')
-  await attempt(identityPool,'SELECT * FROM cloud_reporting_overview()')
+  await attempt(reportingPool,'SELECT * FROM cloud_reporting_audit')
+  await attempt(adminPool,'SELECT * FROM cloud_reporting_audit')
+  await attempt(backupPool,"SELECT * FROM cloud_reporting_overview('reporter01',TRUE)")
+  await attempt(adminPool,"SELECT * FROM cloud_reporting_overview('reporter01',TRUE)")
+  await attempt(identityPool,"SELECT * FROM cloud_reporting_overview('reporter01',TRUE)")
   await attempt(reportingPool,'SELECT * FROM cloud_revoked_backup_tokens')
   await attempt(deletionPool,'SELECT * FROM cloud_users')
   await attempt(reportingPool,"SELECT * FROM cloud_cancel_account('account0001')")
   await attempt(reportingPool,'DELETE FROM cloud_account_deletion_totals')
   check((await readAnonymousDeletionSummary(reportingPool)).length===0,
     'Reporting role sees no entries before any deletion')
-  const initialOverview=await readAnonymousOperationalOverview(reportingPool)
+  await pool.query("INSERT INTO cloud_staff(staff_id,role) VALUES('reporter01','auditor')")
+  const initialOverview=await readAnonymousOperationalOverview(reportingPool,'reporter01',true)
   check(initialOverview.totalAccounts===0&&initialOverview.storedSnapshots===0,
     'Actual restricted reporting role sees no registered accounts initially')
+  await assert.rejects(readAnonymousOperationalOverview(reportingPool,'reporter01',false),
+    /operational_reporting_access_denied/);checks++
+  await assert.rejects(readAnonymousOperationalOverview(reportingPool,'unknown01',true),
+    /operational_reporting_access_denied/);checks++
+  const auditRows=await pool.query("SELECT decision FROM cloud_reporting_audit WHERE staff_id='reporter01' ORDER BY id")
+  check(auditRows.rows.length===2&&auditRows.rows[0].decision==='allow'&&
+    auditRows.rows[1].decision==='deny',
+    'Real database atomically audits both allowed and denied reporting requests')
+  await assert.rejects(pool.query("DELETE FROM cloud_reporting_audit WHERE staff_id='reporter01'"),
+    /append-only/i);checks++
   check(Object.keys(initialOverview).sort().join(',')===
     'accountsCreatedLast7d,cloudEnabledAccounts,snapshotsUpdatedLast7d,storedSnapshots,totalAccounts',
     'Overview exposes only five approved aggregate fields, no identifiers or note bodies')
@@ -253,7 +266,7 @@ try{
   const tokenB=userToken('account0002','device0002')
   check((await service.provision(tokenA))===undefined,'Verified session can provision identity')
   check((await service.provision(tokenB))===undefined,'Independent owner provisioned')
-  const registeredOverview=await readAnonymousOperationalOverview(reportingPool)
+  const registeredOverview=await readAnonymousOperationalOverview(reportingPool,'reporter01',true)
   check(registeredOverview.totalAccounts===2&&registeredOverview.accountsCreatedLast7d===2&&
     registeredOverview.cloudEnabledAccounts===0&&registeredOverview.storedSnapshots===0,
     'Overview counts real distinct active accounts, not synthetic dashboard values')
@@ -858,6 +871,8 @@ try{
   for(const [id,role] of [['support0001','support'],['reviewer001','safety_reviewer'],
     ['superadmin1','super_admin'],['auditor0001','auditor']])
     await pool.query('INSERT INTO cloud_staff(staff_id,role) VALUES($1,$2)',[id,role])
+  await assert.rejects(readAnonymousOperationalOverview(reportingPool,'support0001',true),
+    /operational_reporting_access_denied/);checks++
   await pool.query(`INSERT INTO cloud_access_cases(case_id,owner_id,purpose,status)
     VALUES('ticket0001',$1,'support_ticket','open')`,[a.userId])
   const staff={staffId:'support0001',mfaVerified:true}
@@ -1155,7 +1170,7 @@ try{
     'SELECT COALESCE(sum(accounts_deleted),0) AS n,COALESCE(sum(snapshots_erased),0) AS m FROM cloud_account_deletion_totals')
   check(Number(totals.rows[0].n)===Number(beforeStat.rows[0].n)+1&&
     Number(totals.rows[0].m)>=1,'Backend retains aggregate deletion/snapshot operational counts')
-  const afterDeletionOverview=await readAnonymousOperationalOverview(reportingPool)
+  const afterDeletionOverview=await readAnonymousOperationalOverview(reportingPool,'reporter01',true)
   check(afterDeletionOverview.totalAccounts>=2&&
     afterDeletionOverview.cloudEnabledAccounts<=afterDeletionOverview.totalAccounts&&
     afterDeletionOverview.snapshotsUpdatedLast7d<=afterDeletionOverview.storedSnapshots,

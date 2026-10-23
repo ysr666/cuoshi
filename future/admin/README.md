@@ -36,3 +36,9 @@ npm run test:future:admin-preview
 `future/server/sql/005_account_cancellation.sql` 增加受限 SQL 函数 `cloud_reporting_overview()`。它只对单独的**报表角色**授予 `EXECUTE`，不会授予任何 `cloud_users`、`cloud_snapshots` 或私人 JSON 表的直接读取权；返回五个整数汇总：活跃账号总数（未注销）、目前开启云备份的账号数、存储有快照的账号数、近七日修改过快照的账号数、近七日新注册账号数。调用封装为 `src/operationalReporting.ts`，只返回已验证安全整数，不带账号、内容、简记、日期级用户行为或事件明细。
 
 **严格区分统计口径**：近七日快照更新不等于七日活跃用户，也不能计算真实同步成功率。页面原有的模拟“418”和“99.4%”目前仍只作为显式标注的演示数据；正式运营必须接入独立员工认证及报表服务后才显示真实统计，未测量的字段标明“尚无数据”。本函数不创造任何公共 HTTP 入口，不包含演示回退到真实数据库。
+
+## 生产方向：独立员工汇总接口（尚未开放）
+
+`future/server/src/operationalService.ts` + `operationalHttp.ts` 提供 `GET /internal/admin/overview` 的独立受限处理函数。必须提供独立的 5 分钟员工签名会话（经过实际员工 MFA）、每次检查数据库撤销名单，再调用独立报表账号的 `cloud_reporting_overview(staff_id, mfa_verified)`。PostgreSQL **再次检查员工角色必须为在职管理员/审计员**，并记录允许/拒绝的匿名汇总访问审计；客服即使持有有效会话也不能读。用户 token、伪造员工标识、过期与撤销的会话均被拒绝，不可传递用户 ID/日期/查询参数，没有私人正文路径、批量导出或跨域读权限。
+
+**安全限定**：此处理函数未被公网 `cloudHttpHost`、Caddy、小程序、localhost 演示页或正式服务器入口挂载；也没有提供绕过 MFA 的管理员账号签发器。需要有合法员工身份来源、独立受控管理员 HTTPS 入口和最小数据库角色的生产部署才可投入使用。演示页面仍使用清楚标记的合成数据。

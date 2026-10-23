@@ -24,24 +24,24 @@ try{
  const pool={async connect(){return {async query(sql){
    queries++;check(sql.trim().startsWith('SELECT total_accounts'),
      'Only anonymous reporting function selected')
-   check(sql.includes('FROM cloud_reporting_overview()'),
+   check(sql.includes('FROM cloud_reporting_overview($1,$2)'),
      'Never read raw cloud_users or snapshot JSON')
    return {rows:[row]}
  },release(){released++}}}}
- const result=await readAnonymousOperationalOverview(pool)
+ const result=await readAnonymousOperationalOverview(pool,'reporter01',true)
  check(result.totalAccounts===6&&result.cloudEnabledAccounts===3&&
    result.storedSnapshots===2&&result.snapshotsUpdatedLast7d===1&&
    result.accountsCreatedLast7d===4,'Five metrics correctly parsed')
  check(queries===1&&released===1,'Exactly one query and released connection')
  check(!JSON.stringify(result).includes('userId')&&!JSON.stringify(result).includes('notes'),
    'No personal identifiers or private body in result')
- await assert.rejects(readAnonymousOperationalOverview(null),/reporting_pool_required/);checks++
+ await assert.rejects(readAnonymousOperationalOverview(null,'reporter01',true),/reporting_pool_required/);checks++
  for(const invalid of ['-1','NaN','9007199254740993','1.5',null]){
    const p={connect:async()=>({query:async()=>({rows:[{...row,total_accounts:invalid}]}),release(){released++}})}
-   await assert.rejects(readAnonymousOperationalOverview(p),/invalid_operational_overview/);checks++
+   await assert.rejects(readAnonymousOperationalOverview(p,'reporter01',true),/invalid_operational_overview/);checks++
  }
  const p={connect:async()=>({query:async()=>({rows:[]}),release(){released++}})}
- await assert.rejects(readAnonymousOperationalOverview(p),/invalid_operational_overview/);checks++
+ await assert.rejects(readAnonymousOperationalOverview(p,'reporter01',true),/operational_reporting_access_denied/);checks++
  check(released===7,'Every invalid-result path releases the reporting connection')
  console.log('PASS '+checks+' minimal anonymous PostgreSQL ops reporting contract checks')
 }finally{rmSync(temp,{recursive:true,force:true})}

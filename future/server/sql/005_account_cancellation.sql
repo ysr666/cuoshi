@@ -129,10 +129,21 @@ GRANT EXECUTE ON FUNCTION __SCHEMA__.cloud_purge_old_tombstones()
 GRANT USAGE ON SCHEMA __SCHEMA__ TO __REPORTING_ROLE__;
 GRANT SELECT ON __SCHEMA__.cloud_account_deletion_totals TO __REPORTING_ROLE__;
 
+-- Operations reads are audited separately, without user IDs or private notes.
+CREATE TABLE __SCHEMA__.cloud_reporting_audit (
+  id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+  staff_id TEXT NOT NULL,
+  decision TEXT NOT NULL CHECK (decision IN ('allow','deny')),
+  at TIMESTAMPTZ NOT NULL DEFAULT clock_timestamp()
+);
+CREATE TRIGGER cloud_reporting_audit_no_update_delete
+BEFORE UPDATE OR DELETE ON __SCHEMA__.cloud_reporting_audit
+FOR EACH ROW EXECUTE FUNCTION __SCHEMA__.forbid_cloud_audit_mutation();
+
 -- One aggregate row for the operations dashboard. The reporting login gets
 -- EXECUTE only, NOT SELECT on cloud_users, snapshots, identity or note JSON.
 -- "Recently updated" is NOT a proven upload success rate or daily activity.
-CREATE FUNCTION __SCHEMA__.cloud_reporting_overview()
+CREATE FUNCTION __SCHEMA__.cloud_reporting_overview(p_staff_id TEXT,p_mfa_verified BOOLEAN)
 RETURNS TABLE (
   total_accounts BIGINT,
   cloud_enabled_accounts BIGINT,
@@ -140,10 +151,19 @@ RETURNS TABLE (
   snapshots_updated_7d BIGINT,
   accounts_created_7d BIGINT
 )
-LANGUAGE sql SECURITY DEFINER
+LANGUAGE plpgsql SECURITY DEFINER
 SET search_path=pg_catalog,pg_temp
 AS $fn$
-  SELECT
+DECLARE v_allowed BOOLEAN;
+BEGIN
+  SELECT p_mfa_verified IS TRUE AND EXISTS(
+    SELECT 1 FROM __SCHEMA__.cloud_staff s
+    WHERE s.staff_id=p_staff_id AND s.active IS TRUE
+      AND s.role IN ('super_admin','auditor')) INTO v_allowed;
+  INSERT INTO __SCHEMA__.cloud_reporting_audit(staff_id,decision)
+    VALUES (p_staff_id,CASE WHEN v_allowed THEN 'allow' ELSE 'deny' END);
+  IF NOT v_allowed THEN RETURN; END IF;
+  RETURN QUERY SELECT
     (SELECT count(*) FROM __SCHEMA__.cloud_users u WHERE u.deleted_at IS NULL),
     (SELECT count(*) FROM __SCHEMA__.cloud_users u
      WHERE u.deleted_at IS NULL AND u.backup_enabled IS TRUE),
@@ -154,10 +174,12 @@ AS $fn$
      JOIN __SCHEMA__.cloud_users u ON u.user_id=s.user_id
      WHERE u.deleted_at IS NULL AND s.updated_at>=clock_timestamp()-interval '7 days'),
     (SELECT count(*) FROM __SCHEMA__.cloud_users u
-     WHERE u.deleted_at IS NULL AND u.created_at>=clock_timestamp()-interval '7 days');
+     WHERE u.deleted_at IS NULL AND u.created_at>=clock_timestamp()-interval '7 days')
+;
+END;
 $fn$;
-REVOKE ALL ON FUNCTION __SCHEMA__.cloud_reporting_overview() FROM PUBLIC;
-GRANT EXECUTE ON FUNCTION __SCHEMA__.cloud_reporting_overview()
+REVOKE ALL ON FUNCTION __SCHEMA__.cloud_reporting_overview(TEXT,BOOLEAN) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION __SCHEMA__.cloud_reporting_overview(TEXT,BOOLEAN)
   TO __REPORTING_ROLE__;
 
 -- Expired opaque authentication artifacts have no indefinite retention.
