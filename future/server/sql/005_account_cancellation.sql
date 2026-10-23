@@ -129,6 +129,37 @@ GRANT EXECUTE ON FUNCTION __SCHEMA__.cloud_purge_old_tombstones()
 GRANT USAGE ON SCHEMA __SCHEMA__ TO __REPORTING_ROLE__;
 GRANT SELECT ON __SCHEMA__.cloud_account_deletion_totals TO __REPORTING_ROLE__;
 
+-- One aggregate row for the operations dashboard. The reporting login gets
+-- EXECUTE only, NOT SELECT on cloud_users, snapshots, identity or note JSON.
+-- "Recently updated" is NOT a proven upload success rate or daily activity.
+CREATE FUNCTION __SCHEMA__.cloud_reporting_overview()
+RETURNS TABLE (
+  total_accounts BIGINT,
+  cloud_enabled_accounts BIGINT,
+  stored_snapshots BIGINT,
+  snapshots_updated_7d BIGINT,
+  accounts_created_7d BIGINT
+)
+LANGUAGE sql SECURITY DEFINER
+SET search_path=pg_catalog,pg_temp
+AS $fn$
+  SELECT
+    (SELECT count(*) FROM __SCHEMA__.cloud_users u WHERE u.deleted_at IS NULL),
+    (SELECT count(*) FROM __SCHEMA__.cloud_users u
+     WHERE u.deleted_at IS NULL AND u.backup_enabled IS TRUE),
+    (SELECT count(*) FROM __SCHEMA__.cloud_snapshots s
+     JOIN __SCHEMA__.cloud_users u ON u.user_id=s.user_id
+     WHERE u.deleted_at IS NULL),
+    (SELECT count(*) FROM __SCHEMA__.cloud_snapshots s
+     JOIN __SCHEMA__.cloud_users u ON u.user_id=s.user_id
+     WHERE u.deleted_at IS NULL AND s.updated_at>=clock_timestamp()-interval '7 days'),
+    (SELECT count(*) FROM __SCHEMA__.cloud_users u
+     WHERE u.deleted_at IS NULL AND u.created_at>=clock_timestamp()-interval '7 days');
+$fn$;
+REVOKE ALL ON FUNCTION __SCHEMA__.cloud_reporting_overview() FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION __SCHEMA__.cloud_reporting_overview()
+  TO __REPORTING_ROLE__;
+
 -- Expired opaque authentication artifacts have no indefinite retention.
 CREATE FUNCTION __SCHEMA__.cloud_purge_expired_auth_artifacts()
 RETURNS INTEGER LANGUAGE plpgsql SECURITY DEFINER

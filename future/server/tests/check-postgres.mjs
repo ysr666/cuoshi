@@ -51,6 +51,7 @@ try{
     resolve(root,'future/server/src/wechatIdentity.ts'),
     resolve(root,'future/server/src/accountCancellation.ts'),
     resolve(root,'future/server/src/deletionReporting.ts'),
+    resolve(root,'future/server/src/operationalReporting.ts'),
     resolve(root,'future/cloud/initialMigration.ts'),
     resolve(root,'future/cloud/automaticSync.ts'),
     resolve(root,'future/server/src/backupHttp.ts'),
@@ -84,6 +85,7 @@ try{
   const {loginWithWechatCode,makeWechatCodeExchanger}=require(join(out,'future/server/src/wechatIdentity.js'))
   const {ACCOUNT_DELETE_CONFIRMATION}=require(join(out,'future/server/src/accountCancellation.js'))
   const {readAnonymousDeletionSummary}=require(join(out,'future/server/src/deletionReporting.js'))
+  const {readAnonymousOperationalOverview}=require(join(out,'future/server/src/operationalReporting.js'))
   await basePool.query('CREATE SCHEMA "'+schema+'"')
   pool=new Pool({connectionString:source,options:'-c search_path='+schema,max:14})
   const ddl=renderMigration('001_initial.sql',sqlVars)
@@ -217,12 +219,21 @@ try{
   await attempt(reportingPool,'SELECT * FROM cloud_admin_audit')
   await attempt(reportingPool,'SELECT * FROM cloud_wechat_identities')
   await attempt(reportingPool,'SELECT * FROM cloud_users')
+  await attempt(backupPool,'SELECT * FROM cloud_reporting_overview()')
+  await attempt(adminPool,'SELECT * FROM cloud_reporting_overview()')
+  await attempt(identityPool,'SELECT * FROM cloud_reporting_overview()')
   await attempt(reportingPool,'SELECT * FROM cloud_revoked_backup_tokens')
   await attempt(deletionPool,'SELECT * FROM cloud_users')
   await attempt(reportingPool,"SELECT * FROM cloud_cancel_account('account0001')")
   await attempt(reportingPool,'DELETE FROM cloud_account_deletion_totals')
   check((await readAnonymousDeletionSummary(reportingPool)).length===0,
     'Reporting role sees no entries before any deletion')
+  const initialOverview=await readAnonymousOperationalOverview(reportingPool)
+  check(initialOverview.totalAccounts===0&&initialOverview.storedSnapshots===0,
+    'Actual restricted reporting role sees no registered accounts initially')
+  check(Object.keys(initialOverview).sort().join(',')===
+    'accountsCreatedLast7d,cloudEnabledAccounts,snapshotsUpdatedLast7d,storedSnapshots,totalAccounts',
+    'Overview exposes only five approved aggregate fields, no identifiers or note bodies')
 
   check((await pool.query('SELECT count(*) AS n FROM cloud_admin_audit')).rows[0].n==='0',
     'No privilege probing modified audit history')
@@ -242,6 +253,10 @@ try{
   const tokenB=userToken('account0002','device0002')
   check((await service.provision(tokenA))===undefined,'Verified session can provision identity')
   check((await service.provision(tokenB))===undefined,'Independent owner provisioned')
+  const registeredOverview=await readAnonymousOperationalOverview(reportingPool)
+  check(registeredOverview.totalAccounts===2&&registeredOverview.accountsCreatedLast7d===2&&
+    registeredOverview.cloudEnabledAccounts===0&&registeredOverview.storedSnapshots===0,
+    'Overview counts real distinct active accounts, not synthetic dashboard values')
   await assert.rejects(service.provision(null),/unauthorized/);checks++
   await assert.rejects(service.provision('untrusted'),/unauthorized/);checks++
   await assert.rejects(service.provision(staffToken('support0001')),/unauthorized/);checks++
@@ -1140,6 +1155,14 @@ try{
     'SELECT COALESCE(sum(accounts_deleted),0) AS n,COALESCE(sum(snapshots_erased),0) AS m FROM cloud_account_deletion_totals')
   check(Number(totals.rows[0].n)===Number(beforeStat.rows[0].n)+1&&
     Number(totals.rows[0].m)>=1,'Backend retains aggregate deletion/snapshot operational counts')
+  const afterDeletionOverview=await readAnonymousOperationalOverview(reportingPool)
+  check(afterDeletionOverview.totalAccounts>=2&&
+    afterDeletionOverview.cloudEnabledAccounts<=afterDeletionOverview.totalAccounts&&
+    afterDeletionOverview.snapshotsUpdatedLast7d<=afterDeletionOverview.storedSnapshots,
+    'Aggregate statistics respect deleted-account exclusion and count boundaries')
+  check(!JSON.stringify(afterDeletionOverview).includes(wxLogin.userId)&&
+    !JSON.stringify(afterDeletionOverview).includes('私人文字'),
+    'Aggregates contain no personal identifiers, private notes or history')
   const report=await readAnonymousDeletionSummary(reportingPool)
   check(report.length>=1&&report[0].accountsDeleted>=1&&report[0].snapshotsErased>=1,
     'Restricted operations account can read anonymous deletion totals')

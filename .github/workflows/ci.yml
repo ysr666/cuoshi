@@ -56,6 +56,8 @@ jobs:
         run: npm run test:future:backup-http
       - name: Minimal admin private read route denies unaudited and unauthenticated access
         run: npm run test:future:admin-http
+      - name: Anonymous operational dashboard SQL result contract
+        run: npm run test:future:operational-reporting
       - name: Future trusted WeChat code login and explicit consent HTTP
         run: npm run test:future:account-http
       - name: Composed localhost-only cloud HTTP listener and route isolation
