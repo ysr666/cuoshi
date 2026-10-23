@@ -48,7 +48,8 @@ try{
   const live=await fetch(target+'/healthz')
   check(live.status===204&&live.headers.get('cache-control')==='no-store, private',
    'Health only confirms listener liveness, never database readiness')
-  for(const path of ['/v1/admin/read','/v1/backup/snapshot?ownerId=account0001',
+  for(const path of ['/v1/admin/read','/internal/admin/overview',
+    '/internal/admin/read-day','/v1/backup/snapshot?ownerId=account0001',
     '/v1/auth/wechat/','/v1/auth/%252e%252e/wechat','/v1/backup/consent?enabled=true']){
    const response=await fetch(target+path,{redirect:'manual'})
    check(response.status===404,'Unexpected routes are refused: '+path)
