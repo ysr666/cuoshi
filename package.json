@@ -68,7 +68,8 @@
     "test:future:admin-preview": "node tests/check-future-admin-preview.mjs",
     "test:future:admin-http": "node tests/check-future-admin-http.mjs",
     "test:future:operational-reporting": "node tests/check-future-operational-reporting.mjs",
-    "test:future:operational-http": "node tests/check-future-operational-http.mjs"
+    "test:future:operational-http": "node tests/check-future-operational-http.mjs",
+    "test:future:staff-host": "node tests/check-future-staff-host.mjs"
   },
   "dependencies": {
     "@dcloudio/uni-app": "3.0.0-4080720251210001",

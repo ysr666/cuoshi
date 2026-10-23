@@ -42,3 +42,7 @@ npm run test:future:admin-preview
 `future/server/src/operationalService.ts` + `operationalHttp.ts` 提供 `GET /internal/admin/overview` 的独立受限处理函数。必须提供独立的 5 分钟员工签名会话（经过实际员工 MFA）、每次检查数据库撤销名单，再调用独立报表账号的 `cloud_reporting_overview(staff_id, mfa_verified)`。PostgreSQL **再次检查员工角色必须为在职管理员/审计员**，并记录允许/拒绝的匿名汇总访问审计；客服即使持有有效会话也不能读。用户 token、伪造员工标识、过期与撤销的会话均被拒绝，不可传递用户 ID/日期/查询参数，没有私人正文路径、批量导出或跨域读权限。
 
 **安全限定**：此处理函数未被公网 `cloudHttpHost`、Caddy、小程序、localhost 演示页或正式服务器入口挂载；也没有提供绕过 MFA 的管理员账号签发器。需要有合法员工身份来源、独立受控管理员 HTTPS 入口和最小数据库角色的生产部署才可投入使用。演示页面仍使用清楚标记的合成数据。
+
+## 独立管理员服务入口（仅代码，未部署）
+
+新增 `future/server/src/staffHttpHost.ts`，限定 127.0.0.1 与可信本机代理，只允许运营汇总及经审批的工单单日查询两个精确路径。普通微信登录和私人备份路由返回 404；它没有自动注册到小程序公开服务器。员工 MFA、独立正式管理域名及安全运维配置仍需生产资源。对应 `npm run test:future:staff-host` 做隔离回归。
