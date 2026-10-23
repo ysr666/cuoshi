@@ -7,6 +7,7 @@ import {checkPrivateStaffReadiness} from './privateStaffReadiness'
 import {createTrustedEdgeBoundary} from './trustedEdge'
 import {createStaffConsoleAssets,listenStaffPrivateLoopback} from './staffHttpHost'
 import {createStaffOperationalService} from './operationalService'
+import {createOwnerAuthService} from './ownerAuth'
 import type {DbPool} from './repository'
 
 async function main(){
@@ -20,13 +21,16 @@ async function main(){
  const pools=[staffDb,reportDb]
  let host:Awaited<ReturnType<typeof listenStaffPrivateLoopback>>|null=null
  try{
+   const ownerAuth=createOwnerAuthService(staffDb,{ownerId:cfg.soleOwnerId,
+     passwordRecord:cfg.ownerPasswordHash,totpSecret:cfg.ownerTotpSecret,
+     signingKey:cfg.signingKey,peerHashKey:cfg.ownerPeerHashKey})
    await checkPrivateStaffReadiness(staffDb,reportDb,cfg.dbSchema)
    const assets=createStaffConsoleAssets(resolve(process.cwd(),'future/admin/live'))
    const edge=createTrustedEdgeBoundary({sharedSecret:cfg.edgeSecret})
    host=await listenStaffPrivateLoopback({
      reporting:createStaffOperationalService(staffDb,reportDb,cfg.signingKey,
        ()=>Math.floor(Date.now()/1000),cfg.soleOwnerId),
-     consoleAssets:assets
+     ownerAuth,consoleAssets:assets
    },edge,cfg.port)
    process.stdout.write('Cuoshi sole-owner admin loopback ready (trusted edge required)\n')
    let stopping=false

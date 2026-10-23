@@ -76,3 +76,19 @@ npm run test:future:admin-preview
 ### 2026-10-24 · 管理页面失效响应与 BFCache 隐私隔离
 
 管理台在页面切换时主动中止进行中的私人单日查询；页面离开、BFCache pagehide 和退出员工会话均调用统一的内存及 DOM 清理逻辑，避免旧请求在用户离开后重新填入私人数据。Chrome 验收新增慢工单响应/离开页面/返回登录态检查；生产依然必须提供合法员工 MFA，不会自动展示私人简记。
+
+## 2026-10-24: Sole-owner password + TOTP login (current implementation)
+
+The sole human administrator signs in with a separate dashboard password and a six-digit authenticator code. The web UI no longer asks the user to paste a JWT. Both factors are verified server-side. A signed owner-only bearer session lasts at most five minutes and remains only in the current browser page's memory; logout writes a persistent session-revocation entry. No extra human employee, approval workflow, private-note export, or global user record listing is enabled.
+
+Production settings are REQUIRED and must never be committed, pasted in chat, or bundled into the mini program:
+
+- `CUOSHI_OWNER_ADMIN_ID`: fixed 8-128 character owner ID. The migration operator must enroll exactly this ID as the only active `super_admin` in `cloud_staff` (legacy schema compatibility; this is not a multi-employee system).
+- `CUOSHI_OWNER_PASSWORD_SCRYPT`: `scrypt:16384:<32 hex chars of random salt>:<64 hex chars of derived key>` with scrypt `N=16384,r=8,p=1`, output length 32. No plaintext dashboard password in the environment or code.
+- `CUOSHI_OWNER_TOTP_SECRET`: securely generated uppercase Base32 TOTP seed (at least 20 random bytes), enrolled locally into the owner's authenticator. Never upload the seed.
+- `CUOSHI_OWNER_LOGIN_PEER_KEY_HEX`: an additional independent 32-byte random HMAC key, different from both owner JWT signing key and trusted reverse-proxy key.
+- The preexisting `CUOSHI_STAFF_SIGNING_KEY_HEX`, `CUOSHI_STAFF_EDGE_SHARED_SECRET_HEX`, separate least-privileged PostgreSQL technical roles, and dedicated loopback HTTPS proxy remain required. Technical database roles are NOT human employees.
+
+Migration `008_owner_admin_login.sql` adds atomic 5-minute PostgreSQL login limits (five per authenticated peer, 30 globally), one-use TOTP time-step consumption, and bounded maintenance cleanup. Any missing configuration, failed database, malformed secret or mismatched identity fails closed. The front end has no mock-data fallback on failed sign-in. Unit/browser/integration coverage: `npm run test:future:owner-auth`, `npm run test:future:staff-console`, and real PostgreSQL CI.
+
+This is code readiness only. No real dashboard secrets, production database, official HTTPS domain, or live administrator enrollment have been set up. An unconfigured deployment cannot log in and must NOT be published.

@@ -28,8 +28,8 @@ bad(()=>validateMigrationConfig({...env,CUOSHI_PG_SCHEMA:'cs_staff'}),
 bad(()=>validateMigrationConfig({...env,CUOSHI_PG_AUTH_ROLE:undefined}),
  /migration_identifier_rejected/,'Missing identity role cannot be inferred')
 const files=renderAllMigrations(env)
-check(files.length===7&&files.every((x,i)=>x.name===ORDER[i]),
- 'All seven migrations remain in documented, unskippable sequence')
+check(files.length===8&&files.every((x,i)=>x.name===ORDER[i]),
+ 'All eight migrations remain in documented, unskippable sequence')
 for(const file of files){
  check(file.contents.includes('SET LOCAL search_path TO "cuoshi_prod", pg_catalog;'),
   'Each transaction pins safe explicit SQL schema: '+file.name)
@@ -42,7 +42,8 @@ check(files[0].contents.includes('CREATE TABLE cloud_users'),
  'Initial unqualified tables bind to pinned target schema')
 check(files[1].contents.includes('TO "cs_staff"')&&
  files[4].contents.includes('TO "cs_deletion"')&&
- files[6].contents.includes('TO "cs_login"'),
+ files[6].contents.includes('TO "cs_login"')&&
+ files[7].contents.includes('TO "cs_staff"'),
  'Privilege grants use exact separated role identifiers')
 bad(()=>renderMigration('test_bad.sql',validateMigrationConfig(env)),
  /migration_template_unknown/,'No custom external SQL templates accepted')
@@ -55,11 +56,11 @@ try{
   /migration_output_inside_repository_forbidden/,
   'Generated SQL never placed inside Git workspace')
  const created=createMigrationBundle(folder,env)
- check(created.count===7&&realpathSync(created.directory)===realpathSync(folder),'One unprivileged offline render complete')
+ check(created.count===8&&realpathSync(created.directory)===realpathSync(folder),'One unprivileged offline render complete')
  check((statSync(folder).mode&0o777)===0o700,
   'Sensitive migration bundle directory accessible only to owner')
  const manifest=JSON.parse(readFileSync(join(folder,'SHA256-MANIFEST.json'),'utf8'))
- check(manifest.migrations.length===7&&manifest.format==='cuoshi-v05-offline-sql-render-v1',
+ check(manifest.migrations.length===8&&manifest.format==='cuoshi-v05-offline-sql-render-v1',
   'Fixed migration order and format saved to manifest')
  for(const file of manifest.migrations){
   const path=join(folder,file.file)
@@ -71,4 +72,4 @@ try{
  bad(()=>createMigrationBundle(folder,env),/EEXIST/,
   'Existing migration bundle cannot be overwritten')
 }finally{rmSync(scratch,{recursive:true,force:true})}
-console.log('PASS',n,'offline seven-step SQL render, privilege and injection guards')
+console.log('PASS',n,'offline eight-step SQL render, privilege and injection guards')

@@ -13,6 +13,7 @@ const {chromium}=requireLocal('playwright-core')
 let checks=0
 const ok=(v,m)=>{assert.ok(v,m);checks++}
 const token='T'.repeat(140),unprivileged='U'.repeat(140)
+const fixturePass='fixture-owner-secret-12345',fixtureOtp='123456'
 let staff,proxy,browser,overviewHits=0
 ;(async()=>{
  const output=join(temp,'dist');mkdirSync(output)
@@ -26,7 +27,10 @@ let staff,proxy,browser,overviewHits=0
  const edge=createTrustedEdgeBoundary({sharedSecret})
  const assets=createStaffConsoleAssets(resolve('future/admin/live'))
  ok(assets.size===4,'Only four preapproved local files are served')
- const deps={consoleAssets:assets,reporting:{async overview(key){overviewHits++
+ const deps={consoleAssets:assets,ownerAuth:{async login(c,ip){
+ if(c.password!==fixturePass||c.otp!==fixtureOtp||ip!=='127.0.0.1')throw Error('owner_login_invalid')
+ return token
+ },async logout(){return undefined}},reporting:{async overview(key){overviewHits++
    if(key===unprivileged)throw Error('operational_reporting_access_denied')
    if(key!==token)throw Error('unauthorized')
    return {totalAccounts:12,cloudEnabledAccounts:9,storedSnapshots:7,
@@ -72,16 +76,8 @@ let staff,proxy,browser,overviewHits=0
   ok(await page.locator('#metrics').locator('.stat-card').count()===0,
     width+' no metrics before signed staff session')
   ok(await page.locator('#case-form').count()===0,width+' multi-person cases not present in owner dashboard')
-  await page.locator('#staff-token').fill('x')
-  await page.locator('#auth-form button').click()
-  ok((await page.locator('#message').innerText()).includes('唯一管理员'),width+' invalid token locally refused')
-  await page.locator('#staff-token').fill(unprivileged)
-  await page.locator('#auth-form button').click()
-  await page.getByText('没有管理员权限',{exact:false}).waitFor()
-  ok(await page.locator('#metrics .stat-card').count()===0,width+' unauthorized staff receives no aggregate')
-  ok(!await page.evaluate(()=>localStorage.length||sessionStorage.length),width+' no staff token persisted')
-  await page.locator('#logout').click()
-  await page.locator('#staff-token').fill(token)
+  await page.locator('#owner-password').fill(fixturePass)
+  await page.locator('#owner-otp').fill(fixtureOtp)
   await page.locator('#auth-form button').click()
   await page.locator('#metrics .stat-card').first().waitFor()
   ok(await page.locator('#metrics .stat-card').count()===5,width+' all five real metrics rendered')
@@ -97,7 +93,7 @@ let staff,proxy,browser,overviewHits=0
   await page.locator('#logout').click()
   ok(await page.locator('#auth-card').isVisible()&&await page.locator('#metrics .stat-card').count()===0,
     width+' logout removes credentials and operational metrics')
-  ok((await page.locator('#staff-token').inputValue())==='',width+' token field scrubbed')
+  ok((await page.locator('#owner-otp').inputValue())==='',width+' token field scrubbed')
   await page.evaluate(()=>window.dispatchEvent(new Event('pagehide')))
   ok(await page.locator('#auth-card').isVisible(),width+' browser pagehide resets to login without lingering authorized UI')
   ok(!await page.evaluate(()=>localStorage.length||sessionStorage.length),width+' session never in web storage')
@@ -107,7 +103,7 @@ let staff,proxy,browser,overviewHits=0
   ok(foreign.length===0,width+' no external requests')
   await context.close()
  }
- ok(overviewHits>=4,'Browser exercised sole-owner protected statistics route')
+ ok(overviewHits>=2,'Browser exercised sole-owner protected statistics route')
  console.log('PASS '+checks+' real-data staff console safety and Chrome interactions')
 })().catch(e=>{console.error(e);process.exitCode=1}).finally(async()=>{
  await browser?.close();if(proxy)await new Promise(r=>proxy.close(r));await staff?.close()

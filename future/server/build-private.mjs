@@ -11,7 +11,8 @@ execFileSync(resolve(root,'node_modules/.bin/tsc'),[
  '--skipLibCheck','--rootDir',root,'--outDir',output,
  'future/server/src/privateMain.ts','future/server/src/privateMaintenance.ts',
  'future/server/src/staffHttpHost.ts',
- 'future/server/src/privateStaffMain.ts'
+ 'future/server/src/privateStaffMain.ts',
+ 'future/server/src/ownerAuthHttp.ts'
 ],{cwd:root,stdio:'inherit'})
 writeFileSync(resolve(output,'package.json'),'{"type":"commonjs","private":true}\n')
 console.log('PASS private backend entry compiled; no process started')

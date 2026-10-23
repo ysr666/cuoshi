@@ -71,7 +71,8 @@
     "test:future:operational-http": "node tests/check-future-operational-http.mjs",
     "test:future:staff-host": "node tests/check-future-staff-host.mjs",
     "test:future:staff-console": "node tests/check-future-staff-console.cjs",
-    "test:future:staff-config": "node tests/check-future-staff-config.mjs"
+    "test:future:staff-config": "node tests/check-future-staff-config.mjs",
+    "test:future:owner-auth": "node tests/check-future-owner-auth.mjs"
   },
   "dependencies": {
     "@dcloudio/uni-app": "3.0.0-4080720251210001",

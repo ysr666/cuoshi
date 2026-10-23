@@ -120,3 +120,7 @@ GitHub Actions #39990745284 的前三个 Job 通过，前端 Job 在执行 `apt-
 #### 2026-10-24 · 用户明确更正：管理后台仅唯一管理员
 
 此前设计的员工、多角色、工单双人审批不符合「错事」单人运营模式，已在正式后台代码中取消其可访问入口，并从真实后台与演示 UI 移除相关导航。服务器必须配置唯一管理员 `CUOSHI_OWNER_ADMIN_ID`，拒绝其他签名正确的后台身份；保留数据库独立技术角色作最小权限隔离，不代表多人账号。旧 SQL 两人审批方案暂保留为不可达的历史研发结构，不能作为完成的生产能力。正式后台现只提供受限运营汇总和系统状态，私人简记读取默认不开放。未来独立的真实管理员验证、上线合规验收仍未完成。
+
+#### 2026-10-24: Sole-owner two-factor dashboard authentication
+
+The restricted dashboard login now takes a password and an authenticator code, not a pasted employee token. Isolated `ownerAuth.ts` and `ownerAuthHttp.ts`, migration 008, database-backed login rate limiting and TOTP replay guards, signed five-minute owner session, and persisted logout revocation are added with synthetic tests. No other human administrator or private-note bulk access is introduced. Production secret setup, owner enrollment, standalone HTTPS ingress, mainland cloud resources, and real-device acceptance remain required; release status remains BLOCKED.

@@ -24,10 +24,16 @@ try{
    CUOSHI_PG_STAFF_URL:'postgresql://role_staff:placeholder@127.0.0.1:5432/test?sslmode=verify-full',
    CUOSHI_PG_REPORTING_URL:'postgresql://role_reports:placeholder@127.0.0.1:5432/test?sslmode=verify-full',
    CUOSHI_STAFF_SIGNING_KEY_HEX:randomBytes(32).toString('hex'),
-   CUOSHI_STAFF_EDGE_SHARED_SECRET_HEX:randomBytes(32).toString('hex')
+   CUOSHI_STAFF_EDGE_SHARED_SECRET_HEX:randomBytes(32).toString('hex'),
+   CUOSHI_OWNER_LOGIN_PEER_KEY_HEX:randomBytes(32).toString('hex'),
+   CUOSHI_OWNER_PASSWORD_SCRYPT:'scrypt:16384:'+randomBytes(16).toString('hex')+':'+randomBytes(32).toString('hex'),
+   CUOSHI_OWNER_TOTP_SECRET:'A'.repeat(32)
  }
  const reject=(change,pattern)=>{assert.throws(()=>parsePrivateStaffConfig({...env,...change}),pattern);n++}
  reject({CUOSHI_STAFF_EDGE_ACK:''},/ack_required/)
+ reject({CUOSHI_OWNER_PASSWORD_SCRYPT:''},/hash_invalid/)
+ reject({CUOSHI_OWNER_TOTP_SECRET:''},/totp_secret_invalid/)
+ reject({CUOSHI_OWNER_LOGIN_PEER_KEY_HEX:''},/secret_missing/)
  reject({CUOSHI_OWNER_ADMIN_ID:''},/sole_owner_required/)
  reject({CUOSHI_OWNER_ADMIN_ID:'abc'},/sole_owner_required/)
  reject({CUOSHI_STAFF_PORT:'80'},/port_invalid/)

@@ -5,12 +5,15 @@ import {readFileSync} from 'node:fs'
 import {join} from 'node:path'
 import {answer} from './backupHttp'
 import {createPrivateOperationalHttpHandler} from './operationalHttp'
+import {createOwnerAuthHttpHandler} from './ownerAuthHttp'
+import type {createOwnerAuthService} from './ownerAuth'
 import type {createTrustedEdgeBoundary,CloudRequestHandler} from './trustedEdge'
 import type {createStaffOperationalService} from './operationalService'
 
 type ReportingService=ReturnType<typeof createStaffOperationalService>
 export type StaffHttpDependencies={
   reporting:ReportingService
+  ownerAuth?:ReturnType<typeof createOwnerAuthService>
   // Assets are created from reviewed local files, never from HTTP path input.
   consoleAssets?:ReadonlyMap<string,{content:Buffer;mime:string}>
 }
@@ -30,12 +33,17 @@ export function createStaffConsoleAssets(approvedDirectory:string){
   }
   return result
 }
-export function createStaffHttpRouter(deps:StaffHttpDependencies):CloudRequestHandler{
+export function createStaffHttpRouter(
+ deps:StaffHttpDependencies,verifiedPeer?:(req:IncomingMessage)=>string|null
+):CloudRequestHandler{
   if(typeof deps?.reporting?.overview!=='function')
     throw Error('staff_http_dependencies_required')
   const report=createPrivateOperationalHttpHandler(deps.reporting)
+  const auth=deps.ownerAuth&&verifiedPeer?createOwnerAuthHttpHandler(deps.ownerAuth,verifiedPeer):null
   return async(req:IncomingMessage,res:ServerResponse)=>{
     if(req.url==='/internal/admin/overview')return report(req,res)
+    if(auth&&(req.url==='/internal/admin/login'||req.url==='/internal/admin/logout'))
+      return auth(req,res)
     const asset=deps.consoleAssets?.get(req.url??'')
     if(asset){
       if(req.method!=='GET')return answer(res,405,{error:'method_not_allowed'})
@@ -64,7 +72,7 @@ export async function listenStaffPrivateLoopback(
   if(!edge||typeof edge.protect!=='function'||typeof edge.clientIp!=='function'||
      !Number.isSafeInteger(port)||port<0||port>65535)
     throw Error('staff_private_edge_required')
-  const protectedRoute=edge.protect(createStaffHttpRouter(deps))
+  const protectedRoute=edge.protect(createStaffHttpRouter(deps,edge.clientIp))
   const server=createServer({maxHeaderSize:8192,requestTimeout:15000,
     headersTimeout:10000,keepAliveTimeout:3000},(req,res)=>{
     void protectedRoute(req,res).catch(()=>{

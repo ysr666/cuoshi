@@ -64,6 +64,8 @@ jobs:
         run: npm run test:future:staff-host
       - name: Production staff process config rejects invalid roles and missing MFA keys
         run: npm run test:future:staff-config
+      - name: Sole owner password and one-time authenticator verification
+        run: npm run test:future:owner-auth
       - name: Future trusted WeChat code login and explicit consent HTTP
         run: npm run test:future:account-http
       - name: Composed localhost-only cloud HTTP listener and route isolation
@@ -91,7 +93,7 @@ jobs:
         run: npm run test:future:public-edge
       - name: Verify predeployment HTTPS proxy template and safe credential generation
         run: npm run test:future:proxy-deploy
-      - name: Validate seven SQL migration renders and locked-down operator output
+      - name: Validate eight SQL migration renders and locked-down operator output
         run: npm run test:future:migration-render
       - name: Verify scheduled maintenance service and hourly retention timer (static)
         run: node tests/check-future-maintenance-static.mjs

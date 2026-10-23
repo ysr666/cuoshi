@@ -111,7 +111,8 @@ try{
   for(const name of [
     '002_runtime_permissions.sql','003_wechat_identity.sql',
     '004_session_revocation.sql','005_account_cancellation.sql',
-    '006_global_session_revocation.sql','007_login_rate_limits.sql'
+    '006_global_session_revocation.sql','007_login_rate_limits.sql',
+    '008_owner_admin_login.sql'
   ]){
     await pool.query(renderMigration(name,sqlVars))
   }
@@ -879,6 +880,30 @@ try{
   for(const [id,role] of [['support0001','support'],['reviewer001','safety_reviewer'],
     ['superadmin1','super_admin'],['auditor0001','auditor']])
     await pool.query('INSERT INTO cloud_staff(staff_id,role) VALUES($1,$2)',[id,role])
+  // A single administrator owns the only TOTP challenge; there are no
+  // service-worker-local counters and no second-human approval requirement.
+  const digestForOwner='e'.repeat(64)
+  const slots=[]
+  for(let index=0;index<6;index++){
+    const result=await adminPool.query('SELECT cloud_take_owner_login_slot($1) AS allowed',[digestForOwner])
+    slots.push(result.rows[0].allowed)
+  }
+  check(slots.slice(0,5).every(Boolean)&&slots[5]===false,
+    'Real PostgreSQL atomically blocks sixth login attempt per five-minute peer window')
+  const ownerOtp=(id,step)=>adminPool.query(
+    'SELECT cloud_consume_owner_totp_step($1,$2) AS accepted',[id,step])
+  check((await ownerOtp('superadmin1',50000000)).rows[0].accepted===true,
+    'One existing sole-owner administrator consumes the first TOTP step')
+  check((await ownerOtp('superadmin1',50000000)).rows[0].accepted===false&&
+    (await ownerOtp('superadmin1',49999999)).rows[0].accepted===false,
+    'Repeated and older MFA codes cannot create new sessions')
+  check((await ownerOtp('superadmin1',50000001)).rows[0].accepted===true,
+    'Later MFA step is accepted exactly once')
+  check((await ownerOtp('support0001',50000000)).rows[0].accepted===false,
+    'A different human role cannot consume the owner MFA step')
+  await attempt(backupPool,'SELECT * FROM cloud_owner_login_windows')
+  await attempt(reportingPool,'SELECT * FROM cloud_owner_totp_steps')
+  await attempt(reportingPool,"SELECT cloud_consume_owner_totp_step('superadmin1',50000009)")
   await assert.rejects(readAnonymousOperationalOverview(reportingPool,'support0001',true),
     /operational_reporting_access_denied/);checks++
   await pool.query(`INSERT INTO cloud_access_cases(case_id,owner_id,purpose,status)

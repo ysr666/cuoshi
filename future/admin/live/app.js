@@ -10,7 +10,7 @@ function alertStatus(s){el('message').textContent=s;el('message').hidden=!s}
 function clearData(){el('metrics').replaceChildren();el('updated-at').textContent=''}
 function logout(note=''){
  generation++;request?.abort();request=null;token=null;clearData()
- el('staff-token').value='';el('auth-card').hidden=false;el('logout').hidden=true
+ el('owner-password').value='';el('owner-otp').value='';el('auth-card').hidden=false;el('logout').hidden=true
  switchView('overview');alertStatus(note)
 }
 function switchView(name){if(!(name in views))return
@@ -69,19 +69,46 @@ async function refresh(){
      alertStatus('运营汇总暂时不可用，不使用模拟数字代替。')
  }finally{if(request===controller)request=null}
 }
-el('auth-form').addEventListener('submit',event=>{
- event.preventDefault();const submitted=el('staff-token').value.trim();el('staff-token').value=''
- if(!/^[A-Za-z0-9_.-]{90,1800}$/.test(submitted)){
-   alertStatus('请输入经唯一管理员身份验证后签发的短期会话。');return
+el('auth-form').addEventListener('submit',async event=>{
+ event.preventDefault()
+ const password=el('owner-password').value,otp=el('owner-otp').value.trim()
+ el('owner-password').value='';el('owner-otp').value=''
+ if(password.length<12||password.length>128||!/^[0-9]{6}$/.test(otp)){
+   alertStatus('请输入管理员密码和身份验证器中的六位动态验证码。');return
  }
- logout();token=submitted;el('auth-card').hidden=true;el('logout').hidden=false
- switchView('overview');void refresh()
+ logout();alertStatus('正在核验管理员身份…')
+ const localGeneration=generation
+ try{
+   const response=await fetch('/internal/admin/login',{
+     method:'POST',headers:{'Content-Type':'application/json'},
+     body:JSON.stringify({password,otp}),credentials:'omit',cache:'no-store',
+     referrerPolicy:'no-referrer'})
+   if(localGeneration!==generation)return
+   if(response.status===401){alertStatus('密码或验证码不正确，或验证码已使用。');return}
+   if(response.status===429){alertStatus('尝试次数过多，请稍后重试。');return}
+   if(!response.ok)throw Error('owner_auth_unavailable')
+   const result=await response.json()
+   if(typeof result.token!=='string'||!Number.isSafeInteger(result.expiresInSeconds)||
+       result.expiresInSeconds>300)throw Error('invalid_auth_response')
+   token=result.token;el('auth-card').hidden=true;el('logout').hidden=false
+   switchView('overview');void refresh()
+ }catch{if(localGeneration===generation)alertStatus('暂时无法验证管理员身份，请确认后台服务配置。')}
 })
 for(const b of document.querySelectorAll('[data-view]'))b.addEventListener('click',()=>{
  if(!token){alertStatus('请先登录管理员账号。');return}
  switchView(b.dataset.view);alertStatus('')
 })
 el('refresh').addEventListener('click',()=>{void refresh()})
-el('logout').addEventListener('click',()=>logout('已退出后台。'))
+el('logout').addEventListener('click',async()=>{
+ const oldToken=token
+ logout('已退出本机后台。')
+ if(!oldToken)return
+ try{
+   const response=await fetch('/internal/admin/logout',{
+     method:'POST',headers:{Authorization:'Bearer '+oldToken},
+     credentials:'omit',cache:'no-store',referrerPolicy:'no-referrer'})
+   if(!response.ok)alertStatus('本机已退出，但无法确认服务端撤销；令牌最多五分钟失效。')
+ }catch{alertStatus('本机已退出，网络异常；服务端会话将在五分钟内失效。')}
+})
 window.addEventListener('pagehide',()=>logout())
 })()

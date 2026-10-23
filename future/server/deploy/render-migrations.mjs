@@ -11,7 +11,7 @@ export const ORDER=Object.freeze([
  '001_initial.sql','002_runtime_permissions.sql',
  '003_wechat_identity.sql','004_session_revocation.sql',
  '005_account_cancellation.sql','006_global_session_revocation.sql',
- '007_login_rate_limits.sql'
+ '007_login_rate_limits.sql','008_owner_admin_login.sql'
 ])
 const keys={
  __SCHEMA__:'CUOSHI_PG_SCHEMA',
