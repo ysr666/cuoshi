@@ -34,6 +34,7 @@ try{
  const storage=new Map(),tokens=new Map(),networkListeners=new Set()
  let ignoreNextOwnerRemoval=false,rejectNextLogin=false,nextLoginHttpStatus=0
  let rejectSnapshotRead=false,rejectSnapshotUpload=false,rejectSnapshotConsent=false
+ let foreignSnapshotRead=false
  let cancelHttpStatus=0,cancelRequests=0,cancelStatusHttpStatus=0,loseCancelReply=false
  const cancelledTokens=new Set()
  let owner='account0001',online=true,serverConsent=false,loginCalls=0,
@@ -126,6 +127,12 @@ try{
    }
    if(url.endsWith('/v1/backup/snapshot')&&method==='GET'){
     if(rejectSnapshotRead){rejectSnapshotRead=false;success({statusCode:401,data:{}});return}
+    if(foreignSnapshotRead&&snapshot){
+     foreignSnapshotRead=false
+     success({statusCode:200,data:{...snapshot,
+       ownerId:owner==='account0001'?'account0002':'account0001'}})
+     return
+    }
     success({statusCode:snapshot?200:204,data:snapshot})
     return
    }
@@ -332,6 +339,29 @@ try{
  await until(()=>app.state.stage==='ready'&&app.state.sync==='已同步')
  app.getActions().changeCount(records.localDate(),1,true)
  await until(()=>cloud.readForOwner(principal(),owner)?.records.days[records.localDate()]?.count===1)
+ // Even a valid-looking 200 with another ownerId is a privacy/security
+ // failure, not a temporary outage that permits stale offline data access.
+ const beforeForeignResponse=uploads
+ foreignSnapshotRead=true
+ app.onForeground()
+ await until(()=>app.state.stage==='blocked')
+ ok(app.getActions()===null&&app.state.sync==='账号需要重新验证',
+   'Foreign-owner 200 GET immediately locks native account A/B record actions')
+ ok(uploads===beforeForeignResponse&&
+   storage.get('cuoshi-future-v05-miniapp-offline-reverification-required')===true,
+   'Cross-account response never uploads and durably denies stale offline access')
+ online=false
+ networkListeners.clear()
+ delete require.cache[require.resolve(runtimeModule)]
+ app=require(runtimeModule)
+ await app.start()
+ ok(app.state.stage==='blocked'&&app.getActions()===null,
+   'Cold offline launch cannot reopen records after foreign-owner cloud response')
+ online=true
+ await app.start()
+ await until(()=>app.state.stage==='ready'&&app.state.sync==='已同步')
+ ok(app.getActions().day().count===1,
+   'Fresh verified same-owner login recovers original count and history intact')
  const beforeGetRevocation=uploads
  rejectSnapshotRead=true
  app.onForeground()
