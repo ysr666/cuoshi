@@ -61,6 +61,7 @@ try{
     resolve(root,'future/server/src/loginRateLimiter.ts'),
     resolve(root,'future/server/src/privateConfig.ts'),
     resolve(root,'future/server/src/privateReadiness.ts'),
+    resolve(root,'future/server/src/privateStaffReadiness.ts'),
     resolve(root,'future/server/src/privateMaintenance.ts'),
     resolve(root,'future/server/src/privateHealth.ts')
   ],{cwd:root,stdio:'pipe'})
@@ -75,6 +76,7 @@ try{
   const {createTrustedEdgeBoundary}=require(join(out,'future/server/src/trustedEdge.js'))
   const {privatePoolConnectionOptions}=require(join(out,'future/server/src/privateConfig.js'))
   const {checkPrivateDatabaseReadiness}=require(join(out,'future/server/src/privateReadiness.js'))
+  const {checkPrivateStaffReadiness}=require(join(out,'future/server/src/privateStaffReadiness.js'))
   const {prunePrivateLoginWindows,runPrivateRetentionCycle}=require(join(out,'future/server/src/privateMaintenance.js'))
   const {createPrivateHealthProbe}=require(join(out,'future/server/src/privateHealth.js'))
   const {createPostgresWechatLoginLimiter}=require(join(out,'future/server/src/loginRateLimiter.js'))
@@ -161,6 +163,12 @@ try{
   const runtimeRoles={identityDb:identityPool,backupDb:backupPool,
     staffDb:adminPool,cancellationDb:deletionPool}
   await checkPrivateDatabaseReadiness(runtimeRoles,schema)
+  await checkPrivateStaffReadiness(adminPool,reportingPool,schema)
+  check(true,'Staff gateway verifies separated staff/reporting roles on real PostgreSQL')
+  await assert.rejects(checkPrivateStaffReadiness(adminPool,adminPool,schema),
+    /roles_not_separated/);checks++
+  await assert.rejects(checkPrivateStaffReadiness(adminPool,pool,schema),
+    /role_unsafe/);checks++
   check(true,'Real production pre-listener readiness approves four correct roles')
   await assert.rejects(checkPrivateDatabaseReadiness(
     {...runtimeRoles,staffDb:backupPool},schema),

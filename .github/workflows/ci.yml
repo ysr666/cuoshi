@@ -62,6 +62,8 @@ jobs:
         run: npm run test:future:operational-http
       - name: Independent trusted-edge staff-only localhost host
         run: npm run test:future:staff-host
+      - name: Production staff process config rejects invalid roles and missing MFA keys
+        run: npm run test:future:staff-config
       - name: Future trusted WeChat code login and explicit consent HTTP
         run: npm run test:future:account-http
       - name: Composed localhost-only cloud HTTP listener and route isolation
