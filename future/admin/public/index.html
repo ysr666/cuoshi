@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<meta name="color-scheme" content="light"/>
+<title>错事 · 管理台</title>
+<link rel="stylesheet" href="/styles.css"/>
+<script src="/app.js" defer></script>
+</head>
+<body>
+<div class="shell">
+<aside class="sidebar" aria-label="管理台导航">
+  <div class="identity"><div class="logomark">错</div><div><strong>错事</strong><small>管理台 / ADMIN</small></div></div>
+  <div class="navtitle">工作台</div>
+  <nav id="mainnav" aria-label="主导航">
+    <button class="nav-item active" data-view="overview" aria-current="page"><span class="nav-icon">◫</span>运营概览</button>
+    <button class="nav-item" data-view="accounts"><span class="nav-icon">☷</span>账号状态</button>
+    <button class="nav-item" data-view="cases"><span class="nav-icon">▤</span>工单与授权</button>
+    <button class="nav-item" data-view="system"><span class="nav-icon">⌁</span>系统状态</button>
+  </nav>
+  <div class="side-footer"><div class="status-dot"></div>技术预览 · 未接入真实数据<br/><span>保护每一个私人的决定</span></div>
+</aside>
+<main class="main">
+  <header class="topbar"><div><span class="crumb">CUOSHI <span>/</span> <span id="crumb">运营概览</span></span></div><div class="toolbar"><span class="environment">演示环境</span><span class="avatar" aria-label="预览操作员">预</span></div></header>
+  <section class="content" id="content">
+    <div class="intro"><div class="eyebrow">OVERVIEW</div><h1>运营概览<span class="punct">.</span></h1><p>只看必要的信息。这里不会出现任何人的私人简记。</p></div>
+    <div class="notice"><strong>独立演示环境</strong><span>以下数据均为虚构样例，不来自真实用户。正式后台仍需员工 MFA、生产部署与最小权限数据接口。</span></div>
+    <div id="view-content" aria-live="polite"></div>
+  </section>
+  <footer class="bottom">错事 <span>·</span> 安静地记录，克制地管理。<span class="footer-right">INTERNAL PREVIEW · v0.5</span></footer>
+</main>
+</div>
+</body>
+</html>
