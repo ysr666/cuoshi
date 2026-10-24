@@ -75,7 +75,8 @@
     "test:future:owner-auth": "node tests/check-future-owner-auth.mjs",
     "prepare:future:owner": "node future/server/deploy/prepare-owner.mjs",
     "test:future:owner-bootstrap": "node tests/check-future-owner-bootstrap.mjs",
-    "test:future:framework-boundary": "node tests/check-future-framework-boundary.mjs"
+    "test:future:framework-boundary": "node tests/check-future-framework-boundary.mjs",
+    "test:future:vue-ssr-patch": "node tests/check-future-vue-ssr-patch.mjs"
   },
   "dependencies": {
     "@dcloudio/uni-app": "3.0.0-4080720251210001",
@@ -113,6 +114,7 @@
     "@intlify/vue-devtools": "9.14.5",
     "@intlify/shared": "9.14.5",
     "@intlify/devtools-if": "9.14.5",
-    "express": "4.22.3"
+    "express": "4.22.3",
+    "@vue/server-renderer": "3.5.42"
   }
 }

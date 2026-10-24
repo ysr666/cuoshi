@@ -136,3 +136,7 @@ DCloud 旧插件固定的 Express 4.20.0 通过兼容 4.x 版本 override 定向
 #### 2026-10-24 · 框架攻击面运行包隔离证据
 
 新增 npm 脚本 `test:future:framework-boundary`；在 H5、微信预览、独立 v0.5 微信包完成编译后，GitHub CI 将检索 Vue SSR/Vite 开发服务与 Node 构建器在最终分发产物的静态暴露特征，检查云端 PG 服务没有前端运行依赖，验证 loopback 限制实际生效，并上传 `cuoshi-framework-exposure-*` JSON。已证明扫描器会拒绝恶意夹带的合成包。**自动化结果明确 releaseApproved=false，不影响真实框架高危公告及真机/生产验收阻断。**
+
+#### 2026-10-24 · Vue SSR 3.5.42 安全修复实验成功；全量 Vue 升级实测不兼容
+
+在独立 worktree 中先实测整套 Vue 3.5.42：H5 虽编译成功，但 Chrome 报只读属性赋值异常，主页面无法加载，故没有合入。改为单独覆盖间接 SSR `@vue/server-renderer@3.5.42`，保留客户端 Vue 3.4.21，并完成 H5 三种宽度交互、隐私页面、v0.5 微信原生离线/重连、云设置 Chrome 回归及真实 `ssrRenderDynamicAttr` 安全行为测试。官方同轮根依赖受影响包 17 High 降至 1 High + 1 Moderate；`--omit=dev` 当前为 0，但剩余构建工具仍有公告且生产/真机未验收。CI 审计脚本新增运行依赖 High/Critical 强制阻断，同时继续上传完整审计证据；不作为正式安全签核。

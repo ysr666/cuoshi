@@ -106,6 +106,29 @@ check(viteVersion===uniPeer&&pkg.devDependencies.vite===viteVersion,
  'DCloud plugin exact Vite peer contract preserved (known advisory risk remains)')
 check(pkg.dependencies.vue==='3.4.21'&&pkg.dependencies['@dcloudio/uni-mp-weixin']==='3.0.0-4080720251210001',
  'Pinned native Vue/DCloud UI stack not silently changed by scoped patches')
+// DCloud H5's client router is incompatible with Vue 3.5.x: isolated upgrade
+// causes a runtime read-only `_` assignment before the Today screen mounts.
+// Patch only the affected SSR helper and its nested Vue 3.5.42 dependencies.
+const patchedSsr='3.5.42'
+check(pkg.overrides?.['@vue/server-renderer']===patchedSsr,
+ 'Dedicated secure Vue SSR patch is explicitly pinned')
+const serverRenderer=nodes.filter(x=>x.name==='@vue/server-renderer')
+check(serverRenderer.length>0&&serverRenderer.every(x=>x.version===patchedSsr),
+ 'All installed Vue SSR entry points are patched; no old nested copy')
+const fromH5=createRequire(resolve('node_modules/@dcloudio/uni-h5/package.json'))
+check(fromH5('@vue/server-renderer/package.json').version===patchedSsr,
+ 'Actual H5 compiler resolves patched SSR helper')
+for(const part of ['compiler-core','compiler-dom','compiler-ssr','reactivity',
+ 'runtime-core','runtime-dom','shared']){
+ const name='@vue/'+part
+ const nested=nodes.filter(x=>x.path.startsWith('node_modules/@vue/server-renderer/node_modules/')&&x.name===name)
+ check(nested.length===1&&nested[0].version===patchedSsr,
+  'Patched SSR gets isolated compatible nested '+name+' without changing client runtime')
+}
+const clientRuntime=read('node_modules/@vue/runtime-dom/package.json').version
+check(clientRuntime==='3.4.21',
+ 'DCloud client runtime stays on the browser-tested 3.4.21 line')
+
 const output=resolve('future/.generated-mp/dist/build/mp-weixin')
 const files=[]
 function walk(path){for(const f of readdirSync(path,{withFileTypes:true})){

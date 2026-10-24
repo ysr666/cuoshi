@@ -133,3 +133,21 @@ Vue SSR 风险 `GHSA-g2v6-rqmx-r4w6`（`@vue/server-renderer` 的动态 HTML 属
 - 用专门的错误样本验证 SSR 动态 helper、Vite 客户端、Node 工具引用和 `.env` 检查**真的会失败**；CI 在构建完成后跑同样检查，输出 `cuoshi-framework-exposure-<run_id>` JSON 证据，里面明确 `releaseApproved=false`。
 
 **重要局限**：静态字符串扫描不能证明混淆/压缩 JS 内不存在等价代码，也不能代表实际授权、注入路径、微信运行时、云部署或供应链已经人工验证。其价值是降低可识别的 SSR/dev 构建代码误入产品产物的概率、保证后续框架升级有可重复的回归基线。官方根依赖 17 个 High 告警仍保留；上线判定继续 `BLOCKED`，CI SUCCESS 只说明此阶段自动化检查通过。
+
+### 2026-10-24 · Vue SSR 修复版定向兼容实验及安全落地（PR #4）
+
+**本轮不再靠推测框架无法更新。** 使用两个与 Draft PR #4 独立的 Git worktree、官方 npm Registry、npm 10.9.9 clean install 与真实 Chrome 检查，实际比对如下：
+
+| 隔离实验 | 官方 npm audit（全依赖） | 本地编译及运行验证 | 处置 |
+| --- | --- | --- | --- |
+| 原候选 Vue 3.4.21 / Vue SSR 3.4.21 | 17 High / 0 Moderate | H5 与微信当前验收通过 | 作为实验基线 |
+| 全量 Vue 3.5.42（运行时及编译器） | 1 High / 1 Moderate | TypeScript、H5/微信编译、原生离线模拟通过；**H5 浏览器主页面无法挂载**，报 `Cannot assign to read only property '_'` | **禁止合入**，表明旧 DCloud H5 运行时代码与 Vue 3.5.x 存在实际不兼容 |
+| **仅覆盖 `@vue/server-renderer@3.5.42`**，保留客户端 Vue 3.4.21 | **1 High / 1 Moderate** | H5 320/390/430px 计数、导航与主题重载、隐私页面；微信正常编译；v0.5 原生离线/重连、历史与账户隔离；云设置浏览器 114 项回归均通过 | **采用此定向修复** |
+
+修复方式：根 `package.json` 仅为间接依赖添加 `overrides['@vue/server-renderer']='3.5.42'`，并锁定 npm 10.9.9 生成的 `package-lock.json`。`vue@3.4.21`、`@vue/runtime-core@3.4.21` 和 DCloud 主编译器保留不变。SSR 3.5.42 内部使用其自己的编译/运行子依赖，npm 10 的锁树以独立嵌套副本解析；不把新的 Vue 3.5 运行时混入 H5 的原根运行时。官方 npm 审计中 **15 个受影响包记录**从高危清单消失，是一条传递依赖漏洞链的影响计数变化，**不代表修了 15 条不同 CVE，也不保证 SSR 3.5.42 与所有未经测试的 DCloud 路径兼容**。
+
+测试不仅检查锁文件：`tests/check-future-vue-ssr-patch.mjs` 实际调用由 `@dcloudio/uni-h5` 解析的 SSR `ssrRenderDynamicAttr()`，验证危险的 CR/LF/TAB 与引号/尖括号属性名不再输出 HTML；`tests/check-future-patched-build-deps.mjs` 验证根/嵌套 SSR 版本及 DCloud H5 的模块解析、保留 Vue 3.4.21 浏览器运行时。此前新增 `test:future:framework-boundary` 同步核对实际安装的修复版。**这些行为测试不是全套浏览器 XSS 渗透测试**，也不意味着其它注入风险自动消失。
+
+`npm audit --omit=dev --json` 在本轮官方 Registry 检测为 **0 Critical、0 High、0 Moderate、0 Low**。为防未来回退，`dependency_audit` CI 的机器可读审计新增 `--enforce-runtime-no-high`：一旦**运行依赖**出现 High/Critical，或官方审计端点不可用，即阻断 CI。此门禁与独立 Node PG 后端的高危阻断互为补充。**整个根依赖仍有 1 High（`@dcloudio/vite-plugin-uni`）和 1 Moderate（`vite@5.2.8`）**，仅存在构建链；CI 不会把它们当作自动已修复。Vue 3.4.21 仍是旧版本，应继续跟踪官方其他未知公告。
+
+剩余 Vite/DCloud 工具链因插件 `peerDependencies.vite` 精确为 `5.2.8`，不能直接升级到 Vite 7 而无视版本合同。开发服务器继续绑定 `127.0.0.1`；构建环境不持有生产用户秘密，生产 Node 只运行独立 PG 锁文件；微信正式上线仍须真实 AppID、合规审核、HTTPS/最小权限运维与**两台设备的真实同步验收**。**发布安全状态继续 BLOCKED，CI 绿灯只说明代码检查通过。**

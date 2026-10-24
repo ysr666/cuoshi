@@ -109,6 +109,8 @@ jobs:
         run: npm run test:future:mp-weixin
       - name: Block reintroduced vulnerable build dependencies in actual native WeChat package
         run: npm run test:future:patched-build-deps
+      - name: Verify patched Vue SSR rejects unsafe dynamic attribute names
+        run: npm run test:future:vue-ssr-patch
       - name: Verify Vue SSR and Vite tooling are not directly exposed by shipped outputs
         shell: bash
         run: |
@@ -217,7 +219,7 @@ jobs:
           audit_exit=$?
           set -e
           echo "npm audit exit code: $audit_exit (nonzero is expected for known vulnerabilities)"
-          node tests/summarize-dependency-audit.cjs "$RUNNER_TEMP/cuoshi-audit-raw.json" "$RUNNER_TEMP/cuoshi-audit-summary.json"
+          node tests/summarize-dependency-audit.cjs "$RUNNER_TEMP/cuoshi-audit-raw.json" "$RUNNER_TEMP/cuoshi-audit-summary.json" --enforce-runtime-no-high
       - name: Save machine-readable risk inventory
         if: always()
         uses: actions/upload-artifact@v4

@@ -34,6 +34,9 @@ function summarize(raw){
     releaseApproved:false
   }
 }
+function hasUnsafeRuntimeAdvisory(summary){
+ return summary?.observed?.high>0||summary?.observed?.critical>0
+}
 function selfTest(){
   const ok={metadata:{vulnerabilities:{critical:0,high:28,moderate:11,low:6}},
     vulnerabilities:{sample:{isDirect:true,severity:'high'}}}
@@ -44,6 +47,9 @@ function selfTest(){
   assert.throws(()=>summarize({error:{code:'ENOTFOUND'}}),/inconclusive/)
   assert.throws(()=>summarize({metadata:{vulnerabilities:{critical:0}}}),/invalid_counts/)
   assert.equal(summarize({metadata:{vulnerabilities:{critical:1,high:27,moderate:11,low:6}}}).newCritical,true)
+  assert.equal(hasUnsafeRuntimeAdvisory(s),true)
+  assert.equal(hasUnsafeRuntimeAdvisory(summarize({metadata:{vulnerabilities:{critical:0,high:0,moderate:1,low:0}}})),false)
+  assert.equal(hasUnsafeRuntimeAdvisory(summarize({metadata:{vulnerabilities:{critical:1,high:0,moderate:0,low:0}}})),true)
   console.log('PASS npm SCA parser and fail-closed self-tests')
 }
 if(process.argv[2]==='--self-test')selfTest()
@@ -56,6 +62,10 @@ else{
   console.log('Official npm audit (not release approval):',JSON.stringify(summary.observed))
   console.log('Baseline:',JSON.stringify(summary.baseline))
   console.log('Change:',JSON.stringify(summary.delta))
+  if(process.argv[4]==='--enforce-runtime-no-high'&&hasUnsafeRuntimeAdvisory(summary)){
+    console.error('::error::Production-root runtime dependency high/critical advisory: release blocked')
+    process.exitCode=1
+  }
   if(summary.newCritical){
     console.error('::error::NEW CRITICAL npm advisory: investigate and block publication')
     process.exitCode=1

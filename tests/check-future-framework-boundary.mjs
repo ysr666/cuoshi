@@ -17,7 +17,6 @@ const details={
   scope:'built H5, legacy WeChat preview, isolated v0.5 WeChat, isolated private Node sources',
   scanned:{},
   advisoriesNotAutomaticallyRemediated:[
-    '@vue/server-renderer / Vue 3.4.21: GHSA-g2v6-rqmx-r4w6 (SSR)',
     'Vite 5.2.8: known development server issues',
     'DCloud Vue3 pinned 2025 compiler line: other npm advisory ranges'
   ]
@@ -30,8 +29,12 @@ check(pkg.devDependencies.vite==='5.2.8'&&plugin.version===frozenDcloud&&
  plugin.peerDependencies.vite==='5.2.8',
  'DCloud exact Vite peer contract remains frozen and visible')
 check(pkg.dependencies.vue==='3.4.21'&&uniH5.version===frozenDcloud&&
- uniH5.dependencies['@vue/server-renderer']==='3.4.21',
- 'Vulnerable Vue SSR version remains declared, never falsely described as upgraded')
+ uniH5.dependencies['@vue/server-renderer']==='3.4.21'&&
+ pkg.overrides['@vue/server-renderer']==='3.5.42'&&
+ lock.packages['node_modules/@vue/server-renderer'].version==='3.5.42',
+ 'DCloud dependency metadata stays pinned while installed Vue SSR is patched')
+details.scanned.ssr={installed:'3.5.42',declaredByDcloud:'3.4.21',
+  clientRuntime:'3.4.21',patchType:'isolated compiler SSR transitive override'}
 const cfg=await resolveConfig({configFile:resolve(project,'vite.config.ts')},'serve')
 check(cfg.server.host==='127.0.0.1'&&cfg.preview.host==='127.0.0.1'&&
  cfg.server.strictPort===true&&cfg.preview.strictPort===true,
