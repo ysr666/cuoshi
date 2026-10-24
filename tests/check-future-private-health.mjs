@@ -42,7 +42,7 @@ const stuck=createPrivateHealthProbe(Array.from({length:4},()=>({
 })),{deadlineMs:12,failTtlMs:20,okTtlMs:50})
 check(await stuck()===false&&waited===4,
  'Hung PostgreSQL check respects short health response deadline')
-const deps={account:{identityDb:{},authConfig:{},exchange:async()=>({openid:'synthetic'}),
+const deps={account:{identityDb:{},noticeVersion:'privacy-v1',authConfig:{},exchange:async()=>({openid:'synthetic'}),
  login:async()=>({userId:'account0001',deviceId:'device0001',accessToken:'x'.repeat(128)}),
  account:{status:async()=>({}),setConsent:async()=>{},logoutUser:async()=>{}},
  permitLogin:()=>true},
