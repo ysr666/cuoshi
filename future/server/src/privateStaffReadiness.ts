@@ -1,4 +1,4 @@
-/** Validate minimal read roles before ever binding the employee listener. */
+/** Validate no private-note privileges before binding the sole-owner listener. */
 import {privateDatabaseSchema} from './privateConfig'
 export type StaffReadinessPool={query(sql:string):Promise<{rows:Record<string,unknown>[]}>}
 export async function checkPrivateStaffReadiness(
@@ -36,7 +36,7 @@ export async function checkPrivateStaffReadiness(
      'cloud_read_day(text,boolean,text,text,text)','EXECUTE') AS day_read,
    has_function_privilege(current_user,
      'cloud_reporting_overview(text,boolean)','EXECUTE') AS report_read`)
- if(staffPerm.rows[0]?.day_read!==true||staffPerm.rows[0]?.report_read!==false||
+ if(staffPerm.rows[0]?.day_read!==false||staffPerm.rows[0]?.report_read!==false||
     reportPerm.rows[0]?.day_read!==false||reportPerm.rows[0]?.report_read!==true)
     throw Error('private_staff_function_privileges_unsafe')
 }

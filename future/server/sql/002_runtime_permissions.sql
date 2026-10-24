@@ -13,7 +13,7 @@ GRANT SELECT,INSERT,UPDATE,DELETE ON __SCHEMA__.cloud_snapshots TO __BACKUP_ROLE
 GRANT SELECT,INSERT,DELETE ON __SCHEMA__.cloud_upload_receipts TO __BACKUP_ROLE__;
 
 -- Admin runtime does not receive SELECT on cloud_snapshots, cloud_users,
--- cloud_access_grants or cloud_admin_audit. Only one audited read procedure.
+-- cloud_access_grants or cloud_admin_audit. No legacy private-note read execution privileges.
 CREATE FUNCTION __SCHEMA__.cloud_read_day(
   p_staff_id TEXT, p_mfa_verified BOOLEAN, p_owner_id TEXT,
   p_day_key TEXT, p_case_id TEXT
@@ -112,10 +112,12 @@ BEGIN
 END;
 $function$;
 
+-- DEPRECATED historical scoped-day implementation is retained in the
+-- migration for audit/reference compatibility, but it MUST NOT be callable
+-- by the v0.5 sole-owner runtime role (or any other runtime role). No employee
+-- or private-note-read API is available in the v0.5 deployed owner host.
 REVOKE ALL ON FUNCTION __SCHEMA__.cloud_read_day(TEXT,BOOLEAN,TEXT,TEXT,TEXT)
-  FROM PUBLIC;
-GRANT EXECUTE ON FUNCTION __SCHEMA__.cloud_read_day(TEXT,BOOLEAN,TEXT,TEXT,TEXT)
-  TO __ADMIN_ROLE__;
+  FROM PUBLIC, __ADMIN_ROLE__;
 
 -- No privilege to TRUNCATE, ALTER, DROP, CREATE on the trusted schema or
 -- mutate the append-only audit data is given to either runtime account.

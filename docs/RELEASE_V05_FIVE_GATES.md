@@ -162,3 +162,7 @@ Caddy now keeps the eight WeChat/public API paths on the approved HTTPS hostname
 #### 2026-10-24 · Complete sole-owner service configuration sample and deployment package guard
 
 A previous handoff gap was the absence of a complete owner backend `staff.env` skeleton; it could easily lead to a valid Caddy admin route but a Node process refusing to start. Added `future/server/deploy/staff.env.example` with all twelve owner-server settings and exclusively invalid placeholders, plus a required CI parity test against `privateStaffConfig.ts` and the Caddy proxy operator configuration. The allowlisted deployment tarball now carries this template; extraction tests validate its bytes and runtime startup refusal without secrets. No account is created, no production secret is generated, and no service is enabled. All other release gates remain BLOCKED.
+
+#### 2026-10-24 · 取消唯一管理员对旧版私人日记读取函数的数据库执行权
+
+正式 v0.5 首次迁移 `002_runtime_permissions.sql` 不再授权管理员执行旧版 `cloud_read_day(...)`（并明确撤销旧角色权限），虽然历史源代码依然保留案例/审计函数供隔离测试。此前只有界面/API 删除了员工和私人正文读取入口，但 PostgreSQL 角色还有历史 EXECUTE 权限；现在把数据库这一层也真正收紧。**管理员只可通过独立 Reporting SQL 技术账号获取五项匿名聚合数字，不得调用旧版私人简记读取函数。** 普通微信云服务和后台服务各自的启动就绪度检查都必须拒绝管理员角色意外获得直接 SELECT 或历史正文函数 EXECUTE 权限。CI 使用一次性 PostgreSQL 角色先证实不可执行，然后在隔离测试中临时授权验证旧案例锁和审计逻辑，最后撤销并确认启动自检恢复；**测试临时授权绝不会进入生产 SQL 或部署包**。任何旧环境升级必须另审，不可擅自执行新建迁移。正式上线仍未发生。

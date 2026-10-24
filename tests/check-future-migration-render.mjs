@@ -40,11 +40,15 @@ for(const file of files){
 }
 check(files[0].contents.includes('CREATE TABLE cloud_users'),
  'Initial unqualified tables bind to pinned target schema')
-check(files[1].contents.includes('TO "cs_staff"')&&
+check(files[1].contents.includes('FROM PUBLIC, "cs_staff"')&&
  files[4].contents.includes('TO "cs_deletion"')&&
  files[6].contents.includes('TO "cs_login"')&&
  files[7].contents.includes('TO "cs_staff"'),
  'Privilege grants use exact separated role identifiers')
+check(!files[1].contents.includes('GRANT EXECUTE ON FUNCTION "cuoshi_prod".cloud_read_day'),
+ 'Production runtime migration must never grant deprecated private note-read function')
+check(files[1].contents.includes('FROM PUBLIC, "cs_staff"'),
+ 'Migration explicitly revokes historical private-note EXECUTE from sole owner')
 bad(()=>renderMigration('test_bad.sql',validateMigrationConfig(env)),
  /migration_template_unknown/,'No custom external SQL templates accepted')
 const scratch=mkdtempSync(join(tmpdir(),'cuoshi-sql-render-'))

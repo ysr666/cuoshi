@@ -197,6 +197,11 @@ try{
   await attempt(adminPool,'SELECT * FROM cloud_upload_receipts')
   await attempt(adminPool,'INSERT INTO cloud_admin_audit(staff_id,owner_id,day_key,decision,reason) VALUES(\'x\',\'y\',\'2026-10-16\',\'allow\',\'fake\')')
   await attempt(backupPool,"SELECT * FROM cloud_read_day('support0001',TRUE,'account0001','2026-10-16','ticket0001')")
+  await attempt(adminPool,"SELECT * FROM cloud_read_day('support0001',TRUE,'account0001','2026-10-16','ticket0001')")
+  await attempt(reportingPool,"SELECT * FROM cloud_read_day('support0001',TRUE,'account0001','2026-10-16','ticket0001')")
+  check((await adminPool.query(`SELECT has_function_privilege(current_user,
+     'cloud_read_day(text,boolean,text,text,text)','EXECUTE') AS allowed`)).rows[0].allowed===false,
+    'Production sole owner SQL login has NO permission to read private day content')
   await attempt(identityPool,'SELECT * FROM cloud_wechat_login_rate_windows')
   await attempt(backupPool,'SELECT * FROM cloud_wechat_login_rate_windows')
   await attempt(adminPool,'SELECT * FROM cloud_wechat_login_rate_windows')
@@ -901,6 +906,16 @@ try{
   check(injected.kind==='accepted','SQL-injection-looking note treated as text')
   check((await pool.query('SELECT count(*) AS total FROM cloud_users')).rows[0].total==='6',
     'Schema intact after SQL injection probe, including first-link migration account')
+  // LEGACY INTEGRATION FIXTURE ONLY: the deprecated case/audit test suite
+  // still exercises historical SQL code paths for deletion/locking regression.
+  // The REAL production migrations no longer grant this. Only the disposable
+  // migration-owner connection temporarily elevates its synthetic admin role.
+  await pool.query(`GRANT EXECUTE ON FUNCTION cloud_read_day(text,boolean,text,text,text)
+    TO "${adminRole}"`)
+  await assert.rejects(checkPrivateDatabaseReadiness(runtimeRoles,schema),
+    /legacy_staff_read_permission_forbidden/);checks++
+  await assert.rejects(checkPrivateStaffReadiness(adminPool,reportingPool,schema),
+    /function_privileges_unsafe/);checks++
   // Seed test-only verified staff and an explicit scoped support ticket.
   for(const [id,role] of [['support0001','support'],['reviewer001','safety_reviewer'],
     ['superadmin1','super_admin'],['auditor0001','auditor']])
@@ -1311,6 +1326,13 @@ try{
   check((await pool.query('SELECT count(*) AS n FROM cloud_revoked_staff_tokens')).rows[0].n==='0',
     'Expired staff-token revocations cleared')
 
+  // Restore the exact *production* privilege model after testing historical
+  // behavior. PostgreSQL tests must finish with no text-read path available.
+  await pool.query(`REVOKE EXECUTE ON FUNCTION cloud_read_day(text,boolean,text,text,text)
+    FROM "${adminRole}"`)
+  await attempt(adminPool,"SELECT * FROM cloud_read_day('support0001',TRUE,'account0001','2026-10-16','ticket0001')")
+  await checkPrivateStaffReadiness(adminPool,reportingPool,schema)
+  check(true,'After historic fixture, owner service SQL privileges are denied on private records')
   await assert.rejects(pool.query("UPDATE cloud_admin_audit SET decision='allow' WHERE owner_id='redacted'"),
     /append-only/);checks++
   await assert.rejects(pool.query("DELETE FROM cloud_admin_audit WHERE owner_id='redacted'"),

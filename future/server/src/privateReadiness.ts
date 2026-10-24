@@ -42,6 +42,18 @@ export async function checkPrivateDatabaseReadiness(
    roles.push(role.name)
  }
  if(new Set(roles).size!==4)throw Error('private_cloud_database_roles_not_separated')
+ // The cloud API process also opens the separate admin DB login for session
+ // token revocation. It MUST NOT gain a dormant employee body-read capability,
+ // even if the dedicated owner dashboard process is not running.
+ const noPrivateRead=await pools.staffDb.query(`SELECT
+   has_table_privilege(current_user,'cloud_users','SELECT') AS users,
+   has_table_privilege(current_user,'cloud_snapshots','SELECT') AS snapshots,
+   has_function_privilege(current_user,
+    'cloud_read_day(text,boolean,text,text,text)','EXECUTE') AS day_read`)
+ const privilege=noPrivateRead.rows[0]
+ if(privilege?.users!==false||privilege?.snapshots!==false||privilege?.day_read!==false)
+   throw Error('private_cloud_legacy_staff_read_permission_forbidden')
+
  const limiter=await pools.identityDb.query(
    "SELECT to_regprocedure('cloud_take_wechat_login_slot(text)') AS configured")
  if(!limiter.rows[0]?.configured)

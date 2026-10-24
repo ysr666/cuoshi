@@ -57,3 +57,5 @@
 - 任何数据库敏感读取需要记录主体、理由、案件、时间、结果；日志中不得保存正文。跨设备同步上线前还需冲突合并和恢复交互设计。
 
 **CI 可复现**：`npm run test:future:auth`、`npm run check:types --prefix future/server`、以及使用仅本机临时数据库运行 `npm test --prefix future/server`。完整构建后执行 `npm run test:future:isolation`，验证未来后端未进入 v0.4 小程序包。
+
+> **历史设计归档提示（2026-10-24）：** 员工审批、客服工单、`cloud_read_day` 数据库正文读取属于废弃功能，不作为 v0.5 首发能力。当前产品只有一个后台所有者，且其数据库角色不能执行历史正文读取函数。请以 `RELEASE_V05_FIVE_GATES.md` 与 v0.5 SQL 迁移为准。
