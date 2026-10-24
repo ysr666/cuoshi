@@ -80,7 +80,8 @@
     "test:future:vite-loopback": "node tests/check-vite-loopback-guard.mjs",
     "test:future:rc-build": "node tests/check-future-rc-build.mjs",
     "test:future:private-release-bundle": "node tests/check-future-private-release-bundle.mjs",
-    "package:future:private-release": "node future/server/deploy/package-private-release.mjs"
+    "package:future:private-release": "node future/server/deploy/package-private-release.mjs",
+    "test:future:owner-deploy-config": "node tests/check-future-owner-deploy-config.mjs"
   },
   "dependencies": {
     "@dcloudio/uni-app": "3.0.0-4080720251210001",

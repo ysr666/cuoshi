@@ -55,7 +55,7 @@ try{
  'future/admin/live/index.html','future/admin/live/app.js',
  'future/admin/live/style.css','future/admin/public/styles.css',
  'future/server/deploy/systemd/cuoshi-cloud.service',
- 'future/server/deploy/Caddyfile'
+ 'future/server/deploy/Caddyfile','future/server/deploy/staff.env.example'
  ]
  for(const path of required)check(seen.has(path),'All essential deployment paths included: '+path)
  for(const blocked of ['future/server/node_modules','future/server/.env',

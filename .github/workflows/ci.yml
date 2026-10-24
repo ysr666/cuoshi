@@ -64,6 +64,8 @@ jobs:
         run: npm run test:future:staff-host
       - name: Production staff process config rejects invalid roles and missing MFA keys
         run: npm run test:future:staff-config
+      - name: Verify sole owner production config template contains no usable secrets
+        run: npm run test:future:owner-deploy-config
       - name: Sole owner password and one-time authenticator verification
         run: npm run test:future:owner-auth
       - name: Sole-owner offline first-run provisioning and private file permissions

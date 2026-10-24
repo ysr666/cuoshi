@@ -11,7 +11,7 @@ const root=realpathSync(resolve(fileURLToPath(new URL('../../../',import.meta.ur
 const allowedDeploy=[
  'Caddyfile','README.md','render-migrations.mjs',
  'prepare-owner.mjs','prepare-proxy-env.mjs','check-public-health.mjs',
- 'maintenance.env.example','monitor.env.example',
+ 'maintenance.env.example','monitor.env.example','staff.env.example',
  'systemd/cuoshi-cloud.service','systemd/cuoshi-staff.service',
  'systemd/cuoshi-login-prune.service','systemd/cuoshi-login-prune.timer',
  'systemd/cuoshi-health.service','systemd/cuoshi-health.timer',
