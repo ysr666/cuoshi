@@ -43,8 +43,20 @@ reject({...base,CUOSHI_V05_CLOUD_ORIGIN:'https://api.cuoshi.cn',
  CUOSHI_V05_NOTICE_VERSION:'privacy-v1'},/release_requires_reviewed_privacy_notice_version/,
  'Unreviewed default privacy version rejected')
 reject({...base,CUOSHI_V05_CLOUD_ORIGIN:'https://api.cuoshi.cn'},
- /release_requires_actual_filing_number/,
+ /release_requires_actual_miniprogram_filing_number/,
  'Release candidate refuses missing public filing number')
+// A website ICP filing (-1) and an Android/iOS app filing (-1A) are not
+// valid substitutes for the separately approved mini-program filing (-1X).
+for(const invalidFiling of [
+ '陕ICP备2026123456号-1','陕ICP备2026123456号-1A',
+ '陕ICP备2026123456号','陕ICP备2026123456号-0X',
+ '陕ICP备2026123456号-1x','陕ICP备2026123456号-1X\nX',
+ 'ICP备2026123456号-1X','陕ICP备2026123456号-1X-1',
+ '陕ICP备123号-1X', '陕ICP备2026123456号-1X<script>'
+])reject({...base,CUOSHI_V05_CLOUD_ORIGIN:'https://api.cuoshi.cn',
+ CUOSHI_V05_FILING_NUMBER:invalidFiling},
+ /release_requires_actual_miniprogram_filing_number/,
+ 'RC blocks unissued, website, app or malformed mini-program filing number')
 const withFiling={...base,CUOSHI_V05_CLOUD_ORIGIN:'https://api.cuoshi.cn',
  CUOSHI_V05_FILING_NUMBER:'陕ICP备2026123456号-1X'}
 reject(withFiling,/release_requires_public_support_contact/,
@@ -52,6 +64,7 @@ reject(withFiling,/release_requires_public_support_contact/,
 const accepted=parseMiniappBuildConfig({...withFiling,
  CUOSHI_V05_CONTACT_EMAIL:'privacy@cuoshi.cn'})
 check(accepted.releaseCandidate&&accepted.appId===appId&&
- accepted.cloudOrigin==='https://api.cuoshi.cn',
+ accepted.cloudOrigin==='https://api.cuoshi.cn'&&
+ accepted.filingNumber==='陕ICP备2026123456号-1X',
  'Complete syntactically valid RC input accepted for operator verification')
 console.log('PASS',n,'WeChat v0.5 explicit release candidate config gates (synthetic values)')

@@ -25,7 +25,7 @@
 
 ## 二、云与网关：只执行真实部署所必需的操作
 
-1. 在个人主体实名条件允许后，选择符合法律与服务目的的中国大陆地域；开通独立 PostgreSQL。先由独立迁移账号人工审核并执行 [离线生成的 7 份受限 SQL](../future/server/deploy/README.md#数据库的七步迁移交付离线生成不直接写数据库)；日常应用不得使用 owner/superuser，四条受限连接串分别提供备份、微信身份、员工、安全注销服务，并明确配置与迁移一致的 `CUOSHI_PG_SCHEMA`（禁止默认 public）；验证数据库 TLS 服务器名称，并执行与真实 PostgreSQL CI 共用的 `checkPrivateDatabaseReadiness` 生产启动门禁。
+1. 在个人主体实名条件允许后，选择符合法律与服务目的的中国大陆地域；开通独立 PostgreSQL。先由独立迁移账号人工审核并执行 [离线生成的 8 份受限 SQL](../future/server/deploy/README.md)；日常应用不得使用 owner/superuser，按程序分配的最小权限数据库连接分别服务于备份、微信身份、唯一管理员及必要的安全清理；技术账号不代表员工，并明确配置与迁移一致的 `CUOSHI_PG_SCHEMA`（禁止默认 public）；验证数据库 TLS 服务器名称，并执行与真实 PostgreSQL CI 共用的 `checkPrivateDatabaseReadiness` 生产启动门禁。
 2. 在独立密钥管理中配置 `future/server/.env.example` 列出的服务器环境变量；AppSecret、数据库口令和签名密钥绝不能进仓库、小程序包、日志或二维码。启动 `npm run build:private --prefix future/server` 和独立的私有进程。**后端只能监听 127.0.0.1，不能直接暴露到公网。**
 3. HTTPS 终止代理已有 [受保护的 Caddy 配置模板](../future/server/deploy/README.md) 和 35 项静态检查，**尚未在真实云主机运行或验证 Caddy 配置**。在同一可信主机部署真正的 HTTPS 终止代理：**必须删除外部传入的 `X-Cuoshi-Edge-Proof`、`X-Cuoshi-Client-Ip`，再由代理用私有受限密钥和自己核实的客户端 IP 重写它们**。若前面有 CDN/WAF，代理未准确识别真实客户端时只能对代理 IP 保守限流，不能无条件信任 `X-Forwarded-For`。公网 443/TLS、DNS、证书到期告警、WAF 及可用性监控需真实验证。
 4. 设定真实的私人快照、WAL/物理备份、副本、审计、网关日志的保存/清理期限；明确注销后尚存备份的隔离与最终清理规则，完成一轮演练，不将匿名化与日志保全当作无限保留正文的理由。
@@ -63,7 +63,7 @@
 - 平时：`npm run build:future:mp-weixin` —— 空 AppID、空云域名、绝不请求真实账户；继续用于不接触用户数据的自动回归。
 - 正式候选（**仅在五项门槛材料已经真实具备时**）：设定 `CUOSHI_V05_RELEASE_CANDIDATE=1`、`CUOSHI_V05_WECHAT_APP_ID`、`CUOSHI_V05_CLOUD_ORIGIN`、`CUOSHI_V05_NOTICE_VERSION`、`CUOSHI_V05_FILING_NUMBER`、`CUOSHI_V05_CONTACT_EMAIL`，再执行同一构建命令。这里都是应在公众端可见的材料；**AppSecret、数据库口令只许放后端受控环境**。配置语法通过不证明账号归属和备案有效。
 - 申请审核前先用 `docs/WECHAT_REVIEW_V05_DRAFT.md` 更新名称、类目、真实截图、入口路径、备案和隐私信息；提交微信后台隐私指引并核实平台通过。
-- 固定最终 commit、三 Job CI、12 条双真机 QA、生产安全与运营者签字记录，再合并/上架；任何一个关口仍为 BLOCKED 都不得宣称上线成功。
+- 固定最终 commit、四 Job CI、12 条双真机 QA、生产安全与运营者签字记录，再合并/上架；任何一个关口仍为 BLOCKED 都不得宣称上线成功。
 
 ### 生产运维安全收尾（未现场启用）
 
@@ -144,3 +144,9 @@ DCloud 旧插件固定的 Express 4.20.0 通过兼容 4.x 版本 override 定向
 #### 2026-10-24 · Vite 新版试跑 + 旧版回环 Host/Origin 防护
 
 隔离实验的 Vite 6.4.5 能构建和运行，但与 DCloud 及 Vue 插件显式 peer 不兼容，必须绕过 npm peer 校验且依赖树出现额外无效项，因此不合并。正式保留 Vite 5.2.8，新增限制 Host/Origin 的 HTTP 中间件、IPv4 loopback、禁用 Vite 跨域响应，并在 DCloud 配置合并后再次关闭 HMR WebSocket。实际 60 项开发/预览 HTTP 请求安全测试和框架门禁集成 CI。风险仍存在，发布评估不能据此宣布漏洞消除。
+
+#### 2026-10-24 · 微信正式候选包两项审核一致性修复
+
+已区分官方下发的**小程序备案号 `省ICP备数字号-数字X`** 与网站 `-数字`、App `-数字A`：`buildConfig.mjs` 在 `CUOSHI_V05_RELEASE_CANDIDATE=1` 时拒绝非小程序格式，仅为语法校验，不代表已获管局/微信批准；部署时必须核对真实原始备案信息。参考公开 ICP 编号说明：https://docs.volcengine.com/docs/Record/BasicConceptsofFilingFAQ?lang=zh 。首次告知页现在只在测试包显示“正式发布前……”提示；正式候选包改为指向「设置」中的数据说明、备案和联系渠道，不把测试提示展示给用户。新增 `test:future:rc-build`：在**仓库外临时私有目录**内使用完全虚构 AppID、HTTPS、备案和邮箱实际编译发布路径，检查编译结果的两页、备案/联系方式、首页条件告知和独立版本标志；测试结束一律销毁，不改变正常 CI 测试包，更不冒充微信实测或已核准备案。隐私草案已统一为**唯一管理员**，取消不适用的员工和客服审批陈述；历史 v0.4 JSON 导入导出真机指引明确标为停用存档。
+
+五项真实发布条件仍未齐全，本次没有 AppID、证件、个人资料、生产域名或云密钥接入，发布仍为 BLOCKED。

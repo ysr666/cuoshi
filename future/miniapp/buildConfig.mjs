@@ -4,6 +4,9 @@ import {isIP} from 'node:net'
 const invalidHosts=/(?:^|\.)(?:localhost|local|test|invalid|example)$/i
 const appIdSyntax=/^wx[a-zA-Z0-9]{16}$/
 const privacyVersion=/^[a-zA-Z0-9_.-]{3,64}$/
+// Ministry-issued mini-program filing suffix is -N X (not site -N or app -N A).
+// This is syntax-only; actual issuance/ownership must be verified in WeChat.
+const miniProgramFiling=/^[\u4e00-\u9fff]{1,3}ICP备[0-9]{4,20}号-[1-9][0-9]*X$/
 const originSyntax=/^https:\/\/[a-z0-9.-]+(?::\d{2,5})?$/
 export function parseMiniappBuildConfig(env){
  const appId=env.CUOSHI_V05_WECHAT_APP_ID||''
@@ -30,8 +33,8 @@ export function parseMiniappBuildConfig(env){
    throw Error('release_requires_reviewed_privacy_notice_version')
   // Syntax checking is not legal validation: the operator must confirm the
   // actual filing record and monitored public contact in WeChat back office.
-  if(!/^[^<>\r\n]{8,96}$/.test(filingNumber)||!filingNumber.includes('ICP备'))
-   throw Error('release_requires_actual_filing_number')
+  if(!miniProgramFiling.test(filingNumber))
+   throw Error('release_requires_actual_miniprogram_filing_number')
   if(!/^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,24}$/.test(contactEmail))
    throw Error('release_requires_public_support_contact')
  }

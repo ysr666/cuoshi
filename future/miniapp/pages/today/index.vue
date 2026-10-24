@@ -137,7 +137,8 @@ const dateLabel=computed(()=>{const [year,month,day]=selected.value.split('-')
   <text class="detail">错事默认自动云端保存。每日数量、可选简记、历次修改前后的文字、操作日期和时间会存到你的云端账号，方便更换设备后继续使用。</text>
   <text class="detail">只需要第一次了解并确认。网络异常时先保留本机记录，恢复网络后自动同步。</text>
   <button class="action" @click="accept">了解并开始</button>
-  <text class="fine">正式发布前须完成适用的隐私政策和数据处理告知。此测试包不使用真实用户数据。</text>
+  <text v-if="!state.filingNumber" class="fine">正式发布前须完成适用的隐私政策和数据处理告知。此测试包不使用真实用户数据。</text>
+  <text v-else class="fine">你可以在「设置」中查看数据处理说明、备案信息与个人信息权利申请联系方式。</text>
  </view>
  <view v-else-if="state.stage==='connecting'" class="status-note">正在验证微信账号…</view>
  <view v-else-if="state.stage==='blocked'||state.stage==='offline'" class="notice">

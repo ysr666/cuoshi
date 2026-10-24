@@ -91,6 +91,8 @@ jobs:
 
       - name: Refuse incomplete or synthetic real-app release candidate settings
         run: npm run test:future:release-config
+      - name: Compile synthetic v0.5 release candidate outside the repo and verify public privacy presentation
+        run: npm run test:future:rc-build
       - name: Public cloud gateway read-only probe contract (no real network)
         run: npm run test:future:public-edge
       - name: Verify predeployment HTTPS proxy template and safe credential generation
