@@ -26,8 +26,12 @@ export class AuthenticatedCloudService{
       previousBackupKey?:Uint8Array;previousStaffKey?:Uint8Array
     },
     private readonly nowSeconds:()=>number=()=>Math.floor(Date.now()/1000),
-    private readonly cancellationDb?:DbPool
+    private readonly cancellationDb:DbPool|undefined,
+    private readonly requiredNoticeVersion:string
   ){
+    if(typeof requiredNoticeVersion!=='string'||
+       !/^[-.a-zA-Z0-9_]{3,64}$/.test(requiredNoticeVersion))
+      throw Error('cloud_notice_version_unconfigured')
     if(!(keys?.backupKey instanceof Uint8Array)||keys.backupKey.byteLength<32||
        !(keys?.staffKey instanceof Uint8Array)||keys.staffKey.byteLength<32)
       throw Error('session_keys_not_configured')
@@ -102,12 +106,19 @@ export class AuthenticatedCloudService{
   }
   async provision(token:unknown){return provisionVerifiedUser(this.backupDb,await this.asUser(token))}
   async setConsent(token:unknown,enabled:boolean,noticeVersion:string){
-    return setCloudConsent(this.backupDb,await this.asUser(token),enabled,noticeVersion)
+    const verified=await this.asUser(token)
+    if(enabled&&noticeVersion!==this.requiredNoticeVersion)
+      throw Error('cloud_notice_outdated')
+    return setCloudConsent(this.backupDb,verified,enabled,noticeVersion)
   }
-  async readBackup(token:unknown){return getCloudSnapshot(this.backupDb,await this.asUser(token))}
-  async status(token:unknown){return getCloudBackupStatus(this.backupDb,await this.asUser(token))}
+  async readBackup(token:unknown){
+    return getCloudSnapshot(this.backupDb,await this.asUser(token),this.requiredNoticeVersion)
+  }
+  async status(token:unknown){
+    return getCloudBackupStatus(this.backupDb,await this.asUser(token),this.requiredNoticeVersion)
+  }
   async upload(token:unknown,request:UploadRequest){
-    return uploadCloudSnapshot(this.backupDb,await this.asUser(token),request)
+    return uploadCloudSnapshot(this.backupDb,await this.asUser(token),request,this.requiredNoticeVersion)
   }
   async deleteBackup(token:unknown){return deleteCloudBackup(this.backupDb,await this.asUser(token))}
   /** No default deletion privileges: separate restricted account-cancellation role required. */

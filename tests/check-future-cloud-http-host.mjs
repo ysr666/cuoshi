@@ -33,7 +33,7 @@ try{
    changed=true;return {kind:'rejected',reason:'consent_required'}
   }
  }
- const deps={account:{identityDb:{},authConfig:{},exchange:async()=>({openid:'fakevalue'}),
+ const deps={account:{identityDb:{},noticeVersion:'privacy-v1',authConfig:{},exchange:async()=>({openid:'fakevalue'}),
    login:async (_pool,code,deviceId)=>{loginCalls++;assert.equal(code,'testcode0001');return {
     userId:'account0001',deviceId,isNewAccount:true,accessToken:jwt
    }},account:service,permitLogin:()=>{limitCalls++;return true}

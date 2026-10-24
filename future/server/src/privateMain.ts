@@ -35,13 +35,13 @@ async function main(){
    const edge=createTrustedEdgeBoundary({sharedSecret:config.edgeSecret})
    const service=new AuthenticatedCloudService(backupDb,staffDb,{
      backupKey:config.backupSigningKey,staffKey:config.staffSigningKey
-   },()=>Math.floor(Date.now()/1000),cancellationDb)
+   },()=>Math.floor(Date.now()/1000),cancellationDb,config.noticeVersion)
    const limiter=createPostgresWechatLoginLimiter({
      db:identityDb,peerHmacKey:config.loginPeerKey,verifiedPeer:edge.clientIp
    })
    const exchange=makeWechatCodeExchanger({appId:config.appId,appSecret:config.appSecret})
    host=await listenPrivateEdgeLoopback({
-     account:{identityDb,authConfig:{
+     account:{identityDb,noticeVersion:config.noticeVersion,authConfig:{
        appId:config.appId,codePepper:config.codePepper,
        subjectPepper:config.subjectPepper,
        backupSigningKey:config.backupSigningKey,

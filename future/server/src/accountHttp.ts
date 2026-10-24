@@ -24,6 +24,7 @@ type Limiter=(request:IncomingMessage)=>Promise<boolean>|boolean
 export type AccountHttpDependencies={
   identityDb:DbPool
   authConfig:WechatAuthConfig
+  noticeVersion:string
   exchange:WechatExchange
   login:LoginFn
   account:AccountService
@@ -70,7 +71,9 @@ export function createAccountHttpHandler(deps:AccountHttpDependencies){
      typeof deps.account?.status!=='function'||
      typeof deps.account?.setConsent!=='function'||
      typeof deps.account?.logoutUser!=='function'||
-     typeof deps.permitLogin!=='function')
+     typeof deps.permitLogin!=='function'||
+     typeof deps.noticeVersion!=='string'||
+     !/^[-.a-zA-Z0-9_]{3,64}$/.test(deps.noticeVersion))
     throw Error('account_http_dependencies_required')
   return async (req:IncomingMessage,res:ServerResponse):Promise<void>=>{
     try{
@@ -161,6 +164,15 @@ export function createAccountHttpHandler(deps:AccountHttpDependencies){
         }
         const token=bearer(req)
         const {enabled,noticeVersion}=validateConsentPayload(await collectJson(req,1024))
+        // Fail closed when an outdated mini-program tries to opt in or renew
+        // consent under a no-longer-current privacy notice. The right to stop
+        // uploading is unconditional, even from a stale client.
+        if(enabled&&noticeVersion!==deps.noticeVersion){
+          // Check the actual JWT/DB account first; a syntactically plausible
+          // forged bearer must not probe policy state through an early 409.
+          await deps.account.status(token)
+          throw new HttpFailure(409,'privacy_notice_outdated')
+        }
         await deps.account.setConsent(token,enabled,noticeVersion)
         return answer(res,200,await deps.account.status(token))
       }

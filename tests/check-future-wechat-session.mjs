@@ -23,7 +23,7 @@ try{
   let account='account0001',time=1800000000,codes=0,authCalls=0,allowed=true
   let enabled=false,hasStoredBackup=false,permitLogin=true
   let throwRequest=false,malformed=false,changeOwner=false,loginHttpStatus=0
-  let deletionHttpStatus=0,deleteCalls=0
+  let deletionHttpStatus=0,deleteCalls=0,consentHttpStatus=0
   const received=[]
   const tokens=new Set()
   const platform={
@@ -76,6 +76,8 @@ try{
         }}
       }
       if(req.url===origin+'/v1/backup/consent'){
+        if(consentHttpStatus&&req.data.enabled)
+          return {statusCode:consentHttpStatus,data:{error:'privacy_notice_outdated'}}
         enabled=req.data.enabled
         return {statusCode:200,data:{
           enabled,hasStoredBackup,revision:hasStoredBackup?2:null,
@@ -118,6 +120,10 @@ try{
   ok(!disabled.enabled&&disabled.hasStoredBackup,
     'Opt-out retains existing backup rather than erasing cloud data')
   await rejects(()=>manager.setCloudConsent(true,'x'),/invalid_consent/)
+  consentHttpStatus=409
+  await rejects(()=>manager.setCloudConsent(true,'privacy-old'),/privacy_update_required/)
+  ok(enabled===false,'Outdated privacy notice cannot re-enable stored consent')
+  consentHttpStatus=0
   time+=250 // only 50 seconds left, trigger proactive refresh
   const s2=await manager.getVerifiedSession()
   ok(s2.accessToken!==s1.accessToken,

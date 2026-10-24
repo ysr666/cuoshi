@@ -33,7 +33,7 @@ try{
  const storage={getStorageSync:key=>storageMap.get(key)??'',
    setStorageSync:(key,value)=>storageMap.set(key,value)}
  const journal=createDurableJournalStore({storage,ownerId,deviceId})
- let current=m.fresh(),online=true,consent=false,account=ownerId,loginLimited=false,paused=false
+ let current=m.fresh(),online=true,consent=false,account=ownerId,loginLimited=false,paused=false,privacyOutdated=false
  let uploaded=0,pullCount=0,requestNo=0,lost=false,failLocal=false
  const auth={
    getVerifiedSession:async()=>{if(loginLimited)throw Error('wechat_session_rate_limited')
@@ -42,6 +42,7 @@ try{
    getStatus:async()=>{if(!online)throw Error('network_unavailable')
      return {enabled:consent,hasStoredBackup:!!sim.readForOwner(who,ownerId)}},
    setCloudConsent:async enabled=>{if(!online)throw Error('network_unavailable')
+     if(enabled&&privacyOutdated)throw Error('wechat_session_privacy_update_required')
      consent=enabled;who.cloudBackupEnabled=enabled
      return {enabled:consent}}
  }
@@ -105,6 +106,20 @@ try{
  ok(uploaded===uploadsBeforeRevocation&&
    sim.readForOwner(who,ownerId).records.days[prior].notes.length===1,
    'Re-consent does not duplicate uploads or delete original notes')
+ // Server upgrades its disclosure while an old mini-program stays open.
+ consent=false;who.cloudBackupEnabled=false;privacyOutdated=true
+ state=await ctl.onForeground()
+ state=await ctl.acceptCloudNotice()
+ ok(state.phase==='attention'&&state.consentRequired===true&&
+    /更新小程序/.test(state.message)&&uploaded===uploadsBeforeRevocation,
+   'Old disclosure prompts update and cannot upload old notes')
+ privacyOutdated=false
+ state=await ctl.onNetworkRestored()
+ ok(consent===false&&uploaded===uploadsBeforeRevocation&&state.consentRequired,
+   'Reconnect cannot silently retry rejected outdated consent')
+ state=await ctl.acceptCloudNotice()
+ ok(state.phase==='synced'&&consent===true,
+   'Explicit acknowledgement after privacy update restores sync')
  paused=true
  const beforePaused=uploaded
  m.setCount(current,prior,1)

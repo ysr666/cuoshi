@@ -138,6 +138,8 @@ export function createWeChatSessionManager(args:{
     }
     if(response.statusCode===403)
       throw Error('wechat_session_access_denied')
+    if(response.statusCode===409&&path==='/v1/backup/consent')
+      throw Error('wechat_session_privacy_update_required')
     if(response.statusCode!==200)throw Error('wechat_session_cloud_unavailable')
     return response
   }

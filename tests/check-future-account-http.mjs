@@ -54,12 +54,13 @@ try{
    },
    async setConsent(value,enabled,version){
      if(value!==token)throw Error('unauthorized')
-     if(version!=='privacy-v1')throw Error('invalid_consent')
+     if(enabled&&version!=='privacy-v1')throw Error('invalid_consent')
      consent=enabled
    }
  }
  const backend={
    identityDb:{},
+   noticeVersion:'privacy-v1',
    authConfig:fakeAuth,
    exchange:async code=>{
      providerCalls++
@@ -156,14 +157,19 @@ try{
  check((await call('/v1/backup/consent','PUT',
    {enabled:true,noticeVersion:'x'},authHeaders)).status===400,
    'Consent requires exact version')
+ const outdated=await call('/v1/backup/consent','PUT',
+   {enabled:true,noticeVersion:'privacy-old'},authHeaders)
+ check(outdated.status===409&&(await outdated.json()).error==='privacy_notice_outdated',
+   'Stale privacy revision cannot enable cloud upload')
+ check(consent===false,'Outdated notice never mutates database consent')
  const yes=await call('/v1/backup/consent','PUT',
    {enabled:true,noticeVersion:'privacy-v1'},authHeaders)
  check(yes.status===200&&(await yes.json()).enabled===true,
    'Explicitly informed user can enable cloud backup')
  const no=await call('/v1/backup/consent','PUT',
-   {enabled:false,noticeVersion:'privacy-v1'},authHeaders)
+   {enabled:false,noticeVersion:'privacy-old'},authHeaders)
  check(no.status===200&&(await no.json()).enabled===false,
-   'Cloud opt-out disables new uploads without deleting existing data')
+   'Cloud opt-out works with an outdated privacy version and keeps existing data')
  check((await call('/v1/account/cancel','GET',undefined,authHeaders)).status===405,
    'Cancellation only permits POST with authenticated bearer')
  check((await call('/v1/account/cancel','POST',{confirmation:'注销'},authHeaders)).status===400,

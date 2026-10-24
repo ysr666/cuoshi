@@ -271,7 +271,7 @@ try{
   const staffSigningKey=crypto.randomBytes(32)
   const nowSeconds=()=>Math.floor(Date.now()/1000)
   const service=new AuthenticatedCloudService(backupPool,adminPool,
-    {backupKey:backupSigningKey,staffKey:staffSigningKey},nowSeconds,deletionPool)
+    {backupKey:backupSigningKey,staffKey:staffSigningKey},nowSeconds,deletionPool,'privacy-v1')
   const userToken=(userId,deviceId='device0001',issued=nowSeconds(),generation=0)=>
     issueServerSession({aud:'cuoshi-cloud-backup',sub:userId,deviceId,generation},backupSigningKey,issued)
   const staffToken=(staffId,mfaAt=nowSeconds()-10,issued=nowSeconds())=>
@@ -403,7 +403,7 @@ try{
   // WeChat identity PostgreSQL role and cloud consent service.
   let httpWechatTokenForRedactionCheck
   const qa=await listenCloudLoopbackForQa({
-    account:{identityDb:identityPool,authConfig:wxConfig,exchange:mockExchange,
+    account:{identityDb:identityPool,noticeVersion:'privacy-v1',authConfig:wxConfig,exchange:mockExchange,
       login:loginWithWechatCode,account:service,
       permitLogin // real role-restricted PostgreSQL shared rate limiter
     },
@@ -451,6 +451,25 @@ try{
     const decision=await firstReply.json()
     check(firstReply.status===200&&decision.kind==='accepted'&&decision.receipt.revision===1,
       'One listener runs real WeChat login → consent → PostgreSQL snapshot upload')
+    // Updating the disclosure invalidates earlier opt-ins without erasing data.
+    const newerPolicy=new AuthenticatedCloudService(backupPool,adminPool,
+      {backupKey:backupSigningKey,staffKey:staffSigningKey},
+      nowSeconds,deletionPool,'privacy-v2')
+    const staleStatus=await newerPolicy.status(authenticated.accessToken)
+    check(staleStatus.enabled===false&&staleStatus.hasStoredBackup===true,
+      'Prior-version consent is not current consent after privacy update')
+    check(await newerPolicy.readBackup(authenticated.accessToken)===null,
+      'Stale consent cannot read the snapshot')
+    check((await newerPolicy.upload(authenticated.accessToken,firstUpload)).reason==='consent_required',
+      'Upload and replay blocked inside locked DB transaction for stale consent')
+    await assert.rejects(newerPolicy.setConsent(authenticated.accessToken,true,'privacy-v1'),
+      /cloud_notice_outdated/);checks++
+    await newerPolicy.setConsent(authenticated.accessToken,true,'privacy-v2')
+    check((await newerPolicy.status(authenticated.accessToken)).enabled,
+      'New explicit notice confirmation restores cloud permission')
+    await service.setConsent(authenticated.accessToken,true,'privacy-v1')
+    check((await service.status(authenticated.accessToken)).enabled,
+      'Synthetic old test policy restored for subsequent independent cases')
     const secondReply=await fetch(target+'/v1/auth/wechat',{
       method:'POST',headers:{'Content-Type':'application/json'},
       body:JSON.stringify({code:'wxhttpcode0002',deviceId:'device0100'})
@@ -525,7 +544,7 @@ try{
     db:identityPool,peerHmacKey:limitKey,verifiedPeer:edge.clientIp
   })
   const edgeHost=await listenPrivateEdgeLoopback({
-    account:{identityDb:identityPool,authConfig:wxConfig,exchange:mockExchange,
+    account:{identityDb:identityPool,noticeVersion:'privacy-v1',authConfig:wxConfig,exchange:mockExchange,
       login:loginWithWechatCode,account:service,permitLogin:edgeLimit},
     backup:service
   },edge,0)
@@ -1017,7 +1036,7 @@ try{
   const rotatedService=new AuthenticatedCloudService(backupPool,adminPool,{
     backupKey:nextBackupKey,staffKey:nextStaffKey,
     previousBackupKey:backupSigningKey,previousStaffKey:staffSigningKey
-  },nowSeconds)
+  },nowSeconds,undefined,'privacy-v1')
   check((await rotatedService.status(tokenA)).enabled,
     'Old user token works briefly during configured key rotation')
   const nextUserToken=issueServerSession({
@@ -1036,7 +1055,7 @@ try{
     'New staff signing key uses the same restricted audit DB path')
   const currentOnly=new AuthenticatedCloudService(backupPool,adminPool,{
     backupKey:nextBackupKey,staffKey:nextStaffKey
-  },nowSeconds)
+  },nowSeconds,undefined,'privacy-v1')
   await assert.rejects(currentOnly.status(tokenA),/unauthorized/);checks++
   await assert.rejects(currentOnly.readPrivateDay(
     staffToken('support0001'),a.userId,yesterday,'ticket0001'),/unauthorized/);checks++
@@ -1044,7 +1063,7 @@ try{
     'Removing the previous key retires old user tokens')
   assert.throws(()=>new AuthenticatedCloudService(backupPool,adminPool,{
     backupKey:nextBackupKey,staffKey:nextStaffKey,previousStaffKey:nextBackupKey
-  },nowSeconds),/distinct_keys/);checks++
+  },nowSeconds,undefined,'privacy-v1'),/distinct_keys/);checks++
   // Logout is durable across new AuthenticatedCloudService instances.
   const tokenToRevoke=userToken('account0002','device0002')
   check((await service.status(tokenToRevoke)).enabled,
@@ -1054,7 +1073,7 @@ try{
   await assert.rejects(service.upload(tokenToRevoke,up(state,0,null,'request9990')),
     /session_revoked/);checks++
   const afterRestart=new AuthenticatedCloudService(backupPool,adminPool,
-    {backupKey:backupSigningKey,staffKey:staffSigningKey},nowSeconds)
+    {backupKey:backupSigningKey,staffKey:staffSigningKey},nowSeconds,undefined,'privacy-v1')
   await assert.rejects(afterRestart.status(tokenToRevoke),/session_revoked/);checks++
   await assert.rejects(rotatedService.status(tokenToRevoke),/session_revoked/);checks++
   check((await rotatedService.status(nextUserToken)).enabled,
@@ -1178,7 +1197,7 @@ try{
   // The actual composed route must cancel only the JWT owner, using the
   // separate deletion role; no test direct function call on the success path.
   const deletionHttp=await listenCloudLoopbackForQa({
-    account:{identityDb:identityPool,authConfig:wxConfig,exchange:mockExchange,
+    account:{identityDb:identityPool,noticeVersion:'privacy-v1',authConfig:wxConfig,exchange:mockExchange,
       login:loginWithWechatCode,account:service,permitLogin:()=>true},
     backup:service
   },'SYNTHETIC_TEST_ONLY')

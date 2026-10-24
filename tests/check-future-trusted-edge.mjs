@@ -49,7 +49,7 @@ try{
   async readBackup(){cloudCalls++;return null},
   async upload(){cloudCalls++;return {kind:'rejected',reason:'consent_required'}}
  }
- const deps={account:{identityDb:{},authConfig:{},exchange:async()=>({openid:'synthetic'}),
+ const deps={account:{identityDb:{},noticeVersion:'privacy-v1',authConfig:{},exchange:async()=>({openid:'synthetic'}),
   account:service,
   permitLogin:limiter,
   login:async(_,code,deviceId)=>{loginCount++;return {

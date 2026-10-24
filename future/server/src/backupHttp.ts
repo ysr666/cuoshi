@@ -15,7 +15,7 @@ const MAX_BODY_BYTES=11*1024*1024 // >10 MiB JSONB document limit + metadata
 type Backend=Pick<AuthenticatedCloudService,'readBackup'|'upload'>
 type PublicCode='bad_request'|'unauthorized'|'access_denied'|'not_found'|
   'method_not_allowed'|'payload_too_large'|'unsupported_media_type'|
-  'cloud_temporarily_unavailable'
+  'cloud_temporarily_unavailable'|'privacy_notice_outdated'
 export class HttpFailure extends Error{
   constructor(readonly status:number,readonly code:PublicCode){super(code)}
 }
@@ -98,6 +98,7 @@ export function errorResponse(error:unknown):HttpFailure{
     if(['unauthorized','session_revoked'].includes(error.message))
       return new HttpFailure(401,'unauthorized')
     if(error.message==='account_closed')return new HttpFailure(403,'access_denied')
+    if(error.message==='cloud_notice_outdated')return new HttpFailure(409,'privacy_notice_outdated')
   }
   return new HttpFailure(503,'cloud_temporarily_unavailable')
 }

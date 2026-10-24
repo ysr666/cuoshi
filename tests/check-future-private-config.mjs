@@ -23,13 +23,15 @@ try{
  const env={CUOSHI_PRIVATE_EDGE_ACK:'PRIVATE_EDGE_LOOPBACK_ONLY',CUOSHI_PRIVATE_PORT:'18765',
   CUOSHI_PG_SCHEMA:'cuoshi_prod',
   CUOSHI_WECHAT_APP_ID:'wx0123456789abcdef',CUOSHI_WECHAT_APP_SECRET:'a'.repeat(32),
+  CUOSHI_V05_NOTICE_VERSION:'privacy-v05-reviewed-20261024',
   CUOSHI_PG_BACKUP_URL:'postgresql://backup_private:password@pg.example.net:5432/cuoshi?sslmode=verify-full',
   CUOSHI_PG_IDENTITY_URL:'postgresql://identity_private:password@pg.example.net:5432/cuoshi?sslmode=verify-full',
   CUOSHI_PG_STAFF_URL:'postgresql://staff_private:password@pg.example.net:5432/cuoshi?sslmode=verify-full',
   CUOSHI_PG_CANCELLATION_URL:'postgresql://cancellation_private:password@pg.example.net:5432/cuoshi?sslmode=verify-full'}
  for(const key of keys)env[key]=randomBytes(32).toString('hex')
  const config=parse(env)
- check(config.port===18765&&config.appId===env.CUOSHI_WECHAT_APP_ID,
+ check(config.port===18765&&config.appId===env.CUOSHI_WECHAT_APP_ID&&
+  config.noticeVersion===env.CUOSHI_V05_NOTICE_VERSION,
   'Valid separated private service config parses to typed output')
  check(config.dbSchema==='cuoshi_prod'&&
   privatePoolConnectionOptions(config.backupDbUrl,config.dbSchema).options===
@@ -46,6 +48,12 @@ try{
   reject({CUOSHI_PG_SCHEMA:invalid},/database_schema_invalid/,
    'Invalid/missing runtime schema cannot fall back to public: '+invalid)
  }
+ reject({CUOSHI_V05_NOTICE_VERSION:undefined},/notice_version_invalid/,
+  'Missing reviewed privacy version blocks production backend')
+ reject({CUOSHI_V05_NOTICE_VERSION:'privacy-v1'},/notice_version_invalid/,
+  'Default development notice can never be treated as approved')
+ reject({CUOSHI_V05_NOTICE_VERSION:'privacy-v05\nINJECTED'},/notice_version_invalid/,
+  'Multiline privacy version cannot enter operator runtime')
  reject({CUOSHI_PG_BACKUP_URL:env.CUOSHI_PG_BACKUP_URL+'&options=-c%20search_path%3Dpublic'},
   /database_invalid/,'DSN cannot override audited runtime schema via PG options')
  reject({CUOSHI_PRIVATE_EDGE_ACK:'EXPOSE_PUBLIC'},/ack_required/,'No public-listener acknowledgement')

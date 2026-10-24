@@ -72,14 +72,15 @@ export async function setCloudConsent(pool:DbPool,s:VerifiedUserSession,enabled:
       WHERE user_id=$1`,[s.userId,enabled,noticeVersion])
   })
 }
-export async function getCloudSnapshot(pool:DbPool,s:VerifiedUserSession):Promise<CloudSnapshot|null>{
+export async function getCloudSnapshot(pool:DbPool,s:VerifiedUserSession,requiredVersion?:string):Promise<CloudSnapshot|null>{
   requireUser(s)
   const db=await pool.connect()
   try{
     const result=await db.query(`SELECT b.revision,b.digest,b.records FROM cloud_users u
       JOIN cloud_snapshots b ON b.user_id=u.user_id
       WHERE u.user_id=$1 AND u.deleted_at IS NULL AND u.backup_enabled=TRUE
-        AND ($2::bigint IS NULL OR u.session_generation=$2)`,[s.userId,s.generation??null])
+        AND ($2::bigint IS NULL OR u.session_generation=$2)
+        AND ($3::text IS NULL OR u.consent_version=$3)`,[s.userId,s.generation??null,requiredVersion??null])
     return result.rows[0]?snapshot(result.rows[0],s.userId):null
   }finally{db.release()}
 }
@@ -90,24 +91,24 @@ export type CloudBackupStatus={
   lastSuccessAt:string|null
 }
 /** Non-private status for the user-visible backup page; opt-out keeps old snapshot until deletion. */
-export async function getCloudBackupStatus(pool:DbPool,s:VerifiedUserSession):Promise<CloudBackupStatus>{
+export async function getCloudBackupStatus(pool:DbPool,s:VerifiedUserSession,requiredVersion?:string):Promise<CloudBackupStatus>{
   requireUser(s)
   const db=await pool.connect()
   try{
-    const row=(await db.query(`SELECT u.backup_enabled,s.revision,s.updated_at
+    const row=(await db.query(`SELECT u.backup_enabled,u.consent_version,s.revision,s.updated_at
       FROM cloud_users u LEFT JOIN cloud_snapshots s ON s.user_id=u.user_id
       WHERE u.user_id=$1 AND u.deleted_at IS NULL
         AND ($2::bigint IS NULL OR u.session_generation=$2)`,[s.userId,s.generation??null])).rows[0]
     if(!row)throw Error('unverified_identity')
     return {
-      enabled:row.backup_enabled===true,
+      enabled:row.backup_enabled===true&&(!requiredVersion||row.consent_version===requiredVersion),
       hasStoredBackup:row.revision!==null,
       revision:row.revision===null?null:revisionNumber(row.revision),
       lastSuccessAt:row.updated_at?new Date(row.updated_at).toISOString():null
     }
   }finally{db.release()}
 }
-export async function uploadCloudSnapshot(pool:DbPool,s:VerifiedUserSession,request:UploadRequest):Promise<UploadDecision>{
+export async function uploadCloudSnapshot(pool:DbPool,s:VerifiedUserSession,request:UploadRequest,requiredVersion?:string):Promise<UploadDecision>{
   requireUser(s)
   if(!request||!Number.isSafeInteger(request.baseRevision)||request.baseRevision<0||
       !validId(request.idempotencyKey)||
@@ -125,10 +126,12 @@ export async function uploadCloudSnapshot(pool:DbPool,s:VerifiedUserSession,requ
   ])).digest('hex')
   return transact(pool,async db=>{
     // Serializes writers for the same account, including when the snapshot does not exist.
-    const owners=await db.query('SELECT backup_enabled,session_generation FROM cloud_users WHERE user_id=$1 AND deleted_at IS NULL FOR UPDATE',[s.userId])
+    const owners=await db.query('SELECT backup_enabled,consent_version,session_generation FROM cloud_users WHERE user_id=$1 AND deleted_at IS NULL FOR UPDATE',[s.userId])
     if(!owners.rows.length)return {kind:'rejected',reason:'authentication'}
     if(s.generation!==undefined&&Number(owners.rows[0].session_generation)!==s.generation)throw Error('session_revoked')
-    if(!owners.rows[0].backup_enabled)return {kind:'rejected',reason:'consent_required'}
+    if(!owners.rows[0].backup_enabled||
+       (requiredVersion&&owners.rows[0].consent_version!==requiredVersion))
+      return {kind:'rejected',reason:'consent_required'}
     const receipt=await db.query(`SELECT request_digest,revision,digest
       FROM cloud_upload_receipts WHERE user_id=$1 AND idempotency_key=$2`,[s.userId,request.idempotencyKey])
     if(receipt.rows.length){

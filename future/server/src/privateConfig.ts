@@ -7,6 +7,7 @@ export type PrivateCloudConfig={
   port:number
   appId:string
   appSecret:string
+  noticeVersion:string
   backupDbUrl:string
   identityDbUrl:string
   staffDbUrl:string
@@ -77,6 +78,12 @@ export function parsePrivateCloudConfig(env:Record<string,string|undefined>):Pri
  if(typeof appId!=='string'||!appIdPattern.test(appId)||
     typeof appSecret!=='string'||!/^[A-Za-z0-9_-]{16,256}$/.test(appSecret))
    throw Error('private_cloud_wechat_config_invalid')
+ const noticeVersion=env.CUOSHI_V05_NOTICE_VERSION
+ // The server must reject missing or unreviewed disclosure revisions; no
+ // default development string is acceptable for a production HTTP listener.
+ if(typeof noticeVersion!=='string'||!/^[-.a-zA-Z0-9_]{3,64}$/.test(noticeVersion)||
+    noticeVersion==='privacy-v1')
+   throw Error('private_cloud_notice_version_invalid')
  const dbSchema=privateDatabaseSchema(env.CUOSHI_PG_SCHEMA)
  const urls=[
    databaseUrl(env,'CUOSHI_PG_BACKUP_URL'),
@@ -94,7 +101,7 @@ export function parsePrivateCloudConfig(env:Record<string,string|undefined>):Pri
  if(new Set(keys.map(x=>Buffer.from(x).toString('hex'))).size!==keys.length)
    throw Error('private_cloud_secrets_not_separated')
  return {
-   port,appId,appSecret,dbSchema,
+   port,appId,appSecret,noticeVersion,dbSchema,
    backupDbUrl:urls[0].value,identityDbUrl:urls[1].value,staffDbUrl:urls[2].value,cancellationDbUrl:urls[3].value,
    backupSigningKey:keys[0],staffSigningKey:keys[1],
    subjectPepper:keys[2],codePepper:keys[3],loginPeerKey:keys[4],edgeSecret:keys[5]
