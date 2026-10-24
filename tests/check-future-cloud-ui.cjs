@@ -28,6 +28,10 @@ const srv=createServer((req,res)=>{
    await page.goto('http://127.0.0.1:'+srv.address().port,{waitUntil:'networkidle'})
    ok(await page.getByTestId('cloud-status').innerText()==='开始使用错事',
      'First-time clear cloud data notice')
+   ok(await page.getByText(/仅模拟数据，不会同步云端，请勿输入私人内容/).isVisible(),
+     'Public preview explicitly warns against entering private notes')
+   ok(await page.locator('meta[name="robots"]').getAttribute('content')==='noindex,nofollow,noarchive',
+     'Public preview is marked against crawler indexing')
    ok((await page.evaluate(()=>window.__cuoshiDemo.snapshot())).consent===false,
      'No implicit upload before user has seen and accepted first-use notice')
    ok(await page.getByText(/数字、可选简记以及历次修改历史/).isVisible(),

@@ -93,7 +93,7 @@ Object.assign(window,{__cuoshiDemo:{
 }})
 const Demo=defineComponent({
  render:()=>h('div',{class:'shell'},[
-  h('div',{class:'banner'},'错事 · v0.5 云端优先体验（模拟）'),
+  h('div',{class:'banner'},'错事 · v0.5 交互预览｜仅模拟数据，不会同步云端，请勿输入私人内容'),
   h(CloudFirstPanel,{state:view.value,demonstration:true,busy:busy.value,
    onAccept:()=>{void act(()=>ctl.acceptCloudNotice())},
    onRetry:()=>{void act(()=>ctl.onNetworkRestored())}}),

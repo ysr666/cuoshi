@@ -174,3 +174,9 @@ A previous handoff gap was the absence of a complete owner backend `staff.env` s
 #### 2026-10-24 · 私有发布构建彻底清除旧编译文件
 
 独立后端 TypeScript 编译器默认**不会清理旧输出目录**。实测发现，旧版多员工/私人日期读取处理程序的 `adminHttp.js`、`staffDayService.js` 曾滞留在原编译文件夹中，先前部署打包器会把编译目录中的 JS 一并收录。这不等同于现有公网路由可访问，但不应将无用旧代码带到单管理员正式环境。本轮改为每次构建先生成全新的临时目录，TypeScript 成功后才替换构建目录；打包器另外拒绝出现两份废弃 JS。合同检查会主动插入合成旧文件，分别验证重编译清除与未清除时打包拒绝；不接触真实数据库、凭证或个人简记。原来八份 SQL 迁移、线上服务及微信包均未修改，五道真实发布门槛仍 BLOCKED。
+
+### 2026-10-24 · Render 公开模拟预览（已部署，非生产环境）
+
+使用运营者既有的 Render 工作区，独立新建 `cuoshi-v05-synthetic-preview` 静态网站，手动部署 Draft PR #4 的 `future/preview` 云优先 UI 演示；可访问 <https://cuoshi-v05-synthetic-preview.onrender.com/>。首轮 Render 部署 `dep-dbe627qvcj2c73br0uc0` 为 `live`，远端 HTTPS 首页返回 200，不存在的私人备份 API 路径返回 404；首次部署提交为 `207510a`。服务设置 `autoDeploy=no`，后续代码修改必须手动重新部署。原有旧版 `cuoshi-ysr-v02` 静态站点未改。
+
+该演示使用进程内的虚构账号与模拟云合同，**没有接入真实微信、生产数据库、真实云存储、管理员服务或私人笔记**。公开演示页显示“仅模拟数据，不会同步云端，请勿输入私人内容”，并添加 `noindex,nofollow,noarchive`，独立 Chrome 测试锁定这两项提醒。部署采用 Render 海外静态 CDN，**不能作为中国大陆生产个人信息存储方案，也不满足五道发布关口中任何真实联网/实名/备案要求**。Render 静态网站本身可免费部署，但使用已有工作区流量及构建分钟配额，额度外是否计费以工作区实际账单规则为准。将正式云端接入与本演示彻底隔离。
