@@ -107,3 +107,13 @@ CI 在 Node 22 / 默认 npm 10.9.9 下使用 `npm audit --prefix future/server`�
 ### 2026-10-24 · npm 官方注册表再次核验
 
 已使用官方 registry 在线查询：根依赖审计 24 个受影响包（19 High、2 Moderate、3 Low、0 Critical），仅统计非开发依赖仍有 15 High。问题主要集中在冻结版 DCloud/Vue 编译栈及其间接依赖，不等于这 15 项全都实际打入原生小程序；也不能据此推断无可利用漏洞。独立后端 CI 继续强制阻断 High/Critical。鉴于 DCloud 插件精确要求旧 Vite peer 版本，不能盲目执行强制升级，正式审核需验证编译产物可达性、完成框架兼容试验及实机验收。
+
+### 2026-10-24 · DCloud Express 4.x 传递构建依赖定向修补（PR #4）
+
+已核实冻结版 `@dcloudio/vite-plugin-uni@3.0.0-4080720251210001` 在其依赖列表中把 Express 精确固定为 `4.20.0`，而该旧版及其依赖的 `body-parser`、`qs`、`cookie`、`send`、`serve-static`、`path-to-regexp` 含已公布的 DoS/XSS 风险。此次**不改变 DCloud、Vue、Vite 主框架的版本**；仅添加根层 `overrides.express=4.22.3`，保留 Express 4.x API 合同，通过全新 `npm ci --registry=https://registry.npmjs.org --ignore-scripts` 验证真实插件读取到 Express 4.22.3，并核对其 6 个安全更新后的传递组件版本。
+
+官方 npm registry 的同日对照（同一 Mac、同一命令、非离线估算）：根 `npm audit --json` 从 **24 包（20 High / 1 Moderate / 3 Low / 0 Critical）**降为 **17 包（17 High / 0 Moderate / 0 Low / 0 Critical）**；影响统计里的 7 个包从受影响清单消失，不等于只修复/清理了 7 条独立公告。`npm audit --omit=dev` 仍有 **15 个 High**，仍涉及 DCloud 依赖和 Vue SSR。根项目包括前端构建工具与 H5 所需框架，风险清单不是微信原生最终可达漏洞数量，不能直接解读为可发布。
+
+`tests/check-future-patched-build-deps.mjs` 将 Express 及全部六个传递组件的准确版本、嵌套副本、DCloud 插件实际 Node 解析结果纳入 CI 防回退；原有微信输出包不含 Node 构建器文件的检查继续执行。DCloud Vite 插件仍精确依赖 `vite@5.2.8`，该版本有未关闭的 dev server 漏洞，因此 `vite.config.ts` 新增 `server.host` 与 `preview.host` 均绑定 `127.0.0.1`，实测 Vite 解析生效；**此举只缩减本地网络暴露，不修复 Vite 漏洞**。正式云端不托管开发服务器。测试包含 TypeScript、H5、微信、v0.5 独立原生构建与 v0.4 隔离，真实 CI 仍需通过后才能合并。
+
+不要执行破坏性 `npm audit fix --force`，也不要把 Vue 3.5.x 或 Vite 主版本强制覆盖冻结 DCloud 插件。在有兼容性实验、原生包风险可达性审核、正式真机测量前，**上线安全状态仍为 BLOCKED**。本次没有访问真实生产数据、AppID、服务器或密钥。

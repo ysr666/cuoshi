@@ -128,3 +128,7 @@ The restricted dashboard login now takes a password and an authenticator code, n
 #### 2026-10-24 · 单管理员首装资料与限流清理补齐
 
 新增 `prepare-owner.mjs` 离线引导（随机密码哈希、TOTP 种子、密钥、仅空管理表的唯一所有者审核 SQL），严格仓库外权限 0700/0600、拒绝覆盖/打印秘密；测试不生成正式凭证。现有每小时 PostgreSQL 最小权限清理流程增加 `cloud_prune_owner_login_windows`，不直接读取账号表、用户简记或原始 IP。八步迁移需审核执行，尚未接任何正式资源；发布仍阻断。
+
+#### 2026-10-24 · 构建链 Express 修复并锁定本地 Vite 开发服务
+
+DCloud 旧插件固定的 Express 4.20.0 通过兼容 4.x 版本 override 定向升级到 4.22.3，并清除 6 个关联传递依赖的已知漏洞版本；回归包括 npm 官方在线 audit、冷安装、插件实际模块解析、H5/微信双平台及小程序 v0.4 隔离。根 npm audit 24 包降至 17 包；仍有 17 High，生产分发继续阻断。旧 Vite 仍为 DCloud 精确 peer 5.2.8，本地开发/预览仅允许 loopback，不表述为已修复 Vite 本身的风险。

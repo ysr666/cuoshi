@@ -68,6 +68,26 @@ for(const [name,policy] of Object.entries(patched)){
  check(version===(policy.reviewed??policy.minimum),
   'Security patch version stays explicitly reviewed: '+name)
 }
+// The pinned DCloud Vite adapter pulls exact Express 4.20.0, which has
+// multiple known transitive DoS/XSS advisories. Our scoped 4.x-only override
+// must remain effective in both npm lockfile and clean install; this does not
+// relax the separate DCloud/Vite/Vue risk gate or update user-facing features.
+check(pkg.overrides?.express==='4.22.3',
+ 'DCloud legacy builder Express override remains intentionally reviewed')
+const verifiedExpress={
+ 'express':'4.22.3','body-parser':'1.20.9','qs':'6.16.1',
+ 'cookie':'0.7.2','send':'0.19.2','serve-static':'1.16.3',
+ 'path-to-regexp':'0.1.13'
+}
+const fromDcloud=createRequire(resolve('node_modules/@dcloudio/vite-plugin-uni/package.json'))
+for(const [name,expected] of Object.entries(verifiedExpress)){
+ const variants=nodes.filter(x=>x.name===name)
+ check(variants.length>0&&variants.every(x=>x.version===expected),
+  'No stale vulnerable nested Express dependency: '+name)
+ const actual=fromDcloud(name+'/package.json').version
+ check(actual===expected,
+  'Real uni plugin resolves checked patched Express tree: '+name)
+}
 const from=createRequire(resolve('node_modules/@dcloudio/uni-mp-weixin/package.json'))
 check(from('ws/package.json').version==='8.22.0',
  'Real DCloud WeChat builder resolves patched WebSocket dependency')

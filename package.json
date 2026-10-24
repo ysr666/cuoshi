@@ -111,6 +111,7 @@
     "@intlify/runtime": "9.14.5",
     "@intlify/vue-devtools": "9.14.5",
     "@intlify/shared": "9.14.5",
-    "@intlify/devtools-if": "9.14.5"
+    "@intlify/devtools-if": "9.14.5",
+    "express": "4.22.3"
   }
 }
