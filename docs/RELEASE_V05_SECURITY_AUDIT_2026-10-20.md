@@ -117,3 +117,19 @@ CI 在 Node 22 / 默认 npm 10.9.9 下使用 `npm audit --prefix future/server`�
 `tests/check-future-patched-build-deps.mjs` 将 Express 及全部六个传递组件的准确版本、嵌套副本、DCloud 插件实际 Node 解析结果纳入 CI 防回退；原有微信输出包不含 Node 构建器文件的检查继续执行。DCloud Vite 插件仍精确依赖 `vite@5.2.8`，该版本有未关闭的 dev server 漏洞，因此 `vite.config.ts` 新增 `server.host` 与 `preview.host` 均绑定 `127.0.0.1`，实测 Vite 解析生效；**此举只缩减本地网络暴露，不修复 Vite 漏洞**。正式云端不托管开发服务器。测试包含 TypeScript、H5、微信、v0.5 独立原生构建与 v0.4 隔离，真实 CI 仍需通过后才能合并。
 
 不要执行破坏性 `npm audit fix --force`，也不要把 Vue 3.5.x 或 Vite 主版本强制覆盖冻结 DCloud 插件。在有兼容性实验、原生包风险可达性审核、正式真机测量前，**上线安全状态仍为 BLOCKED**。本次没有访问真实生产数据、AppID、服务器或密钥。
+
+### 2026-10-24 · Vue SSR 与旧 Vite 安全可达性新增自动化门禁（PR #4）
+
+查阅 npm 当前（10 月 24 日）官方 Vue3 标签：`@dcloudio/{uni-app,uni-components,uni-h5,uni-mp-weixin}` 和 `@dcloudio/vite-plugin-uni` 的 Vue3 标签已推进到 `3.0.0-5030320261023001`。但检查该标签的**实际包元数据**，Vite 插件仍精确要求 `vite@5.2.8`，内部 `@vue/shared` / Vue 编译器仍精确要求 `3.4.21`，`uni-h5` 继续依赖 `@vue/server-renderer@3.4.21`。因此仅替换整套 DCloud 为这一最新版**不能视为修复**旧 Vite 与 Vue SSR 漏洞。为防破坏首发兼容性，本轮不对冻结的 DCloud/Vue/Vite 组件做无收益的盲目升级。
+
+Vue SSR 风险 `GHSA-g2v6-rqmx-r4w6`（`@vue/server-renderer` 的动态 HTML 属性名检查未拒绝 CR 字符），官方修复于 `3.5.42`。触发前提是**服务端将外部可控 HTML 属性映射渲染成响应文本**。目前「错事」的生产云后端使用独立 `pg` 依赖、未加载 Vue SSR 运行时；H5 构建为静态客户端，微信输出为小程序包。**这只是攻击面证据，不是漏洞本身已修复、没有其他攻击路径或能够解除上线阻断。**
+
+新增 `tests/check-future-framework-boundary.mjs`：
+
+- 核对根 DCloud、Vue、Vite 锁版本与插件精确 peer；不允许误报已升级。
+- 通过实际 `vite.resolveConfig()` 验证开发/预览监听仅限 `127.0.0.1`、禁止无意换端口。
+- 完整遍历最终 H5、v0.4 微信预览、v0.5 独立微信原生包，拒绝意外的 `.env`、私钥、源码映射、npm 依赖清单、Node SSR helper 名称、Vite 开发客户端和 Node 工具链入口等**可静态识别的暴露标记**。
+- 核对独立 PostgreSQL 后端运行依赖与 TypeScript 源码，防止引入 DCloud/Vue SSR/Vite/Express 作为云端执行依赖。
+- 用专门的错误样本验证 SSR 动态 helper、Vite 客户端、Node 工具引用和 `.env` 检查**真的会失败**；CI 在构建完成后跑同样检查，输出 `cuoshi-framework-exposure-<run_id>` JSON 证据，里面明确 `releaseApproved=false`。
+
+**重要局限**：静态字符串扫描不能证明混淆/压缩 JS 内不存在等价代码，也不能代表实际授权、注入路径、微信运行时、云部署或供应链已经人工验证。其价值是降低可识别的 SSR/dev 构建代码误入产品产物的概率、保证后续框架升级有可重复的回归基线。官方根依赖 17 个 High 告警仍保留；上线判定继续 `BLOCKED`，CI SUCCESS 只说明此阶段自动化检查通过。

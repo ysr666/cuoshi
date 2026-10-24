@@ -132,3 +132,7 @@ The restricted dashboard login now takes a password and an authenticator code, n
 #### 2026-10-24 · 构建链 Express 修复并锁定本地 Vite 开发服务
 
 DCloud 旧插件固定的 Express 4.20.0 通过兼容 4.x 版本 override 定向升级到 4.22.3，并清除 6 个关联传递依赖的已知漏洞版本；回归包括 npm 官方在线 audit、冷安装、插件实际模块解析、H5/微信双平台及小程序 v0.4 隔离。根 npm audit 24 包降至 17 包；仍有 17 High，生产分发继续阻断。旧 Vite 仍为 DCloud 精确 peer 5.2.8，本地开发/预览仅允许 loopback，不表述为已修复 Vite 本身的风险。
+
+#### 2026-10-24 · 框架攻击面运行包隔离证据
+
+新增 npm 脚本 `test:future:framework-boundary`；在 H5、微信预览、独立 v0.5 微信包完成编译后，GitHub CI 将检索 Vue SSR/Vite 开发服务与 Node 构建器在最终分发产物的静态暴露特征，检查云端 PG 服务没有前端运行依赖，验证 loopback 限制实际生效，并上传 `cuoshi-framework-exposure-*` JSON。已证明扫描器会拒绝恶意夹带的合成包。**自动化结果明确 releaseApproved=false，不影响真实框架高危公告及真机/生产验收阻断。**

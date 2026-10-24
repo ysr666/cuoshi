@@ -109,6 +109,10 @@ jobs:
         run: npm run test:future:mp-weixin
       - name: Block reintroduced vulnerable build dependencies in actual native WeChat package
         run: npm run test:future:patched-build-deps
+      - name: Verify Vue SSR and Vite tooling are not directly exposed by shipped outputs
+        shell: bash
+        run: |
+          node tests/check-future-framework-boundary.mjs "$RUNNER_TEMP/cuoshi-framework-boundary.json"
       - name: Test native wx crypto, verified-offline restart and automatic reconnect
         run: npm run test:future:mp-weixin:offline
       - name: Upload isolated v0.5 developer-package (not for release)
@@ -124,6 +128,14 @@ jobs:
 
       - name: Inspect WeChat preview build for accidentally packaged private files
         run: node tests/check-wechat-preview-artifact.cjs
+      - name: Upload framework reachability evidence (not release authorization)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cuoshi-framework-exposure-${{ github.run_id }}
+          path: ${{ runner.temp }}/cuoshi-framework-boundary.json
+          if-no-files-found: warn
+          retention-days: 14
       - name: Upload isolated WeChat preview build for real-device QA
         uses: actions/upload-artifact@v4
         with:
