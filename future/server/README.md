@@ -1,0 +1,205 @@
+# 「错事」未来中国大陆云服务：独立 PostgreSQL 后端基础
+
+> **最新状态（2026-10-24）**：本 README 下文含按时间追加的历史阶段描述，早期“没有 HTTP 入口”等陈述已过时。现在已经实现受限的本机业务 HTTP 启动程序、独立 staff 工单/汇总 HTTP 处理函数、隔离的管理员本机入口及 SQL 操作审计；全部仍未部署到公网或真实微信平台。运行正式服务仍必须由实际主体提供已获准的 AppID、合法域名、数据库、员工 MFA 和真实资源。`future/admin/` 是虚构数据预览，不能充当在线数据后台；实时营运数字尚未接入 UI。可查阅 [`future/admin/README.md`](../admin/README.md) 和 [`docs/RELEASE_V05_FIVE_GATES.md`](../../docs/RELEASE_V05_FIVE_GATES.md)。
+
+**开发中，不能发布。** 此目录未提供 HTTP 服务、**已启用的真实微信登录**、短信验证或云服务域名；不连接任何真实用户。它只包含后端数据库建表、事务实现和测试。v0.4 微信/H5 包不包含这些模块。
+
+## 第二阶段安全实现（隔离中）
+
+- `sql/002_runtime_permissions.sql`：真实 SQL 运行时角色分权模板。备份角色只能管理备份表；管理员不能 SELECT 全库快照或更改/删除审计，只可执行 `cloud_read_day` 受限函数。
+- `src/adminRepository.ts` 不再直查多张私人表，而是仅调用 PostgreSQL 内部的审计读取函数；数据库负责工单、审批、授权日期与有效期检查。
+- `src/sessionTokens.ts` 提供**未来真实身份验证后的**短期签名会话校验；`src/authenticatedService.ts` 先验证用户/员工独立密钥的签名和用途，再访问数据库。**尚未接入微信/短信平台，也没有对外 API。**
+- `src/repository.ts` 新增本人云备份状态接口：是否开启、是否仍有云副本、最后成功时间/版本；关闭上传不删除既有副本。
+- 独立 PostgreSQL 测试的云备份/管理员角色都是真正非数据库所有者的登录角色；新增 SQL 直接读取越权、审计修改、审批人停用、工单关闭和授权撤销竞争测试。生产还需外部不可篡改审计、正式密钥托管/自动轮换、设备级会话失效与加密策略。
+- 专门的安全与合规交接文档：[`docs/CN_CLOUD_BACKEND_SECURITY_HANDOFF.md`](../../docs/CN_CLOUD_BACKEND_SECURITY_HANDOFF.md)。
+
+## 新增：微信账号映射、会话撤销和密钥过渡（仍未部署）
+
+- `sql/003_wechat_identity.sql`、`src/wechatIdentity.ts`：服务端微信 `code2Session` 准备层，将核验得到的 openid 转成随机内部账号；数据库仅存 HMAC 摘要。微信认证运行时账号无删除用户和备份权限；同账号并发初始化通过事务锁防重复，临时代码重复使用会拒绝。
+- `sql/004_session_revocation.sql`、`src/sessionRevocation.ts`：对用户与员工 bearer 会话分别记录只含哈希 ID 的持久拒绝名单；退出后新请求先查数据库，失效后不能复活。完整账号级强制退出已由 `006_global_session_revocation.sql` 后续实现，但未接正式登录 UI。
+- `authenticatedService.ts` 支持新密钥与前任密钥短期共存以完成轮换；删除前任密钥后旧签名不能再使用。已有账号会话代际号；尚无生产 KMS、远程设备列表 UI 或 HTTP 登录接口。
+- 新的服务端认证、合规限制、DB 权限风险、实机前置条件见 [微信与会话安全交接](../../docs/CN_CLOUD_WECHAT_AUTH_HANDOFF.md)。本地真实数据库有 **192 项集成检查**，微信平台响应目前使用完全离线的假返回值。
+
+## 账号注销及后台数据保留（单独分权、未上线）
+
+- `sql/005_account_cancellation.sql`：把账号注销限定在独立的数据库删除角色；不授予云备份/管理员/微信身份服务直接删除账号的权限。服务端签名身份验证后、用户明确二次确认后，事务将微信映射与云端私人正文/历史/备份删除，并将关联员工审计的个人标识和记录日期擦除。
+- 后台**保留的是不可直接关联个体的月度注销统计及已擦除用户信息的必要员工访问记录**，不提供已注销用户的私人正文查询。报表角色对统计表只有 SELECT 权限，对快照、审计和身份映射无权限。
+- 短期内部墓碑防止注销后有效期内的旧会话再次登录；维护角色 24 小时后安全清理墓碑，且定期清理过期微信临时代码和会话撤销哈希。原用户云数据在注销事务提交时即从当前数据库删除。
+- [真实法规、留存范围、确认界面及生产副本清理要求](../../docs/CN_ACCOUNT_CANCELLATION_POLICY.md)，已在隔离 PostgreSQL 17 中验证 **225 项**集成检查。
+- **没有用户可用的注销界面或正式服务端**。法定留存例外若需要特殊保全必须单独合规评估，不能默认永久保留个人日记。
+
+## 数据与权限
+
+- `sql/001_initial.sql`：独立 PostgreSQL 表，用于账号与云备份授权、单账户最新快照、请求幂等、客服/审核案件、短期授权和管理员审计。
+- `src/repository.ts`：必须由**经过服务端认证**的调用方提供用户 ID；用户写入必须主动开启备份。每笔写入在数据库事务中锁住账号行，再比较版本、稳定内容摘要与幂等键，拒绝冲突、截断旧历史或无效数据。
+- `src/ledger.ts`：额外重建简记新增/编辑/删除历史，阻止绕过事件历史直接改写文字或创建/修改时间。
+- `src/adminRepository.ts`：必须经过**服务端校验**的员工身份和 MFA；读取私密正文前检查客服工单或必要审核案件、角色、日期授权和有效期，且先写入脱敏审计。审计失败，整笔事务失败，不返回正文。
+- 由于 PostgreSQL `jsonb` 会调整字段顺序，云端摘要使用单独的稳定 JSON 序列化；**不改变**现有 v0.4 本地 JSON 备份的校验格式。
+
+### 这些能力还没有完成
+
+- **无身份认证**：`VerifiedUserSession`、`VerifiedStaffSession` 是要求由未来可信认证适配层创建的输入契约，不能直接从网络请求里的用户 ID 构造。**严禁将这些函数裸露成公开 HTTP 端点**。
+- **无部署安全闭环**：现在测试实际使用独立、非所有者的备份和管理员数据库账号，迁移与测试种子数据仍使用数据库所有者。生产仍需在真实部署中落实独立角色和密钥管理，禁止应用角色 `ALTER/DROP/TRUNCATE/UPDATE/DELETE` 审计历史。额外的库外不可篡改审计、加密密钥管理、备份副本删除及灾难恢复尚未实现。
+- **无真实云地域/主体/法律审核**：应优先选中国大陆地域、核对个人主体和微信服务类目、备案、隐私指引、数据授权与供应商协议。
+- **无在线恢复界面和用户数据同步**：目前仅保存完整快照；冲突被明确拒绝，尚未实现多设备冲突合并。生产应提供用户可理解的恢复与保留双方选项。
+
+## 真实 PostgreSQL 集成验收
+
+项目根目录依赖：
+```sh
+npm ci
+npm ci --prefix future/server
+```
+
+**只能使用一次性、本地测试数据库**，例如在隔离 PostgreSQL 容器里创建的数据库。测试程序明确拒绝非 localhost 地址，每次生成随机独立 Schema，运行完删除 Schema。不要传生产数据库连接串。
+
+```sh
+CUOSHI_TEST_POSTGRES_URL='postgresql://<test-user>:<test-password>@127.0.0.1:<port>/<disposable-db>' npm test --prefix future/server
+```
+
+测试包括并发首次写入与后续写入、幂等、互不串号、修改历史连续性、`jsonb` 字段顺序、SQL 注入样式简记、云备份关闭/擦除、最小管理员角色授权、MFA、特定日期范围、日志追加限制、以及**审计插入失败拒绝返回正文**。
+
+GitHub Actions 使用隔离的 `postgres:16-alpine` service 跑同一套测试；Mac 本地测试使用独立的一次性 PostgreSQL 17 容器。任何一次真实数据库回归不通过，禁止将此后端作为云服务候选版。
+
+## 审计与权限的重要限制
+
+SQL 的审计禁止修改触发器只是**附加防线**，拥有数据库所有者或超级用户权限的账户仍可删表或禁用触发器。正式部署必须采用数据库最小权限、独立日志存储与监控，评估保留和删除例外。日志中**不包含简记正文**。云备份快照目前是 JSONB 明文结构，正式上线必须评估应用级加密/存储加密、密钥隔离与运营者受限访问需求，不能将其宣传为端到端加密。
+
+详细法律和产品边界：`docs/CN_CLOUD_ENGINEERING_SPEC.md`、`docs/CN_CLOUD_ADMIN_ROADMAP.md`。
+
+**当前没有公开入口，没有真实账号，不能部署给用户试用。**
+
+### 全设备会话强制退出（独立实现）
+
+新增 `sql/006_global_session_revocation.sql` 和 `AuthenticatedCloudService.logoutAllUser`。账户 `session_generation` 在数据库持久化；普通用户已验证会话可以强制使所有旧设备令牌失效。登录通过可信微信交换重新获取最新代际号，关键云端写入/删除事务在用户行锁下二次核对，避免等待中的旧设备写回。**该代码无正式微信身份源、无公开 HTTP API，不能单凭数据库检查声明可生产部署。**
+
+## v0.5 客户端云同步适配边界（未部署）
+
+`../cloud/initialMigration.ts`、`automaticSync.ts` 与 `clientAdapters.ts` 已具备首次迁移、断网与幂等重试、账号分区本地队列、注入式 HTTPS / `uni.request` 的合同验证。**客户端必须在每次网络调用前核对队列账号与最新短期会话的 owner 一致，避免切换登录账号时交叉上传。当前不存在已启用的 HTTP Listener、生产域名、已登录的真实微信账号或实际自动上传**。后端 `AuthenticatedCloudService` 仍只可在正式微信身份核验和严格授权服务端路由之后被调用；不能把任意客户端传来的 `userId` 作为 `VerifiedUserSession`。正式上云前需连接真实网络、安全审查与跨设备验收。
+
+## 未来隔离的 HTTP 入口（未启动）
+
+`src/backupHttp.ts` 现在包含受保护的 `GET/PUT /v1/backup/snapshot` 请求处理函数，仅接收 Bearer 会话，把身份验证交给 `AuthenticatedCloudService`，支持真实 PostgreSQL 幂等回执与 CAS 冲突。**代码不包含 `listen()`、不暴露任何端口**；`tests/check-future-backup-http.mjs` 才会使用 `127.0.0.1` 临时端口进行非生产测试。正式上云必须另外实现微信可信登录、TLS、域名、限流、监控、生产数据加密与删除政策；不得把代码存在仓库中理解为服务已发布。
+
+## 2026-10-19 · 可信微信登录、云端授权 HTTP 路由（仍未部署）
+
+`src/accountHttp.ts` 增加隔离的 `POST /v1/auth/wechat`（接受有限长度的 `wx.login` 临时代码与设备 ID，调用**服务端凭证**配置的 `loginWithWechatCode` 和可信 `jscode2session` 交换器）、`GET /v1/backup/status`（Bearer token）及 `PUT /v1/backup/consent`（显式开关和隐私说明版本）。登录从不自动启用云备份，旧账号不能被错误地显示为“默认关闭”。云备份状态必须查询真实的认证服务。
+
+登录路由必须通过独立的 `permitLogin` 服务端限流器注入；未提供该依赖则无法创建处理函数。仅在隔离测试中显式使用允许所有请求的限流模拟器，**生产环境必须部署跨实例、抗滥用的集中限流，并保证授权 code 不进入 URL、日志、分析或持久队列**。此模块只导出请求处理函数，没有创建服务监听或微信真实密钥。
+
+`tests/check-future-account-http.mjs` 通过 30 项回环测试覆盖登录、授权默认关闭、显式同意、取消同意、令牌与请求体校验、重放及限流。PostgreSQL 集成测试额外走真实权限隔离的 `cloud_wechat_identities`、已消费 code 与 `AuthenticatedCloudService`，验证短期会话签发与实际用户授权。云端路由未经正式 AppID、TLS、主体、备案、网关和微信真机验收不得上线。
+
+### 当前设备退出（后续客户端设置页使用）
+
+`POST /v1/auth/logout` 必须从会话中验证用户并在受限 PostgreSQL 撤销当前 Bearer token，成功后返回 204。客户端仅在收到服务端 204 后显示“退出成功”；失败或网络不确定时必须保留会话并提示无法确认，绝不能把简单清除内存令牌当成服务器撤销。多设备全部退出使用独立的代际号路径，不与本设备退出混淆。
+
+## 客户端首次关联执行器（仍独立研发）
+
+`../cloud/firstLinkRuntime.ts` 会使用与正常自动同步相同的账户绑定持久队列与受认证云端合同；用户必须先明确同意备份、看过仅含日期/事件计数的预览并再次确认。上传前持久化完整快照及幂等号，成功后以验证过的服务器快照初始化同步游标并覆写清理临时排队正文；遇到分叉停下不覆盖。对应 Node 单元及界面控制器联动测试请见 `tests/check-future-first-link-runtime.mjs` 与 `tests/check-future-first-link-ui.mjs`。这些代码尚未链接到真实微信/AppID 或生产云域名。
+
+### 多设备冲突只读核对（尚不解决冲突）
+
+`../cloud/conflictReview.ts` 已能基于真实完整历史生成不含正文的用户差异预览；客户端设置界面只展示日期、数字、简记条数、修改事件条数和历史是否分叉。它没有向服务器发送写请求，也没有更改后端 CAS、账号或历史保护；未来任何合并/覆盖流程都需要独立的导出保存及版本核验设计与真机验收。
+
+## 最新客户端同步模式：默认云端
+
+产品最新要求以云为主，正常记录及启动后自动同步。隔离模块 `future/cloud/cloudFirst.ts` 与 `cloudFirstLifecycle.ts` 实现一次明示同意后的自动保存、网络失败提示和重新连接重试；客户端为云端优先，但绝不可静默擦除本地尚未上传的历史。上一版的冲突差异 UI 目前只是研发留档，不再是目标首发交互。该模块不创建公网服务，也没有在 v0.4 微信应用中启用。
+
+## 微信宿主接线与恢复边界
+
+`../cloud/uniCloudHost.ts` 和 `uniAccountRecords.ts` 将未来微信登录、受认证 HTTPS 备份、账号私有本机记录、保存事件、前台/联网事件与云同步引擎组合成可运行的**注入式适配器**；通过模拟平台合同和自动回归，不会自动部署。旧版未关联账号的本机历史只有确认后才归属一个用户；自动从较新云端快照拉取时使用前镜像与同步游标联合核对，失败后可以安全重启恢复。正式服务部署与微信真机需另行集成验收。
+
+### 可交互 v0.5 页面研发
+
+`../ui/CloudTodayPanel.vue` 和 `../cloud/cloudRecordActions.ts` 直接使用账号专属持久存储，覆盖日计数、显式 0、编辑过去日期、简记增删改及历史事件。独立 H5 预览与 Chrome 回归是用户界面的真实互动验证，不等于已挂载到微信小程序正式页面。所有生产云端资质和真实用户数据仍不触及。
+
+
+## 2026-10-19 · 单入口 HTTP 联调层（仍不对公网开放）
+
+- `src/cloudHttpHost.ts` 将现有可信微信登录、云端授权、退出与完整快照 HTTP 处理器组合到**同一个严格匹配路由**。只开放 `/v1/auth/wechat`、`/v1/auth/logout`、`/v1/backup/status`、`/v1/backup/consent`、`/v1/backup/snapshot` 和无私有数据的 `/healthz`；未知路径、路径变体、含查询字符串的伪装请求和员工内部 API 均返回 404。真实 JWT 权限和幂等判断仍由原服务端实现。
+- `listenCloudLoopbackForQa` 仅供已明确声明 `SYNTHETIC_TEST_ONLY` 的隔离测试：Node HTTP 强制监听随机端口 `127.0.0.1`，不允许指定公网监听地址，限制 HTTP Header 和请求时间，关闭时释放监听器。**本地明文 HTTP 只可用于合成数据联调，绝不能当作正式微信小程序的线上 `request` 域名**。
+- `npm run test:future:http-host` 目前覆盖 19 项合成 HTTP 请求；`future/server/tests/check-postgres.mjs` 扩展为通过同一个真实本地监听器及受限数据库角色进行微信登录 → 确认云端授权 → 写入显式 0/简记 → 第二设备登录并读取相同完整快照 → 关闭授权的端到端集成验收。CI 自动安装一次性 PostgreSQL；所有微信登录值均来自假交换器，未向微信平台发请求。
+- **这只是服务器路由与本地实际连接的工程闭环，不代表已经获得微信生产 AppID、正式密钥、HTTPS 域名、分布式登录限流、监控及合规审批。生产服务器的真实启动程序尚未创建，也不得把这些测试用的假身份源用到公网。**
+
+
+## 2026-10-19 · 微信登录请求的跨实例限流
+
+- `sql/007_login_rate_limits.sql`：PostgreSQL 固定一分钟窗口，同一个可信 TCP 来源最多 **12 次/分钟**、服务整体最多 **200 次/分钟**。采用同一事务中的原子 UPSERT 和撤销式拒绝，同步的多个 Node Worker 不能分别重置配额；任一配额触顶时请求的其他计数也不会增加。
+- `src/loginRateLimiter.ts`：仅从可信 `req.socket.remoteAddress` 取来源，绝不信任客户端伪造的 `X-Forwarded-For` 或 `X-Real-IP`；来源经过独立、至少 32 字节的服务端 HMAC key 处理后才进入数据库。数据库表只存固定一分钟桶与 HMAC 摘要，不保存原 IP、手机号、openid、登录码或私密简记。DB 不可用时拒绝继续登录（HTTP 503），不切换到不共享的内存额度。
+- 身份数据库角色只获得限流函数 `EXECUTE` 权限，不能查看或清除限流表；受限维护角色仅能调用独立函数清理超过 24 小时的桶。正式运维仍须按固定周期执行清理，不得将此功能视为现成的自动任务或免运维限流服务。
+- 注意：本机测试 HTTP 使用 127.0.0.1；公网反向代理若仅向应用传递代理自己的 socket IP，则**所有用户共享一个保守的代理 IP 配额**。正式上线前必须落实可信代理身份边界、上游 CDN/WAF 的频率限制和多代理来源验证，不能直接把不可信请求头当用户 IP。阈值需结合网关和真实业务流量审核。
+- 新增 13 项合成安全断言；隔离 PostgreSQL CI 增加最小 SQL 权限、跨实例并发、额度耗尽、真实 HTTP 429、来源 HMAC 保护等联调。未使用真实微信账号及生产服务器。
+
+
+## 2026-10-19 · 可编译的私有监听进程与代理信任边界（待正式部署审核）
+
+- `src/privateMain.ts`：已编写实际 Node 启动入口，整合 `AuthenticatedCloudService`、受限 PostgreSQL 角色连接池、微信 `jscode2session` 交换器、跨实例 SQL 登录限流和统一云端 HTTP 路由，且**只能监听 `127.0.0.1`**。启动前检查数据库服务账号非超级用户/不能建库建角色、不同角色独立、限流迁移函数就绪；启动异常或中断将关闭连接池和本机监听。
+- `src/privateConfig.ts`：必须提交明确 `CUOSHI_PRIVATE_EDGE_ACK=PRIVATE_EDGE_LOOPBACK_ONLY`、固定非特权端口、正式形态的微信 AppID/AppSecret、三条不同最小权限的 PostgreSQL URL（要求 `sslmode=verify-full`）、六组互不相同的 32 字节强随机十六进制密钥。不符合任何条件都不能进入监听。**有效的配置检查不代表微信主体资格、云供应商资质或法律审核已经通过。**
+- `src/trustedEdge.ts`：仅接受来自本机套接字的代理请求；反向代理只用 `SHA-256(原始服务器边缘密钥)` 的派生十六进制凭据设置 `X-Cuoshi-Edge-Proof`，并**覆写而不是保留外部客户端传入的** `X-Cuoshi-Client-Ip`。服务端在验证本地套接字、密钥及单一合法 IP 后，才把该 IP 交给 `loginRateLimiter.ts` 生成 HMAC。原样读取任意 `X-Forwarded-For` 仍然禁止。除非可靠的反向代理已配置，否则请不要运行带真密钥的服务。
+- 注意：这个设计依赖 **TLS 终止网关正确隔离并重写私有请求头**。反向代理必须禁止客户端直接访问 HTTP 回环服务、不能透传外部提供的代理密钥/IP 头，网关私有密钥必须从秘密管理器注入并受最小权限保护。若 CDN 在网关之前，必须配置严格可信的 CDN IP 列表，否则 IP 限流依据应是网关接收到的 CDN 地址。入口可另外由 WAF 预先限流；勿把静态边缘密钥当成终端用户认证。
+- 服务编译：先在仓库根目录 `npm ci`，再 `npm ci --prefix future/server`；执行 `npm run build:private --prefix future/server`，产物仅出现在被 Git 忽略的 `future/server/.private-build`；设置经过安全审核的环境变量后再运行 `npm run start:private --prefix future/server`。仓库中的 `.env.example` 只是**无效占位模板**，绝不存放真实值。不得将此服务打包进微信小程序。
+- CI 测试：`npm run test:future:trusted-edge`（26 项实际本机 HTTP 请求检查）、`npm run test:future:private-config`（23 项配置拒绝和编译产物启动检查），加上隔离 PostgreSQL 对可信代理 → 微信登录 → SQL 登录限流 → 云端账号的联动检查。**仍未接真实微信平台，也未设置正式 TLS 网关、服务器运维或上线。**
+
+
+## 2026-10-19 · 对外账号注销路由及独立运行身份
+
+- `POST /v1/account/cancel` 只在 Bearer JWT 验证通过、JSON **恰好**包含 `confirmation: "注销账号并清除云端记录"` 后调用已有 `AuthenticatedCloudService.cancelAccount()`；不接受 ownerId、openid 或 query 参数。使用单独 `CUOSHI_PG_CANCELLATION_URL`（必须与 backup / identity / staff 三个受限角色互异）执行数据库内事务。没有单独删除角色时启动配置校验直接失败，绝不借用备份角色执行删除。
+- 成功响应仅回传删除确认、是否清理过私人云备份以及脱敏审计数量。失败时只返回统一 HTTP 错误，禁止泄漏记录内容、JWT、用户标识或 SQL 明细；接口与所有其他用户路由一样只允许经可信回环代理访问，正式公网入口尚未部署。
+- PostgreSQL 一次性 CI 通过实际 HTTP 请求检验拒绝不完整确认、禁止指定他人账号/员工令牌，并核验仅正确 JWT 所属账号删除，月度匿名总计与脱敏审计保留，旧 JWT、管理员工单、私有云内容不可再读。
+- 这只是开发版本。**正式发布仍需审核个人信息保护的保存期限、基础设施备份清除周期、审计脱敏充分性、身份再注册策略和用户可访问的隐私政策**，不能默认为无限期保留可识别的用户资料。
+
+
+## 2026-10-19 · 注销成功回执丢失后的独立核验
+
+- `GET /v1/account/cancel/status` 在既有可信边缘网关后提供**只读**注销状态：验证原有未过期 `cuoshi-cloud-backup` JWT 后按其签名主体查询 `cloud_users.deleted_at`；不接受用户 ID、微信 openid 或任何查询参数。返回 `closed`、`active` 或 `unknown`，不返回私人内容、身份映射或任何新的 bearer。旧墓碑超过维护期限被清理时是 `unknown`，不能据此假定删除已成功。
+- 注销响应可能在 PostgreSQL 事务提交后丢失；原 JWT 的其它用户数据请求已禁止，但该只读状态检查仍可在原令牌有效期内证明 `deleted_at`。不能走普通 `asUser()`（它正确拒绝已注销用户），也不能绕过 JWT 的原始过期时间。`active` 表示该旧用户尚未进入删除墓碑状态，`unknown` 或网络错误不能证明注销已完成。
+- 仅保留原有运行期数据库权限；没有新增查询任意账户、更新其他用户数据或后台管理员访问的能力。真实 PostgreSQL CI 经真实 HTTP 验证账号删除前 `active`、删除后 `closed`、无 token 401、带跨用户 ID 查询 404。
+
+## 正式部署前的公网只读核验（v0.5）
+
+业务上线五关与需人工验证的材料见 [`docs/RELEASE_V05_FIVE_GATES.md`](../../docs/RELEASE_V05_FIVE_GATES.md)。本私有监听进程仍未在大陆生产服务器部署；`npm run test:future:public-edge` 只验证**模拟 HTTP 传输和拒绝私网域名**，没有真实互联网连接。运营者在真实 HTTPS 网关和可信代理配置完毕之后，可在有权限的工作环境执行 `CUOSHI_V05_CLOUD_ORIGIN=https://实际域名 npm run check:future:public-edge`。探针只用 GET 检查 204 健康响应、未授权私有快照 401、未知路由 404；不发送用户身份、简记或 POST。网关与数据库权限审查、真实微信身份验证、备份恢复/删除演练仍需另做。
+
+
+### 实际公网入口准备（未部署）
+
+已增加 [Caddy HTTPS 网关模板、派生代理凭据生成脚本及安全操作说明](deploy/README.md)。`npm run test:future:proxy-deploy` 用 35 项离线检查覆盖 API 白名单、仅本机上游、特权请求头覆写、私有文件权限及不泄漏原始密钥；正式服务器仍须运行 Caddy 原生配置验证，并完成备案、证书和真实微信双机测试。
+
+
+### 七份数据库迁移的可复用生成方式
+
+已提供 [数据库生产首建 SQL 离线渲染器](deploy/README.md#数据库的七步迁移交付离线生成不直接写数据库) 及 `npm run test:future:migration-render`；生成器固定脚本顺序、显式选定 PostgreSQL schema、严格拒绝危险角色名，输出权限 0700/0600 和 SHA-256 清单；**只生成，不连接、不执行数据库 SQL**。真实 PostgreSQL CI 使用同一渲染器，部署仍需运营者提供受控数据库、独立迁移身份、合法备份与人工复核。
+
+
+### 独立服务的 Linux 启动模板
+
+增加 [systemd 后端与 Caddy 服务模板](deploy/README.md#真实-linux-主机-systemd-服务模板此处只提供文件不启动) 及 `npm run test:future:systemd-deploy`：后端使用专用低权限账号和受限文件读取，Caddy 用独立派生密钥；这不是已注册云实例或真实 Linux 部署。
+
+
+### PostgreSQL 启动时 schema（上线阻断修复）
+
+`CUOSHI_PG_SCHEMA` 是必填服务端环境变量，必须与七份迁移目标 schema 完全相同；私有 Node 服务四个独立 `pg.Pool` 使用 `privatePoolConnectionOptions()` 限定启动时 `search_path=<schema>,pg_catalog`，并在监听端口前核验 `current_schema()`。没有此设置，真实迁移后数据库可存在业务表，但 PostgreSQL 的默认 `public` 搜索路径无法访问，服务会启动失败。配置拒绝空值、默认 `public`、危险 SQL 名称以及 URL 的 `options` 连接参数覆盖；真实 PG CI 按同一连接函数验证，不使用测试专有的隐式 schema 设置。
+
+
+### 生产启动自检与真实 PostgreSQL 使用同一代码（2026-10-20）
+
+`src/privateReadiness.ts` 提取了 `privateMain` 在绑定 127.0.0.1 端口之前必须运行的数据库自检：四个互异、非提权且不拥有私有表的登录角色，四条连接都选中指定 schema，微信登录限流函数和账号注销过程完整存在。真实 PostgreSQL CI 使用**同一个函数**在四条真实受限连接上验证，并验证复用角色、迁移 owner、错误 schema 或缺少连接时均拒绝启动；不是另写一套模仿生产的测试 SQL。验证全通过后才允许私有 Node 监听端口，不能靠放宽运行账号权限或迁移到 `public` 来绕过失败。
+
+
+### 私有运行时依赖验证（2026-10-20）
+
+编译私有 Cloud 入口之后需要安装独立 `future/server` 的生产锁定依赖 `pg`（不能只拷贝 `.private-build`）。`npm run test:future:private-runtime-package` 会从**编译产物实际 Node 模块解析路径**加载 `pg`，核对生产 `package-lock.json`、PostgreSQL TLS 和 schema 参数、systemd 启动路径，以及无密钥时是否安全拒绝启动；真实 PostgreSQL CI 在独立 `npm ci --prefix future/server` 后执行，禁止缺少生产模块仍将构建成功误当为可部署。
+
+
+### 数据最小化维护与请求超时（未正式部署）
+
+已加入独立服务端入口 `src/privateMaintenance.ts`，只能以专用维护数据库角色执行过期微信登录限流窗口清理；systemd 每小时执行且故障时显式失败。数据库语句/锁/事务/客户端查询分别设有固定超时，避免数据库故障时业务资源无上界。测试和实际运行要求见 [部署文档](deploy/README.md#每小时删除旧登录限流记录独立最小权限尚未启用)，真实 PG CI 直接使用同一 worker 执行清理。此改动**不扩展小程序用户功能，也不包含生产环境实际启用、WAL 清理或用户正文删库计划**。
+
+
+### 生产健康检查与三个清理对象
+
+`createPrivateHealthProbe` 把 4 个受限 PostgreSQL 连接的轻量 `SELECT 1` 用短期缓存/并发合并和截止时间保护，生产 `/healthz` 仅通过可信本机 Caddy 入口提供可读的 204/503，不再在数据库故障时盲目报 204；测试用无数据库 QA 主机仍保持 204 模拟。小时级维护程序同时处理旧微信登录限流窗口、已注销账号墓碑以及过期一次性登录代码/撤销会话摘要；不触碰用户正文或物理备份。详见 [私有部署注意事项](deploy/README.md#云端健康与故障可见性上线前仍须接运维告警)。
+
+
+### 可执行的恢复演练与 HTTPS 监控模板
+
+增加真实 PostgreSQL CI 的官方 `pg_dump -Fc` → 临时空库 `pg_restore` 合成记录校验（无真实数据、没有用户导出入口），以及独立、低权限的五分钟 HTTPS 健康巡检 service/timer。备份原始格式未加密，因此 CI 临时文件不上传，生产必须另有**加密备份与 WAL 保留**；监控脚本只产生系统失败信号，须经运营者配置真实通知渠道才称得上告警。详见 [运维收尾](deploy/README.md#ci-原生-pg_dump--pg_restore-恢复演练不会产生用户导出功能)。

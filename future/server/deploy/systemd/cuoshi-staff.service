@@ -1,0 +1,35 @@
+# TEMPLATE ONLY — not installed, enabled, or deployed.
+# Sole project owner only. Dedicated HTTPS admin edge and owner MFA REQUIRED.
+[Unit]
+Description=Cuoshi sole-owner private admin console and operations API
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=simple
+User=cuoshi-staff
+Group=cuoshi-staff
+WorkingDirectory=/opt/cuoshi/current
+Environment=NODE_ENV=production
+# Root-owned secrets file, not committed and never exposed in the web tree.
+EnvironmentFile=/etc/cuoshi/staff.env
+ExecStart=/usr/bin/node /opt/cuoshi/current/future/server/.private-build/future/server/src/privateStaffMain.js
+Restart=on-failure
+RestartSec=5s
+UMask=0077
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+LockPersonality=yes
+RestrictSUIDSGID=yes
+CapabilityBoundingSet=
+AmbientCapabilities=
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+
+[Install]
+WantedBy=multi-user.target

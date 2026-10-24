@@ -1,0 +1,12 @@
+# Synthetic/template: installation does not enable monitoring or alert paging.
+[Unit]
+Description=Check Cuoshi production HTTPS readiness every five minutes
+
+[Timer]
+OnCalendar=*:0/5
+Persistent=true
+Unit=cuoshi-health.service
+AccuracySec=30s
+
+[Install]
+WantedBy=timers.target

@@ -1,0 +1,337 @@
+name: Cuoshi cross-platform CI
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    name: Typecheck, tests, H5 and WeChat builds
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - name: Install dependencies
+        run: npm ci
+      - name: Typecheck
+        run: npm run typecheck
+      - name: Core tests
+        run: npm test
+      - name: Isolated future cloud authorization and snapshot contracts
+        run: npm run test:future:cloud
+      - name: Signed future session boundary (no real credentials)
+        run: npm run test:future:auth
+      - name: Future cloud recovery preview and user-confirmed replacement
+        run: npm run test:future:recovery
+      - name: First account link must migrate complete local history safely
+        run: npm run test:future:first-link
+      - name: Durable first-link queue, restart and idempotent server replay
+        run: npm run test:future:first-link-runtime
+      - name: Settings controller and real first-link sync adapter integration
+        run: npm run test:future:first-link-ui
+      - name: Non-destructive two-device cloud history difference review
+        run: npm run test:future:conflict-review
+      - name: Cloud-default automatic uploads, offline notice and reconnect replay
+        run: npm run test:future:cloud-first
+      - name: Real uni platform host, account-isolated storage and crash recovery
+        run: npm run test:future:uni-host
+      - name: Account-scoped daily counts, notes, history and private draft commit
+        run: npm run test:future:record-actions
+      - name: Durable opt-in background sync, retry and cross-device conflict
+        run: npm run test:future:auto-sync
+      - name: Future authenticated uni.request and durable local journal adapters
+        run: npm run test:future:client-adapters
+      - name: Future backup HTTP route loopback security and client-to-server protocol
+        run: npm run test:future:backup-http
+      - name: Minimal admin private read route denies unaudited and unauthenticated access
+        run: npm run test:future:admin-http
+      - name: Anonymous operational dashboard SQL result contract
+        run: npm run test:future:operational-reporting
+      - name: Signed employee MFA and isolated operational stats HTTP
+        run: npm run test:future:operational-http
+      - name: Independent trusted-edge staff-only localhost host
+        run: npm run test:future:staff-host
+      - name: Production staff process config rejects invalid roles and missing MFA keys
+        run: npm run test:future:staff-config
+      - name: Verify sole owner production config template contains no usable secrets
+        run: npm run test:future:owner-deploy-config
+      - name: Sole owner password and one-time authenticator verification
+        run: npm run test:future:owner-auth
+      - name: Sole-owner offline first-run provisioning and private file permissions
+        run: npm run test:future:owner-bootstrap
+      - name: Future trusted WeChat code login and explicit consent HTTP
+        run: npm run test:future:account-http
+      - name: Composed localhost-only cloud HTTP listener and route isolation
+        run: npm run test:future:http-host
+      - name: Persistent SQL login limiter HMAC, socket IP and fail-closed contracts
+        run: npm run test:future:login-rate
+      - name: Trusted local reverse proxy authentication and verified client quotas
+        run: npm run test:future:trusted-edge
+      - name: Private cloud deployment config and secure startup preflight
+        run: npm run test:future:private-config
+      - name: WeChat session refresh, account switch and consent client contracts
+        run: npm run test:future:wechat-session
+      - name: Future cloud settings Vue typecheck
+        run: npm run typecheck:future:cloud-ui
+      - name: WeChat backup bridge contracts
+        run: npm run test:wechat:backup-bridge
+      - name: Build H5
+        run: npm run build:h5
+      - name: Build WeChat Mini Program
+        run: npm run build:mp-weixin
+
+      - name: Refuse incomplete or synthetic real-app release candidate settings
+        run: npm run test:future:release-config
+      - name: Compile synthetic v0.5 release candidate outside the repo and verify public privacy presentation
+        run: npm run test:future:rc-build
+      - name: Public cloud gateway read-only probe contract (no real network)
+        run: npm run test:future:public-edge
+      - name: Verify predeployment HTTPS proxy template and safe credential generation
+        run: npm run test:future:proxy-deploy
+      - name: Validate eight SQL migration renders and locked-down operator output
+        run: npm run test:future:migration-render
+      - name: Verify scheduled maintenance service and hourly retention timer (static)
+        run: node tests/check-future-maintenance-static.mjs
+      - name: Verify read-only HTTPS health probe and nonsecret monitoring timer
+        run: npm run test:future:health-monitor
+      - name: Validate private backend systemd service and restricted Caddy startup template
+        run: npm run test:future:systemd-deploy
+      - name: Compile isolated v0.5 native WeChat package (no production AppID)
+        run: npm run build:future:mp-weixin
+      - name: Verify native pages, privacy gate, package hygiene and typecheck
+        run: npm run test:future:mp-weixin
+      - name: Block reintroduced vulnerable build dependencies in actual native WeChat package
+        run: npm run test:future:patched-build-deps
+      - name: Verify patched Vue SSR rejects unsafe dynamic attribute names
+        run: npm run test:future:vue-ssr-patch
+      - name: Verify Vue SSR and Vite tooling are not directly exposed by shipped outputs
+        shell: bash
+        run: |
+          node tests/check-future-framework-boundary.mjs "$RUNNER_TEMP/cuoshi-framework-boundary.json"
+      - name: Verify Vite loopback Host and Origin protection with real HTTP requests
+        run: npm run test:future:vite-loopback
+      - name: Test native wx crypto, verified-offline restart and automatic reconnect
+        run: npm run test:future:mp-weixin:offline
+      - name: Upload isolated v0.5 developer-package (not for release)
+        uses: actions/upload-artifact@v4
+        with:
+          name: cuoshi-v05-wechat-dev-${{ github.run_id }}
+          path: future/.generated-mp/dist/build/mp-weixin/
+          if-no-files-found: error
+          retention-days: 7
+
+      - name: Ensure future cloud code cannot enter v0.4 bundles
+        run: npm run test:future:isolation
+
+      - name: Inspect WeChat preview build for accidentally packaged private files
+        run: node tests/check-wechat-preview-artifact.cjs
+      - name: Upload framework reachability evidence (not release authorization)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cuoshi-framework-exposure-${{ github.run_id }}
+          path: ${{ runner.temp }}/cuoshi-framework-boundary.json
+          if-no-files-found: warn
+          retention-days: 14
+      - name: Upload isolated WeChat preview build for real-device QA
+        uses: actions/upload-artifact@v4
+        with:
+          name: wechat-preview-${{ github.run_id }}
+          path: dist/build/mp-weixin/
+          if-no-files-found: error
+          retention-days: 7
+      - name: Install pinned CJK font for actual Chrome screenshot review
+        shell: bash
+        run: |
+          set -euo pipefail
+          # Ubuntu APT metadata mirrors repeatedly stalled for 120s. Download
+          # one pinned OFL Noto CJK font directly from GitHub with checksum.
+          mkdir -p "$HOME/.local/share/fonts"
+          curl --fail --location --silent --show-error \
+            --connect-timeout 10 --max-time 80 --retry 2 --retry-delay 1 \
+            'https://raw.githubusercontent.com/notofonts/noto-cjk/f8d157532fbfaeda587e826d4cd5b21a49186f7c/Sans/OTF/SimplifiedChinese/NotoSansCJKsc-Regular.otf' \
+            --output "$RUNNER_TEMP/NotoSansCJKsc-Regular.otf"
+          echo '2c76254f6fc379fddfce0a7e84fb5385bb135d3e399294f6eeb6680d0365b74b  '"$RUNNER_TEMP/NotoSansCJKsc-Regular.otf" | sha256sum --check --status
+          cp "$RUNNER_TEMP/NotoSansCJKsc-Regular.otf" "$HOME/.local/share/fonts/NotoSansCJKsc-Regular.otf"
+          fc-cache -f "$HOME/.local/share/fonts"
+          test -n "$(fc-match -f '%{family}' 'Noto Sans CJK SC:lang=zh-cn')"
+          fc-match -f 'CJK review font: %{family}\n' 'Noto Sans CJK SC:lang=zh-cn'
+      - name: Set up Chrome for real H5 browser checks
+        id: chrome
+        uses: browser-actions/setup-chrome@v2
+      - name: Build isolated v0.5 cloud settings demo (synthetic data only)
+        run: npm run build:future:cloud-ui
+      - name: Test v0.5 cloud-default auto sync and offline notice in Chrome
+        run: npm run test:future:cloud-ui
+      - name: Secure localhost admin dashboard synthetic-data and responsive Chrome checks
+        env:
+          CHROME_PATH: ${{ steps.chrome.outputs.chrome-path }}
+        run: npm run test:future:admin-preview
+      - name: Production-shaped protected staff console and MFA API Chrome checks
+        env:
+          CHROME_PATH: ${{ steps.chrome.outputs.chrome-path }}
+        run: npm run test:future:staff-console
+      - name: H5 layout, typography, touch feedback and notes
+        env:
+          CHROME_PATH: ${{ steps.chrome.outputs.chrome-path }}
+        run: npm run test:h5:layout && npm run test:h5:typography && npm run test:h5:refinement && npm run test:h5:notes && npm run test:h5:feedback && npm run test:h5:polish && npm run test:h5:audit && npm run test:h5:extended && npm run test:h5:date-boundaries && npm run test:h5:release
+
+      - name: Upload H5 screenshots for design review
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: h5-review-${{ github.run_id }}
+          if-no-files-found: ignore
+          retention-days: 7
+          path: |
+            /tmp/cuoshi-type-setting-*.png
+            /tmp/cuoshi-refined-*.png
+            /tmp/cuoshi-feedback-*.png
+            /tmp/cuoshi-polish-editor-*.png
+            /tmp/cuoshi-audit-year-zero-*.png
+            /tmp/cuoshi-release-privacy-*.png
+
+  dependency_audit:
+    name: Official npm SCA inventory (unresolved baseline)
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout pinned lockfile
+        uses: actions/checkout@v4
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Audit parser self-tests
+        run: node tests/summarize-dependency-audit.cjs --self-test
+      - name: Query official npm advisory database
+        shell: bash
+        run: |
+          set +e
+          npm audit --omit=dev --registry=https://registry.npmjs.org --fetch-retries=1 --fetch-timeout=15000 --json > "$RUNNER_TEMP/cuoshi-audit-raw.json"
+          audit_exit=$?
+          set -e
+          echo "npm audit exit code: $audit_exit (nonzero is expected for known vulnerabilities)"
+          node tests/summarize-dependency-audit.cjs "$RUNNER_TEMP/cuoshi-audit-raw.json" "$RUNNER_TEMP/cuoshi-audit-summary.json" --enforce-runtime-no-high
+      - name: Save machine-readable risk inventory
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: npm-sca-${{ github.run_id }}
+          retention-days: 14
+          if-no-files-found: warn
+          path: |
+            ${{ runner.temp }}/cuoshi-audit-raw.json
+            ${{ runner.temp }}/cuoshi-audit-summary.json
+
+  caddy_gateway:
+    name: Official Caddy offline config adaptation (synthetic)
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout Caddyfile and parser assertions
+        uses: actions/checkout@v4
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Adapt release Caddyfile with official pinned Caddy in network-isolated container
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker run --rm --network none --read-only --cap-drop ALL --cap-add NET_BIND_SERVICE \
+            --user 65534:65534 \
+            -e CUOSHI_PUBLIC_DOMAIN=api.cuoshi.invalid \
+            -e CUOSHI_PRIVATE_PORT=18765 \
+            -e CUOSHI_EDGE_PROOF_HEX=$(printf 'a%.0s' {1..64}) \
+            -e CUOSHI_STAFF_PORT=18766 \
+            -e CUOSHI_ADMIN_GATE_PORT=18767 \
+            -e CUOSHI_STAFF_EDGE_PROOF_HEX=$(printf 'b%.0s' {1..64}) \
+            -v "$PWD/future/server/deploy/Caddyfile:/etc/caddy/Caddyfile:ro" \
+            caddy:2.11.7-alpine caddy adapt --config /etc/caddy/Caddyfile --adapter caddyfile --pretty \
+            > "$RUNNER_TEMP/cuoshi-caddy-adapt.json"
+          node tests/check-future-caddy-adapt.mjs "$RUNNER_TEMP/cuoshi-caddy-adapt.json"
+
+  cloud_postgres:
+    name: Real PostgreSQL cloud contract (isolated)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: ci_only_disposable
+          POSTGRES_DB: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - name: Install shared TypeScript compiler
+        run: npm ci
+      - name: Install isolated PostgreSQL client
+        run: npm ci --prefix future/server --ignore-scripts --no-audit
+      - name: Block high and critical vulnerabilities in private production backend
+        run: cd future/server && npx --yes npm@11.7.0 audit --omit=dev --audit-level=high --registry=https://registry.npmjs.org --fetch-retries=1 --fetch-timeout=15000
+      - name: Typecheck isolated backend
+        run: npm run check:types --prefix future/server
+      - name: Compile private-loopback cloud executable (no credentials)
+        run: npm run build:private --prefix future/server
+      - name: Boot-check compiled private runtime and isolated PostgreSQL production dependency
+        run: npm run test:future:private-runtime-package
+      - name: Check production database readiness, outage and protected HTTP health status
+        run: npm run test:future:private-health
+      - name: Verify hourly privacy maintenance worker and independent service safety
+        run: npm run test:future:maintenance
+      - name: Validate offline disaster-recovery test cannot address production
+        run: node tests/check-future-restore-drill.mjs
+      - name: Migrate, dump and restore disposable PostgreSQL schema
+        env:
+          CUOSHI_TEST_RESTORE_DRILL: SYNTHETIC_POSTGRES_ONLY
+          CUOSHI_TEST_POSTGRES_URL: postgresql://postgres:ci_only_disposable@127.0.0.1:5432/postgres
+        run: npm test --prefix future/server
+      - name: Package allowlisted private deploy input and verify clean-room extraction
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm run test:future:private-release-bundle
+          mkdir -p -m 700 "$RUNNER_TEMP/cuoshi-private-release"
+          npm run package:future:private-release -- "$RUNNER_TEMP/cuoshi-private-release"
+          cd "$RUNNER_TEMP/cuoshi-private-release"
+          sha256sum cuoshi-private-deploy.tar.gz > cuoshi-private-deploy.tar.gz.sha256
+          sha256sum -c cuoshi-private-deploy.tar.gz.sha256
+      - name: Archive non-deployed, secret-free private cloud release input
+        uses: actions/upload-artifact@v4
+        with:
+          name: cuoshi-private-release-${{ github.run_id }}
+          path: |
+            ${{ runner.temp }}/cuoshi-private-release/cuoshi-private-deploy.tar.gz
+            ${{ runner.temp }}/cuoshi-private-release/cuoshi-private-deploy.tar.gz.sha256
+          if-no-files-found: error
+          retention-days: 7

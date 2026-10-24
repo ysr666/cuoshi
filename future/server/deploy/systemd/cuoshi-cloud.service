@@ -1,0 +1,38 @@
+# TEMPLATE ONLY. Do NOT enable without real personal-owner approval,
+# completed schema migrations, secrets manager, and real WeChat credentials.
+[Unit]
+Description=Cuoshi v0.5 Private Cloud (loopback-only)
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=simple
+User=cuoshi
+Group=cuoshi
+WorkingDirectory=/opt/cuoshi/current
+Environment=NODE_ENV=production
+# Root-owned 0600: systemd PID 1 loads before dropping User privileges.
+EnvironmentFile=/etc/cuoshi/cloud.env
+ExecStart=/usr/bin/node /opt/cuoshi/current/future/server/.private-build/future/server/src/privateMain.js
+Restart=on-failure
+RestartSec=5s
+TimeoutStopSec=30s
+UMask=0077
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+LockPersonality=yes
+RestrictSUIDSGID=yes
+CapabilityBoundingSet=
+AmbientCapabilities=
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+# Node only talks to the local HTTPS proxy and outbound PostgreSQL/WeChat.
+# PrivateMain itself independently enforces bind(127.0.0.1) and role checks.
+
+[Install]
+WantedBy=multi-user.target

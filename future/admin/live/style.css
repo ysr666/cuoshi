@@ -1,0 +1,8 @@
+@import url('/admin/base.css');
+/* Staff surface uses the same quiet design language without external assets. */
+#auth-form{grid-template-columns:minmax(230px,2fr) minmax(120px,1fr) auto;align-items:end;margin-top:19px}
+#auth-form .actions{padding-bottom:2px}
+#owner-otp{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;letter-spacing:2px}
+#metrics{grid-template-columns:repeat(3,minmax(0,1fr))}
+[hidden]{display:none!important}
+@media(max-width:720px){#auth-form{grid-template-columns:1fr}#metrics{grid-template-columns:repeat(2,minmax(0,1fr))}}

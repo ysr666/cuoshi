@@ -1,0 +1,28 @@
+# Only enable after official domain, DNS, TLS and cloud launch are approved.
+# A failure is visible in systemd/journald; no notification destination exists.
+[Unit]
+Description=Cuoshi private cloud HTTPS availability probe
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=oneshot
+User=cuoshi-monitor
+Group=cuoshi-monitor
+WorkingDirectory=/opt/cuoshi/current
+Environment=NODE_ENV=production
+EnvironmentFile=/etc/cuoshi/monitor.env
+ExecStart=/usr/bin/node /opt/cuoshi/current/future/server/deploy/check-public-health.mjs
+TimeoutStartSec=12s
+UMask=0077
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+CapabilityBoundingSet=
+AmbientCapabilities=
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
