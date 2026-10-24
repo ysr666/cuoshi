@@ -180,3 +180,9 @@ A previous handoff gap was the absence of a complete owner backend `staff.env` s
 使用运营者既有的 Render 工作区，独立新建 `cuoshi-v05-synthetic-preview` 静态网站，手动部署 Draft PR #4 的 `future/preview` 云优先 UI 演示；可访问 <https://cuoshi-v05-synthetic-preview.onrender.com/>。首轮 Render 部署 `dep-dbe627qvcj2c73br0uc0` 为 `live`，远端 HTTPS 首页返回 200，不存在的私人备份 API 路径返回 404；首次部署提交为 `207510a`。服务设置 `autoDeploy=no`，后续代码修改必须手动重新部署。原有旧版 `cuoshi-ysr-v02` 静态站点未改。
 
 该演示使用进程内的虚构账号与模拟云合同，**没有接入真实微信、生产数据库、真实云存储、管理员服务或私人笔记**。公开演示页显示“仅模拟数据，不会同步云端，请勿输入私人内容”，并添加 `noindex,nofollow,noarchive`，独立 Chrome 测试锁定这两项提醒。部署采用 Render 海外静态 CDN，**不能作为中国大陆生产个人信息存储方案，也不满足五道发布关口中任何真实联网/实名/备案要求**。Render 静态网站本身可免费部署，但使用已有工作区流量及构建分钟配额，额度外是否计费以工作区实际账单规则为准。将正式云端接入与本演示彻底隔离。
+
+### 2026-10-24 · 独立目标机发布验包闭环（完成开发，尚未在生产执行）
+
+部署 ZIP/TAR 获得方不再只依赖人工查看文件列表。后端候选压缩包现在**随包附带** `future/server/deploy/verify-private-release.mjs`，目标 Linux 在部署目录刚解压、安装运行依赖及生产 Secrets **之前**运行，逐项核对全部发布文件 SHA-256、8 份 SQL、单管理员/云/维护入口、Caddy/systemd 模板和真实 Git 提交信息。意外混入文件、删除或修改文件、遗留废弃员工私密读取处理器、额外密钥/源码文件及符号链接均拒绝；不会触及公网、个人数据或数据库。测试在独立临时 tar 解包目录真实执行检查器，并注入篡改后确认拒绝。使用前必须独立验证受信任 GitHub Actions 给出的外层 tar SHA-256，包内 SHA256SUMS **不是数字签名**，不得仅靠其宣称可信。参见 [后端部署说明](../future/server/deploy/README.md#新增目标机不带任何生产凭据的首轮验包)。
+
+这项工作使获授权的 Linux 部署能够先完成可重复的静态验收，不意味着已有合法云主机、实际 AppID、备案/HTTPS 证书、已执行迁移、生产可达性或真实双真机记录。五关 BLOCKED 不变。

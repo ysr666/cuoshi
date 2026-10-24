@@ -9,6 +9,7 @@ import {tmpdir} from 'node:os'
 import {resolve,join,dirname,sep} from 'node:path'
 import {createRequire} from 'node:module'
 import {packagePrivateRelease} from '../future/server/deploy/package-private-release.mjs'
+import {verifyPrivateRelease} from '../future/server/deploy/verify-private-release.mjs'
 let count=0
 const check=(v,message)=>{assert.ok(v,message);count++}
 const tmp=mkdtempSync(join(tmpdir(),'cuoshi-release-test-'))
@@ -46,6 +47,30 @@ try{
      !/(^|\/)(?:\.env|node_modules|\.git)(\/|$)/.test(path),
      'No dangerous absolute, traversal, secrets or vendor directory in archive')
  }
+ const verify=verifyPrivateRelease(root)
+ check(verify.commit===result.commit&&verify.files===result.files,
+   'Detached pre-install Linux verifier accepts full curated release and commit')
+ const installedVerifier=join(root,'future/server/deploy/verify-private-release.mjs')
+ const standalone=spawnSync(process.execPath,[installedVerifier],{
+   cwd:root,env:{PATH:process.env.PATH||''},encoding:'utf8',timeout:6000})
+ check(standalone.status===0&&standalone.stdout.includes(result.commit),
+   'Verifier bundled inside tar runs without repository or secrets: '+JSON.stringify({status:standalone.status,stdout:standalone.stdout,stderr:standalone.stderr}))
+ const injected=join(root,'unexpected.txt')
+ writeFileSync(injected,'synthetic unauthorized file',{flag:'wx'})
+ assert.throws(()=>verifyPrivateRelease(root),/unlisted_or_missing_file/);count++
+ rmSync(injected)
+ const about=join(root,'RELEASE.txt')
+ const original=readFileSync(about)
+ writeFileSync(about,Buffer.from('forged release identity'))
+ assert.throws(()=>verifyPrivateRelease(root),/release_metadata_missing/);count++
+ writeFileSync(about,original)
+ const changed=join(root,'future/admin/live/style.css')
+ const originalCss=readFileSync(changed)
+ writeFileSync(changed,Buffer.concat([originalCss,Buffer.from('/* synthetic edit */')]))
+ assert.throws(()=>verifyPrivateRelease(root),/digest_mismatch/);count++
+ writeFileSync(changed,originalCss)
+ check(verifyPrivateRelease(root).files===result.files,
+   'Recovery from synthetic tampering restores matching release manifest')
  const manifest=readFileSync(join(root,'SHA256SUMS'),'utf8').trim().split('\n')
  check(manifest.length===result.files,'SHA256SUMS lists every shipped source file exactly once')
  const seen=new Set()
@@ -66,7 +91,8 @@ try{
  'future/admin/live/index.html','future/admin/live/app.js',
  'future/admin/live/style.css','future/admin/public/styles.css',
  'future/server/deploy/systemd/cuoshi-cloud.service',
- 'future/server/deploy/Caddyfile','future/server/deploy/staff.env.example'
+ 'future/server/deploy/Caddyfile','future/server/deploy/staff.env.example',
+ 'future/server/deploy/verify-private-release.mjs'
  ]
  for(const path of required)check(seen.has(path),'All essential deployment paths included: '+path)
  for(const blocked of ['future/server/node_modules','future/server/.env',

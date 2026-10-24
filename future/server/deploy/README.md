@@ -134,7 +134,21 @@ GitHub 真实 PostgreSQL Job 在完成 8 份正式 schema 迁移并上传**合�
 
 包严格白名单包含：经 `npm run build:private --prefix future/server` 编译的 CommonJS 云服务、唯一管理员服务、每小时维护服务及核心模型；`future/server/package.json`、独立 `package-lock.json`（**不附加 node_modules**）；8 份经审核的 SQL 迁移；Caddy HTTPS 代理/systemd/service timer 模板；独立管理员网页四份受限静态资源；本 README 及五道发布关口指引。`RELEASE.txt` 标记 Git commit 和 `NOT AN INSTALLED DEPLOYMENT`，`SHA256SUMS` 覆盖每个实际文件的内容。压缩包权限 0600，临时组包目录创建后即清理，不放到 Git 目录或微信小程序中。
 
-`npm run test:future:private-release-bundle` 会对生成物执行**实际 tar 解包、超过 300 项逐文件摘要复核、危险路径与 `.env`/源码/`node_modules` 排除、真正的唯一管理员 HTML/CSS 资源装载**，并从解包后的三种独立可执行服务中抽查主服务及后台在缺密钥时明确拒绝启动。CI 和本地不会执行迁移、联网接触任何微信账号、写生产数据或激活 systemd。下载后用 `sha256sum -c cuoshi-private-deploy.tar.gz.sha256` 验证外层下载完整性，再校验 `SHA256SUMS`，才能由授权部署人员在**合法部署目标机**使用独立锁文件安装 `pg` 运行依赖、审查迁移/权限、注入正式 Secrets 并进行全套现场验收。
+`npm run test:future:private-release-bundle` 会对生成物执行**实际 tar 解包、超过 300 项逐文件摘要复核、危险路径与 `.env`/源码/`node_modules` 排除、真正的唯一管理员 HTML/CSS 资源装载**，并从解包后的三种独立可执行服务中抽查主服务及后台在缺密钥时明确拒绝启动。CI 和本地不会执行迁移、联网接触任何微信账号、写生产数据或激活 systemd。下载后用 `sha256sum -c cuoshi-private-deploy.tar.gz.sha256` 验证外层下载完整性（必须从受信任的 CI 记录独立比对 SHA-256），再校验 `SHA256SUMS`，才能由授权部署人员在**合法部署目标机**使用独立锁文件安装 `pg` 运行依赖、审查迁移/权限、注入正式 Secrets 并进行全套现场验收。
+
+#### 新增：目标机不带任何生产凭据的首轮验包
+
+这一步应在**可信目标主机**上解包到**全新、访问受限**的安装目录之后、安装 Node 依赖/放置生产环境文件之前执行；仅做文件清单、SHA-256 和来源提交元数据的离线核对，**不会启动服务、连接数据库或触碰个人信息**：
+
+```sh
+# 在授权主机由有权限的部署人员执行；下面的路径仅是示例。
+sha256sum -c cuoshi-private-deploy.tar.gz.sha256
+mkdir -m 700 /opt/cuoshi/release-check
+tar -xzf cuoshi-private-deploy.tar.gz -C /opt/cuoshi/release-check
+node /opt/cuoshi/release-check/future/server/deploy/verify-private-release.mjs
+```
+
+验证器随候选包交付，会核对八份迁移、私有服务/单人后台/维护入口、Caddy 和 systemd 模板是否齐全，逐项校验 SHA-256，拒绝路径穿越、符号链接、未知文件、改动后的文件及旧私密读取处理器；失败输出固定错误码，不打印文件内容。**先确认外部可信的压缩包哈希与 commit，再信任包内清单**：包内散列可以由攻击者一起改写，不能代替签名或独立来源校验。检查只适合全新解包、尚未执行 `npm ci` 的目录；安装后 `node_modules` 属额外文件，应在首次安装前完成检查并保持部署内容受控。服务以 `cuoshi` 低权限用户运行，部署人员还必须正确设置安装目录属主与只读权限，不能直接将 root 拥有的 0600 文件解包后宣称运行账号有读取权。不要在未备案、未授权的主机上继续迁移或联网。
 
 切勿把这份技术部署压缩包当成微信审核上传包；微信候选版来自独立的 `build:future:mp-weixin`，生产云必须独立持有用户数据与秘密。管理员只有项目所有者一人；独立的技术数据库角色不是员工账号。正式域名和服务端密钥在所有发布包中一律不存在。
 

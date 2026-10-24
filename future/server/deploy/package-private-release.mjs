@@ -10,7 +10,7 @@ import {fileURLToPath} from 'node:url'
 const root=realpathSync(resolve(fileURLToPath(new URL('../../../',import.meta.url))))
 const allowedDeploy=[
  'Caddyfile','README.md','render-migrations.mjs',
- 'prepare-owner.mjs','prepare-proxy-env.mjs','check-public-health.mjs',
+ 'verify-private-release.mjs','prepare-owner.mjs','prepare-proxy-env.mjs','check-public-health.mjs',
  'maintenance.env.example','monitor.env.example','staff.env.example',
  'systemd/cuoshi-cloud.service','systemd/cuoshi-staff.service',
  'systemd/cuoshi-login-prune.service','systemd/cuoshi-login-prune.timer',
