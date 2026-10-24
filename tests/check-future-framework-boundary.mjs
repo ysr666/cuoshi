@@ -39,8 +39,11 @@ const cfg=await resolveConfig({configFile:resolve(project,'vite.config.ts')},'se
 check(cfg.server.host==='127.0.0.1'&&cfg.preview.host==='127.0.0.1'&&
  cfg.server.strictPort===true&&cfg.preview.strictPort===true,
  'Vite development and preview servers are restricted to loopback')
+check(cfg.server.hmr===false&&cfg.server.cors===false&&cfg.preview.cors===false&&
+ cfg.plugins.some(plugin=>plugin.name==='cuoshi-loopback-request-guard'),
+ 'Resolved DCloud/Vite config disables HMR and installs host/origin gate')
 details.scanned.vite={version:pkg.devDependencies.vite,serverHost:cfg.server.host,
- previewHost:cfg.preview.host,upgraded:false}
+ previewHost:cfg.preview.host,hmrEnabled:false,hostOriginGuard:true,upgraded:false}
 const targets=[
  {name:'h5',path:'dist/build/h5',type:'web'},
  {name:'v04Wechat',path:'dist/build/mp-weixin',type:'wechat'},

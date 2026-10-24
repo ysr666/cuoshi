@@ -76,7 +76,8 @@
     "prepare:future:owner": "node future/server/deploy/prepare-owner.mjs",
     "test:future:owner-bootstrap": "node tests/check-future-owner-bootstrap.mjs",
     "test:future:framework-boundary": "node tests/check-future-framework-boundary.mjs",
-    "test:future:vue-ssr-patch": "node tests/check-future-vue-ssr-patch.mjs"
+    "test:future:vue-ssr-patch": "node tests/check-future-vue-ssr-patch.mjs",
+    "test:future:vite-loopback": "node tests/check-vite-loopback-guard.mjs"
   },
   "dependencies": {
     "@dcloudio/uni-app": "3.0.0-4080720251210001",

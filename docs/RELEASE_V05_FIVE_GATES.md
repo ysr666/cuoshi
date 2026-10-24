@@ -140,3 +140,7 @@ DCloud 旧插件固定的 Express 4.20.0 通过兼容 4.x 版本 override 定向
 #### 2026-10-24 · Vue SSR 3.5.42 安全修复实验成功；全量 Vue 升级实测不兼容
 
 在独立 worktree 中先实测整套 Vue 3.5.42：H5 虽编译成功，但 Chrome 报只读属性赋值异常，主页面无法加载，故没有合入。改为单独覆盖间接 SSR `@vue/server-renderer@3.5.42`，保留客户端 Vue 3.4.21，并完成 H5 三种宽度交互、隐私页面、v0.5 微信原生离线/重连、云设置 Chrome 回归及真实 `ssrRenderDynamicAttr` 安全行为测试。官方同轮根依赖受影响包 17 High 降至 1 High + 1 Moderate；`--omit=dev` 当前为 0，但剩余构建工具仍有公告且生产/真机未验收。CI 审计脚本新增运行依赖 High/Critical 强制阻断，同时继续上传完整审计证据；不作为正式安全签核。
+
+#### 2026-10-24 · Vite 新版试跑 + 旧版回环 Host/Origin 防护
+
+隔离实验的 Vite 6.4.5 能构建和运行，但与 DCloud 及 Vue 插件显式 peer 不兼容，必须绕过 npm peer 校验且依赖树出现额外无效项，因此不合并。正式保留 Vite 5.2.8，新增限制 Host/Origin 的 HTTP 中间件、IPv4 loopback、禁用 Vite 跨域响应，并在 DCloud 配置合并后再次关闭 HMR WebSocket。实际 60 项开发/预览 HTTP 请求安全测试和框架门禁集成 CI。风险仍存在，发布评估不能据此宣布漏洞消除。

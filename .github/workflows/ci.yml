@@ -115,6 +115,8 @@ jobs:
         shell: bash
         run: |
           node tests/check-future-framework-boundary.mjs "$RUNNER_TEMP/cuoshi-framework-boundary.json"
+      - name: Verify Vite loopback Host and Origin protection with real HTTP requests
+        run: npm run test:future:vite-loopback
       - name: Test native wx crypto, verified-offline restart and automatic reconnect
         run: npm run test:future:mp-weixin:offline
       - name: Upload isolated v0.5 developer-package (not for release)

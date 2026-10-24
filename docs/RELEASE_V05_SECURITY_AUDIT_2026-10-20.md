@@ -151,3 +151,9 @@ Vue SSR 风险 `GHSA-g2v6-rqmx-r4w6`（`@vue/server-renderer` 的动态 HTML 属
 `npm audit --omit=dev --json` 在本轮官方 Registry 检测为 **0 Critical、0 High、0 Moderate、0 Low**。为防未来回退，`dependency_audit` CI 的机器可读审计新增 `--enforce-runtime-no-high`：一旦**运行依赖**出现 High/Critical，或官方审计端点不可用，即阻断 CI。此门禁与独立 Node PG 后端的高危阻断互为补充。**整个根依赖仍有 1 High（`@dcloudio/vite-plugin-uni`）和 1 Moderate（`vite@5.2.8`）**，仅存在构建链；CI 不会把它们当作自动已修复。Vue 3.4.21 仍是旧版本，应继续跟踪官方其他未知公告。
 
 剩余 Vite/DCloud 工具链因插件 `peerDependencies.vite` 精确为 `5.2.8`，不能直接升级到 Vite 7 而无视版本合同。开发服务器继续绑定 `127.0.0.1`；构建环境不持有生产用户秘密，生产 Node 只运行独立 PG 锁文件；微信正式上线仍须真实 AppID、合规审核、HTTPS/最小权限运维与**两台设备的真实同步验收**。**发布安全状态继续 BLOCKED，CI 绿灯只说明代码检查通过。**
+
+### 2026-10-24 · Vite 6.4.5 独立升级实验与旧版开发服务 Host/Origin 加固
+
+在 Git worktree `/tmp/cuoshi-vite645-spike-1024`（不改 PR #4）验证了 `vite@6.4.5`：官方 npm audit 全依赖 0 条当前报告告警，TypeScript、H5、微信构建、320/390/430px H5 浏览器计数及导航、v0.5 原生离线/重连、云界面 114 项检查均通过。然而其安装要求 npm 的 `--legacy-peer-deps`，且 `npm ls --all` 显示 DCloud、`@vitejs/plugin-vue`、`@vitejs/plugin-vue-jsx`、`@vitejs/plugin-legacy` 的多个 Vite peer 版本不兼容，以及 Vite 6 引入的 yaml、picomatch 解析问题；GitHub 现用无绕过的 `npm ci` 不能接受这个依赖树。**故实验不合入、未使用全局 legacy-peer-deps、也不把审计 0 视为安全签核。** 正式开发仍保留 `vite@5.2.8` 与 DCloud 精确版本合同，并继续跟踪兼容的供应商修复。
+
+本轮在 `vite.config.ts` 增加前置 Connect HTTP Host/Origin 严格校验：仅接受 localhost / 127.0.0.1 Host，以及同源或无 Origin 的请求；其余拒绝 403 并禁止缓存。开发及预览仅绑定 IPv4 loopback、禁用跨域响应。DCloud `uni()` 配置阶段会重新打开 HMR，因此另在 `configResolved` 阶段显式关闭；禁用的 HMR 会降低本地开发时的热更新便利性，但避免了 WebSocket 绕过 HTTP Connect 校验的路径。新增 `tests/check-vite-loopback-guard.mjs`，用真实 loopback HTTP 请求对开发和预览两套入口检查恶意 Host、DNS 回绑定域名、跨站 Origin、非同源端口及非法端口；更新现有框架门禁检查最终 Vite 配置确实关闭 HMR / CORS。这是旧版开发服务的**临时防御性限制，不是 Vite 漏洞修复**，不能将开发服务暴露到公网，也不能替代供应商升级。上线阻断继续保持，生产只分发构建产物，不运行开发服务器。
