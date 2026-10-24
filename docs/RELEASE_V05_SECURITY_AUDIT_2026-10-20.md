@@ -157,3 +157,11 @@ Vue SSR 风险 `GHSA-g2v6-rqmx-r4w6`（`@vue/server-renderer` 的动态 HTML 属
 在 Git worktree `/tmp/cuoshi-vite645-spike-1024`（不改 PR #4）验证了 `vite@6.4.5`：官方 npm audit 全依赖 0 条当前报告告警，TypeScript、H5、微信构建、320/390/430px H5 浏览器计数及导航、v0.5 原生离线/重连、云界面 114 项检查均通过。然而其安装要求 npm 的 `--legacy-peer-deps`，且 `npm ls --all` 显示 DCloud、`@vitejs/plugin-vue`、`@vitejs/plugin-vue-jsx`、`@vitejs/plugin-legacy` 的多个 Vite peer 版本不兼容，以及 Vite 6 引入的 yaml、picomatch 解析问题；GitHub 现用无绕过的 `npm ci` 不能接受这个依赖树。**故实验不合入、未使用全局 legacy-peer-deps、也不把审计 0 视为安全签核。** 正式开发仍保留 `vite@5.2.8` 与 DCloud 精确版本合同，并继续跟踪兼容的供应商修复。
 
 本轮在 `vite.config.ts` 增加前置 Connect HTTP Host/Origin 严格校验：仅接受 localhost / 127.0.0.1 Host，以及同源或无 Origin 的请求；其余拒绝 403 并禁止缓存。开发及预览仅绑定 IPv4 loopback、禁用跨域响应。DCloud `uni()` 配置阶段会重新打开 HMR，因此另在 `configResolved` 阶段显式关闭；禁用的 HMR 会降低本地开发时的热更新便利性，但避免了 WebSocket 绕过 HTTP Connect 校验的路径。新增 `tests/check-vite-loopback-guard.mjs`，用真实 loopback HTTP 请求对开发和预览两套入口检查恶意 Host、DNS 回绑定域名、跨站 Origin、非同源端口及非法端口；更新现有框架门禁检查最终 Vite 配置确实关闭 HMR / CORS。这是旧版开发服务的**临时防御性限制，不是 Vite 漏洞修复**，不能将开发服务暴露到公网，也不能替代供应商升级。上线阻断继续保持，生产只分发构建产物，不运行开发服务器。
+
+### 2026-10-24 · 独立云界面预览服务器加固（仅开发工具）
+
+复核官方 npm Registry：当前根依赖依然有 **1 High / 1 Moderate**，集中在 DCloud 精确依赖的 Vite 5.2.8 编译链；`@dcloudio/vite-plugin-uni` 要求 `peerDependencies.vite=5.2.8`，不能在正式候选中绕开 peer 合同硬升。该风险没有因以下措施而消失。
+
+这次发现另一套 `future/preview/vite.config.ts` 独立演示工程虽监听本机 IPv4，但没有主工程的请求 Host/Origin 防护，开发模式 HMR 默认开启，且允许自动切换端口。现复用相同的请求防护逻辑：开发与预览仅监听 `127.0.0.1`、严格端口、关闭 CORS 和 HMR；带恶意 Host、DNS rebinding 域名或外站 Origin 的请求返回不可缓存的 403。主工程 `vite.config.ts` 保留独立自包含防护，因为正式微信候选测试会把该配置单独复制到隔离临时目录；让它直接引用预览模块会导致真实候选构建找不到依赖，故没有这样修改。
+
+`tests/check-vite-loopback-guard.mjs` 扩展为覆盖**两套工程、每套开发/预览两种入口**的 120 项真实回环 HTTP 拒绝与配置检查，继续由原有 CI 门禁执行。隔离微信正式候选构建、云演示编译、主项目类型检查也纳入回归。**本地防护不能修补上游旧版 Vite，也不允许把开发服务器部署到公网；真实生产只交付静态微信包与独立 Node 云服务，发布门禁仍为 BLOCKED。**

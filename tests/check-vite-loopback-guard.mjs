@@ -17,9 +17,9 @@ const guard=config.plugins.find(p=>p.name==='cuoshi-loopback-request-guard')
 assert.ok(guard,'Loopback Host/Origin guard is installed in Vite')
 let passed=8
 
-async function exercise(kind){
+async function exercise(kind,plugin=guard){
  const middleware=[]
- const hook=kind==='preview'?guard.configurePreviewServer:guard.configureServer
+ const hook=kind==='preview'?plugin.configurePreviewServer:plugin.configureServer
  if(typeof hook!=='function')throw Error('vite_loopback_guard_missing_'+kind)
  await hook({middlewares:{use(fn){middleware.push(fn)}}})
  assert.equal(middleware.length,1,'Guard mounted before '+kind+' fallback')
@@ -72,4 +72,20 @@ async function exercise(kind){
 }
 await exercise('dev')
 await exercise('preview')
-console.log('PASS '+passed+' actual loopback-only HTTP Host/Origin and disabled-HMR checks')
+
+// The independent v0.5 cloud UI preview also uses this pinned Vite 5.
+// Verify both its dev and static preview entrypoints, not only uni-app.
+const cloud=await resolveConfig({configFile:'future/preview/vite.config.ts'},'serve')
+assert.equal(cloud.server.host,'127.0.0.1')
+assert.equal(cloud.preview.host,'127.0.0.1')
+assert.equal(cloud.server.hmr,false)
+assert.equal(cloud.server.cors,false)
+assert.equal(cloud.preview.cors,false)
+assert.equal(cloud.server.strictPort,true)
+assert.equal(cloud.preview.strictPort,true)
+const cloudGuard=cloud.plugins.find(p=>p.name==='cuoshi-loopback-request-guard')
+assert.ok(cloudGuard,'Cloud demo must also install the guard')
+passed+=8
+await exercise('dev',cloudGuard)
+await exercise('preview',cloudGuard)
+console.log('PASS '+passed+' actual root and cloud-demo loopback Host/Origin/HMR checks')
