@@ -16,3 +16,4 @@ future/.generated-mp/
 
 # Future server-only CommonJS build; never package into the mini-program
 future/server/.private-build/
+future/server/.private-build-stage-*/

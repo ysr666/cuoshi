@@ -55,6 +55,11 @@ export function packagePrivateRelease(outDir){
  const compiled=join(root,'future/server/.private-build')
  if(!existsSync(compiled))throw Error('private_release_not_compiled')
  const compiledFiles=pathsUnder(compiled)
+ // Explicitly reject retired employee/private-note HTTP handlers even if an
+ // old tsc output survived outside the clean-build process.
+ const retired=['adminHttp.js','staffDayService.js']
+ if(compiledFiles.some(x=>retired.some(name=>x.endsWith('/'+name))))
+  throw Error('private_release_retired_admin_handlers_forbidden')
  if(compiledFiles.length<20||!compiledFiles.includes('future/server/.private-build/future/server/src/privateMain.js')||
    !compiledFiles.includes('future/server/.private-build/future/server/src/privateStaffMain.js')||
    !compiledFiles.includes('future/server/.private-build/future/server/src/privateMaintenance.js')||

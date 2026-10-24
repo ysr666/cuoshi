@@ -4,7 +4,7 @@
 import assert from 'node:assert/strict'
 import {createHash} from 'node:crypto'
 import {execFileSync,spawnSync} from 'node:child_process'
-import {mkdtempSync,mkdirSync,readFileSync,readdirSync,realpathSync,rmSync,statSync} from 'node:fs'
+import {mkdtempSync,mkdirSync,readFileSync,readdirSync,realpathSync,rmSync,statSync,writeFileSync,existsSync} from 'node:fs'
 import {tmpdir} from 'node:os'
 import {resolve,join,dirname,sep} from 'node:path'
 import {createRequire} from 'node:module'
@@ -17,6 +17,17 @@ try{
  mkdirSync(target,{mode:0o700})
  assert.throws(()=>packagePrivateRelease('relative'),/absolute_output_required/);count++
  assert.throws(()=>packagePrivateRelease(resolve('future/server')),/inside_repository_forbidden/);count++
+ // A stale compiler artifact must be removed by a fresh build, and the packer
+ // must refuse it even if someone accidentally reintroduces it afterwards.
+ const retired=resolve('future/server/.private-build/future/server/src/staffDayService.js')
+ check(!existsSync(retired),'Production output starts without obsolete staff day reader')
+ writeFileSync(retired,'// synthetic stale artifact; no user data\n',{flag:'wx'})
+ try{
+  execFileSync('npm',['run','build:private','--prefix','future/server'],{stdio:'pipe'})
+  check(!existsSync(retired),'Rebuild discards stale private JavaScript files')
+  writeFileSync(retired,'// synthetic stale artifact; no user data\n',{flag:'wx'})
+  assert.throws(()=>packagePrivateRelease(target),/retired_admin_handlers_forbidden/);count++
+ }finally{rmSync(retired,{force:true})}
  const result=packagePrivateRelease(target)
  check(result.archive===join(realpathSync(target),'cuoshi-private-deploy.tar.gz')&&result.files>30,
    'Produces one complete, curated deploy archive outside repo')
@@ -59,6 +70,8 @@ try{
  ]
  for(const path of required)check(seen.has(path),'All essential deployment paths included: '+path)
  for(const blocked of ['future/server/node_modules','future/server/.env',
+     'future/server/.private-build/future/server/src/adminHttp.js',
+     'future/server/.private-build/future/server/src/staffDayService.js',
      'src/pages/today/index.vue','future/.generated-mp/dist/build/mp-weixin/app.js'])
    check(!seen.has(blocked),'Source/staging secrets or client code excluded: '+blocked)
  const revision=readFileSync(join(root,'RELEASE.txt'),'utf8')
