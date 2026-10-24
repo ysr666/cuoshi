@@ -66,6 +66,8 @@ jobs:
         run: npm run test:future:staff-config
       - name: Sole owner password and one-time authenticator verification
         run: npm run test:future:owner-auth
+      - name: Sole-owner offline first-run provisioning and private file permissions
+        run: npm run test:future:owner-bootstrap
       - name: Future trusted WeChat code login and explicit consent HTTP
         run: npm run test:future:account-http
       - name: Composed localhost-only cloud HTTP listener and route isolation

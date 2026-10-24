@@ -37,12 +37,40 @@ export async function prunePrivateLoginWindows(pool:PoolLike,schema:string):Prom
  return removed
 }
 
+/** Owner-login peer fingerprints are independent of WeChat login windows.
+ * The same restricted maintenance role gets EXECUTE only, never table reads.
+ */
+export async function prunePrivateOwnerLoginWindows(pool:PoolLike,schema:string):Promise<number>{
+ const expected=privateDatabaseSchema(schema)
+ const role=await pool.query(`SELECT current_user AS role,rolsuper,rolcreatedb,
+   rolcreaterole,rolreplication,rolbypassrls FROM pg_roles WHERE rolname=current_user`)
+ const r=role.rows[0]
+ if(!r||typeof r.role!=='string'||r.rolsuper!==false||r.rolcreatedb!==false||
+    r.rolcreaterole!==false||r.rolreplication!==false||r.rolbypassrls!==false)
+   throw Error('private_cloud_maintenance_role_unsafe')
+ const cap=await pool.query(`SELECT current_schema() AS active_schema,
+    to_regclass('cloud_owner_login_windows') AS subject,
+    has_function_privilege(current_user,'cloud_prune_owner_login_windows()','EXECUTE') AS can_prune,
+    has_table_privilege(current_user,'cloud_owner_login_windows','SELECT') AS can_read,
+    has_table_privilege(current_user,'cloud_owner_login_windows','DELETE') AS can_delete`)
+ const flags=cap.rows[0]
+ if(!flags||flags.active_schema!==expected||!flags.subject||
+    flags.can_prune!==true||flags.can_read!==false||flags.can_delete!==false)
+   throw Error('private_cloud_maintenance_scope_unsafe')
+ const result=await pool.query('SELECT cloud_prune_owner_login_windows() AS removed')
+ const removed=result.rows[0]?.removed
+ if(!Number.isSafeInteger(removed)||removed<0)
+   throw Error('private_cloud_maintenance_result_invalid')
+ return removed
+}
+
 /** One hourly run covers ALL existing identity-retention obligations.
  * Each bounded SQL function is idempotent, so a partial failure exits nonzero
  * and a subsequent hourly run safely retries the remaining cleanup.
  */
 export async function runPrivateRetentionCycle(pool:PoolLike,schema:string){
  const loginWindows=await prunePrivateLoginWindows(pool,schema)
+ const ownerLoginWindows=await prunePrivateOwnerLoginWindows(pool,schema)
  const capabilities=await pool.query(`SELECT
    has_function_privilege(current_user,'cloud_purge_old_tombstones()','EXECUTE') AS tombstones,
    has_function_privilege(current_user,'cloud_purge_expired_auth_artifacts()','EXECUTE') AS auth,
@@ -63,7 +91,7 @@ export async function runPrivateRetentionCycle(pool:PoolLike,schema:string){
  if(!Number.isSafeInteger(tombstones)||tombstones<0||
     !Number.isSafeInteger(authArtifacts)||authArtifacts<0)
    throw Error('private_cloud_maintenance_result_invalid')
- return {loginWindows,tombstones,authArtifacts}
+ return {loginWindows,ownerLoginWindows,tombstones,authArtifacts}
 }
 
 async function main(){
@@ -74,7 +102,8 @@ async function main(){
  try{
    const result=await runPrivateRetentionCycle(pool,config.schema)
    process.stdout.write('Cuoshi private retention cycle completed; login_windows='+
-     result.loginWindows+' tombstones='+result.tombstones+
+     result.loginWindows+' owner_login_windows='+result.ownerLoginWindows+
+     ' tombstones='+result.tombstones+
      ' auth_artifacts='+result.authArtifacts+'\n')
  }finally{await pool.end()}
 }

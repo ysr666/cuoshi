@@ -10,7 +10,7 @@ const root=resolve('.')
 const entry=resolve(root,'future/server/.private-build/future/server/src/privateMaintenance.js')
 check(existsSync(entry),'Real independently compiled maintenance entry exists')
 const req=createRequire(entry)
-const {parsePrivateMaintenanceConfig,prunePrivateLoginWindows,runPrivateRetentionCycle}=req('./privateMaintenance.js')
+const {parsePrivateMaintenanceConfig,prunePrivateLoginWindows,prunePrivateOwnerLoginWindows,runPrivateRetentionCycle}=req('./privateMaintenance.js')
 const pg=req('pg')
 check(typeof pg.Pool==='function','Actual runtime pg module resolvable from scheduler entry')
 const env={CUOSHI_MAINTENANCE_ACK:'PRUNE_LOGIN_WINDOWS_ONLY',
@@ -33,16 +33,20 @@ const role={role:'cuoshi_maint',rolsuper:false,rolcreatedb:false,
  rolcreaterole:false,rolreplication:false,rolbypassrls:false}
 const capability={active_schema:'cuoshi_prod',subject:'cloud_wechat_login_rate_windows',
  can_prune:true,can_read:false,can_delete:false}
+const ownerCapability={...capability,subject:'cloud_owner_login_windows'}
 const queries=[]
 const pool=(r=role,c=capability,result=3)=>({async query(sql){
  queries.push(sql)
  if(sql.includes('FROM pg_roles'))return {rows:[r]}
- if(sql.includes('current_schema()'))return {rows:[c]}
- if(sql==='SELECT cloud_prune_wechat_login_windows() AS removed')return {rows:[{removed:result}]}
+ if(sql.includes('current_schema()'))return {rows:[sql.includes('cloud_owner_login_windows')?{...c,subject:'cloud_owner_login_windows'}:c]}
+ if(sql==='SELECT cloud_prune_wechat_login_windows() AS removed'||
+    sql==='SELECT cloud_prune_owner_login_windows() AS removed')return {rows:[{removed:result}]}
  throw Error('unexpected_db_query')
 }})
+const ownerRemoved=await prunePrivateOwnerLoginWindows(pool(),'cuoshi_prod')
+check(ownerRemoved===3,'Owner login fingerprints are pruned by a separate SQL function')
 const removed=await prunePrivateLoginWindows(pool(),'cuoshi_prod')
-check(removed===3&&queries.length===3,
+check(removed===3&&queries.length===6,
  'Worker executes exact three queries and returns aggregated deletion count only')
 check(!queries.join('|').includes('SELECT *')&&
  !queries.join('|').includes('cloud_snapshots')&&
@@ -71,9 +75,11 @@ const createCyclePool=(caps=allowed,counts={tombstones:2,auth_artifacts:5})=>{
  const db={async query(sql){
    calls.push(sql)
    if(sql.includes('FROM pg_roles'))return {rows:[role]}
-   if(sql.includes('current_schema()'))return {rows:[capability]}
+   if(sql.includes('current_schema()'))return {rows:[sql.includes('cloud_owner_login_windows')?ownerCapability:capability]}
    if(sql==='SELECT cloud_prune_wechat_login_windows() AS removed')
      return {rows:[{removed:3}]}
+   if(sql==='SELECT cloud_prune_owner_login_windows() AS removed')
+     return {rows:[{removed:2}]}
    if(sql.includes('has_function_privilege(current_user,\'cloud_purge_old_tombstones'))
      return {rows:[caps]}
    if(sql.includes('cloud_purge_old_tombstones() AS tombstones'))
@@ -84,11 +90,11 @@ const createCyclePool=(caps=allowed,counts={tombstones:2,auth_artifacts:5})=>{
 }
 const cycle=createCyclePool()
 const results=await runPrivateRetentionCycle(cycle.db,'cuoshi_prod')
-check(results.loginWindows===3&&results.tombstones===2&&results.authArtifacts===5,
- 'One maintenance job covers all three PostgreSQL retention functions')
-check(cycle.calls.length===5&&
- cycle.calls[4].includes('cloud_purge_old_tombstones()')&&
- cycle.calls[4].includes('cloud_purge_expired_auth_artifacts()'),
+check(results.loginWindows===3&&results.ownerLoginWindows===2&&results.tombstones===2&&results.authArtifacts===5,
+ 'One maintenance job covers all four PostgreSQL retention functions')
+check(cycle.calls.length===8&&
+ cycle.calls[7].includes('cloud_purge_old_tombstones()')&&
+ cycle.calls[7].includes('cloud_purge_expired_auth_artifacts()'),
  'No missing account tombstone or session digest pruning path')
 check(!cycle.calls.join(' ').includes('SELECT * FROM cloud_users')&&
  !cycle.calls.join(' ').includes('SELECT * FROM cloud_consumed_wechat_codes'),
@@ -99,7 +105,7 @@ for(const bad of [{...allowed,tombstones:false},{...allowed,auth:false},
  const t=createCyclePool(bad)
  await assert.rejects(runPrivateRetentionCycle(t.db,'cuoshi_prod'),
  /maintenance_scope_unsafe/);count++
- check(t.calls.length===4,'Illegal role cannot run any tombstone or auth digest purge')
+ check(t.calls.length===7,'Illegal role cannot run any tombstone or auth digest purge')
 }
 for(const invalid of [{tombstones:-1,auth_artifacts:2},
  {tombstones:0,auth_artifacts:'2'}]){

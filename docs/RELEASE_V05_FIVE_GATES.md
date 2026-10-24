@@ -124,3 +124,7 @@ GitHub Actions #39990745284 的前三个 Job 通过，前端 Job 在执行 `apt-
 #### 2026-10-24: Sole-owner two-factor dashboard authentication
 
 The restricted dashboard login now takes a password and an authenticator code, not a pasted employee token. Isolated `ownerAuth.ts` and `ownerAuthHttp.ts`, migration 008, database-backed login rate limiting and TOTP replay guards, signed five-minute owner session, and persisted logout revocation are added with synthetic tests. No other human administrator or private-note bulk access is introduced. Production secret setup, owner enrollment, standalone HTTPS ingress, mainland cloud resources, and real-device acceptance remain required; release status remains BLOCKED.
+
+#### 2026-10-24 · 单管理员首装资料与限流清理补齐
+
+新增 `prepare-owner.mjs` 离线引导（随机密码哈希、TOTP 种子、密钥、仅空管理表的唯一所有者审核 SQL），严格仓库外权限 0700/0600、拒绝覆盖/打印秘密；测试不生成正式凭证。现有每小时 PostgreSQL 最小权限清理流程增加 `cloud_prune_owner_login_windows`，不直接读取账号表、用户简记或原始 IP。八步迁移需审核执行，尚未接任何正式资源；发布仍阻断。

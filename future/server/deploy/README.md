@@ -25,17 +25,17 @@
 - 当前仓库没有可重复的真实 Caddy 启动或 HTTPS 探针通过证据，也没有真实私有云账号。此模板需要在未来的受控运行环境**执行原生命令验证并做安全复核**，不能称为已部署成功。
 
 
-## 数据库的七步迁移交付（离线生成，不直接写数据库）
+## 数据库的八步迁移交付（离线生成，不直接写数据库）
 
 `render-migrations.mjs` 是独立的安全迁移渲染器。首次生产部署前，必须由**有权限的独立数据库管理员**创建受控 schema 和 6 个不同 LOGIN 角色：备份、管理员、微信身份、注销、维护、汇总统计。运行时的 4 个服务角色不能拥有 schema、执行 DDL 或成为超级用户；维护/只读统计角色只用于独立管理服务，**不复用小程序的数据库账号**。
 
 1. 由云服务管理员先核准本项目部署方案、schema 名称及各角色名；**不要把密码填进下列变量或提交给 GitHub**。准备 `CUOSHI_PG_SCHEMA`、`CUOSHI_PG_BACKUP_ROLE`、`CUOSHI_PG_ADMIN_ROLE`、`CUOSHI_PG_AUTH_ROLE`、`CUOSHI_PG_DELETION_ROLE`、`CUOSHI_PG_MAINTENANCE_ROLE`、`CUOSHI_PG_REPORTING_ROLE`，均应是符合 SQL 标识符规则的不同小写英文下划线名称。
 2. 将以上仅含**非秘密角色名字**的环境变量交给离线 CLI：`npm run prepare:future:migrations -- /absolute/private/out/new-migrations`。输出必须是此前不存在的目录、在仓库之外；不会发送数据库请求、不会创建账号、不会执行 SQL。失败也不会留下部分迁移。
-3. 工具按固定顺序生成 `001_initial.sql` 至 `007_login_rate_limits.sql` 和 `SHA256-MANIFEST.json`；目录权限 0700、文件 0600，带完整 SHA-256 校验和。每个 SQL 在 `BEGIN` 后显式 `SET LOCAL search_path` 指向经过严格校验的 schema，以免依赖数据库客户端默认 search_path 而错建表。
+3. 工具按固定顺序生成 `001_initial.sql` 至 `008_owner_admin_login.sql` 和 `SHA256-MANIFEST.json`；目录权限 0700、文件 0600，带完整 SHA-256 校验和。每个 SQL 在 `BEGIN` 后显式 `SET LOCAL search_path` 指向经过严格校验的 schema，以免依赖数据库客户端默认 search_path 而错建表。
 4. **人工逐项复核生成 SQL**，确认实例及 schema 与账号归属，检查是否已存在对象、角色权限、需要的维护窗口、可回滚快照以及数据库实际备份。此脚本目前面向新部署的**一次性、从空 schema 开始**的迁移，不提供在线重放/升级或自动 rollback；数据库已有数据绝不能再次跑首建 SQL。
 5. 由经过授权的**独立迁移账号**按文件名顺序执行，严格核对每步的 DB 返回、对象/权限和失败日志；严禁使用运行时备份、微信身份、注销或管理员账户执行 DDL。迁移成功后才能启动私有 Node 服务，验证 4 个最小权限登录，随后再通过可信代理连接真实微信服务。
 
-`npm run test:future:migration-render` 用 **62 项**静态与临时文件合同验证固定顺序、SQL 角色名、注入防护、只写仓库外权限隔离目录及 checksum；独立的真实 PostgreSQL CI 则直接调用相同渲染器执行 7 份迁移并验证角色权限与注销业务。这两类测试均不能代替生产实例上的审查和演练。
+`npm run test:future:migration-render` 用 **67 项**静态与临时文件合同验证固定顺序、SQL 角色名、注入防护、只写仓库外权限隔离目录及 checksum；独立的真实 PostgreSQL CI 则直接调用相同渲染器执行 8 份迁移并验证角色权限与注销业务。这两类测试均不能代替生产实例上的审查和演练。
 
 
 ### 必须配置的 PostgreSQL schema（已修复生产启动阻断）
@@ -97,7 +97,7 @@
 
 ## CI 原生 pg_dump / pg_restore 恢复演练（不会产生用户导出功能）
 
-GitHub 真实 PostgreSQL Job 在完成 7 份正式 schema 迁移并上传**合成**零件数/简记修改历史后，使用与数据库版本一致的官方 `postgres:16-alpine` 客户端、非 root 容器运行 `pg_dump --format custom`，将测试 schema 备份到 CI 宿主的私有临时目录，再以 `pg_restore --exit-on-error` **恢复至另一座新建的空数据库**。恢复后核验：JSONB 中显式 0、完整历史事件数量、原 revision 和 digest、所有者授权以及原库不被更改；还校验 `PGDMP` 文件头及备份 SHA-256 未变，最后删除测试恢复库与临时文件。额外静态校验禁止生产域名、其他数据库名、异常 SQL schema 和非合成 owner ID。
+GitHub 真实 PostgreSQL Job 在完成 8 份正式 schema 迁移并上传**合成**零件数/简记修改历史后，使用与数据库版本一致的官方 `postgres:16-alpine` 客户端、非 root 容器运行 `pg_dump --format custom`，将测试 schema 备份到 CI 宿主的私有临时目录，再以 `pg_restore --exit-on-error` **恢复至另一座新建的空数据库**。恢复后核验：JSONB 中显式 0、完整历史事件数量、原 revision 和 digest、所有者授权以及原库不被更改；还校验 `PGDMP` 文件头及备份 SHA-256 未变，最后删除测试恢复库与临时文件。额外静态校验禁止生产域名、其他数据库名、异常 SQL schema 和非合成 owner ID。
 
 这个演练**只在 GitHub Actions `CI=true`、`GITHUB_ACTIONS=true`、`CUOSHI_TEST_RESTORE_DRILL=SYNTHETIC_POSTGRES_ONLY` 及回环地址的临时测试库允许执行**。测试备份不可包含生产个人信息，且**不会上传到 CI Artifacts**，不存在对用户开放的数据导出或设备恢复功能。
 
@@ -108,3 +108,18 @@ GitHub 真实 PostgreSQL Job 在完成 7 份正式 schema 迁移并上传**合�
 `deploy/check-public-health.mjs` 仅接受规范的非内网、非保留域名字符串，以系统 HTTPS 客户端向备案的 `https://<域名>/healthz` 发起一次无凭据的 GET。只有 HTTP 204 算正常；TLS 证书/域名校验失败、超时、跳转、200 或 503 一律使脚本非零退出，且日志只打印固定错误代号，不包含服务端密钥或用户记录。`systemd/cuoshi-health.service` 用独立 `cuoshi-monitor` 低权限身份与 `/etc/cuoshi/monitor.env`（仅含公开域名），定时器 `systemd/cuoshi-health.timer` 每五分钟执行，错误可通过 `systemctl status`、`journalctl` 被运维监控检测。单独的 `monitor.env.example` 是**不可直接用于正式运行的模板**。
 
 `npm run test:future:health-monitor` 以模拟 HTTPS 返回和实际 Node 启动验证错误状态、域名限制、独立 systemd 配置。**仓库尚未接入实际运维通知接收人，脚本失败并不自动发送短信或微信消息**；在真实云开通后须由账号主体确认通知人员，配置云平台服务监控/告警策略并通过断网、数据库暂停、证书错误三类现场演练。切勿因为 CI 的合成健康检查成功就认为已配置监控或正式备份。
+
+## 唯一管理员首次初始化（只提供离线工具，绝不自动接管生产）
+
+正式后台只允许项目所有者一人使用，**没有员工体系或双人审批**。在真实合规服务器、独立 PostgreSQL 空 schema 和受控迁移就绪前，**不要执行正式初始化**。`prepare-owner.mjs` 仅生成离线私有资料，不访问网络、数据库，也不会在命令行打印账号密码或 TOTP 种子。
+
+在受信任的运维主机上，准备一个**已经存在、仅当前操作者可写的私人父目录**（不能是仓库内或可公开读取目录），为已经审核的 schema 指定 `CUOSHI_PG_SCHEMA`，然后执行 `npm run prepare:future:owner -- /绝对/私人/父目录/全新的管理员资料夹`。输出目录必须此前不存在，工具拒绝覆盖和父目录的宽松权限。新目录采用 `0700`、内含四个 `0600` 文件：
+
+- `owner-auth.env.fragment`：仅用于服务端秘密管理器或 `/etc/cuoshi/staff.env` 的管理员认证变量。**它不是完整部署环境文件**；另需数据库 TLS URL、管理端口、独立代理和受控的所有生产配置。
+- `owner-onboarding.txt`：含一次性生成的强密码和身份验证器 Base32 种子。所有者应只在本地导入 TOTP 应用（时间型、SHA-1、六位码、30 秒），将密码安全保存到自己的密码管理器；完成后由本人按正式保密流程销毁这一临时资料，避免泄露或误传。
+- `owner-enroll.sql`：用审核过的 schema 明确设置事务 `search_path`，并且**只有 `cloud_staff` 表完全为空时**才插入唯一 `super_admin` ID；存在任何旧管理身份时一律报错，不会覆盖、重建、删除原表。此 SQL **只可由真实独立迁移身份人工审查执行一次**，绝不能由运行时管理员数据库用户或公网接口自动执行。它不含密码、验证码种子或私有记录。
+- `SHA256-MANIFEST.txt`：对环境片段与初始化 SQL 的完整校验清单；不能把哈希文件误认为加密。
+
+生成的秘密片段仍须配置到有权限保护的云端安全存储。登录接口只有在 `CUOSHI_OWNER_ADMIN_ID` 与唯一 `super_admin` 记录一致、密码哈希/TOTP 种子正确、可信 HTTPS 代理与两个独立 PostgreSQL 最小权限账号就绪时才会开放。测试使用全虚构、临时创建后立即销毁的密钥材料；`npm run test:future:owner-bootstrap` 检查输出权限、密码哈希可验证性、TOTP 格式、schema 限定、拒绝覆盖和不在日志泄漏秘密。
+
+升级注意：迁移 `008_owner_admin_login.sql` 为单人后台添加额外的登录限流与验证码使用状态，运行时维护任务现在也清理过期管理员 IP-HMAC 时间窗口。历史文档的七步迁移说明已被八步替代；迁移执行前仍需真实数据库管理员按顺序复核并做好备份、回滚方案。不存在自动生产迁移或“一键上线”。

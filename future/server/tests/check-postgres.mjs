@@ -77,7 +77,7 @@ try{
   const {privatePoolConnectionOptions}=require(join(out,'future/server/src/privateConfig.js'))
   const {checkPrivateDatabaseReadiness}=require(join(out,'future/server/src/privateReadiness.js'))
   const {checkPrivateStaffReadiness}=require(join(out,'future/server/src/privateStaffReadiness.js'))
-  const {prunePrivateLoginWindows,runPrivateRetentionCycle}=require(join(out,'future/server/src/privateMaintenance.js'))
+  const {prunePrivateLoginWindows,prunePrivateOwnerLoginWindows,runPrivateRetentionCycle}=require(join(out,'future/server/src/privateMaintenance.js'))
   const {createPrivateHealthProbe}=require(join(out,'future/server/src/privateHealth.js'))
   const {createPostgresWechatLoginLimiter}=require(join(out,'future/server/src/loginRateLimiter.js'))
   const repository=require(join(out,'future/server/src/repository.js'))
@@ -365,6 +365,31 @@ try{
     /private_cloud_maintenance_role_unsafe/);checks++
   await assert.rejects(prunePrivateLoginWindows(maintenancePool,'wrong_schema'),
     /private_cloud_maintenance_scope_unsafe/);checks++
+  // Owner-login IP-HMAC buckets have their own timer-safe, least-privilege
+  // pruning function. Production retention cycle invokes this automatically.
+  check(await prunePrivateOwnerLoginWindows(maintenancePool,schema)===0,
+    'Real maintenance safely keeps recent owner login windows')
+  const ownerExpiredWindow=Math.floor(Date.now()/300000)-301
+  const ownerRecentWindow=Math.floor(Date.now()/300000)-3
+  await pool.query(`INSERT INTO cloud_owner_login_windows
+    (scope,digest,window_5m,attempts) VALUES
+    ('peer',$1,$2,1),('peer',$3,$4,1)`,
+    ['e'.repeat(64),ownerExpiredWindow,'f'.repeat(64),ownerRecentWindow])
+  check(await prunePrivateOwnerLoginWindows(maintenancePool,schema)===1,
+    'Only expired sole-owner login peer digests are purged')
+  check((await pool.query(`SELECT count(*) AS n FROM cloud_owner_login_windows
+    WHERE digest=$1`,['e'.repeat(64)])).rows[0].n==='0'&&
+    (await pool.query(`SELECT count(*) AS n FROM cloud_owner_login_windows
+    WHERE digest=$1`,['f'.repeat(64)])).rows[0].n==='1',
+    'Owner login maintenance keeps the recent limiter intact')
+  await assert.rejects(prunePrivateOwnerLoginWindows(identityPool,schema),
+    /private_cloud_maintenance_scope_unsafe/);checks++
+  await assert.rejects(prunePrivateOwnerLoginWindows(adminPool,schema),
+    /private_cloud_maintenance_scope_unsafe/);checks++
+  await assert.rejects(prunePrivateOwnerLoginWindows(maintenancePool,'wrong_schema'),
+    /private_cloud_maintenance_scope_unsafe/);checks++
+  await attempt(adminPool,'SELECT * FROM cloud_owner_login_windows')
+  await attempt(reportingPool,'SELECT * FROM cloud_owner_login_windows')
   // The rest of this disposable database suite assumes only actual login
   // traffic occupies the in-progress minute windows. Remove synthetic seed.
   await pool.query('DELETE FROM cloud_wechat_login_rate_windows WHERE peer_digest=$1',

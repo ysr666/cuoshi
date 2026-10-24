@@ -72,7 +72,9 @@
     "test:future:staff-host": "node tests/check-future-staff-host.mjs",
     "test:future:staff-console": "node tests/check-future-staff-console.cjs",
     "test:future:staff-config": "node tests/check-future-staff-config.mjs",
-    "test:future:owner-auth": "node tests/check-future-owner-auth.mjs"
+    "test:future:owner-auth": "node tests/check-future-owner-auth.mjs",
+    "prepare:future:owner": "node future/server/deploy/prepare-owner.mjs",
+    "test:future:owner-bootstrap": "node tests/check-future-owner-bootstrap.mjs"
   },
   "dependencies": {
     "@dcloudio/uni-app": "3.0.0-4080720251210001",

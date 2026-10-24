@@ -92,3 +92,9 @@ Production settings are REQUIRED and must never be committed, pasted in chat, or
 Migration `008_owner_admin_login.sql` adds atomic 5-minute PostgreSQL login limits (five per authenticated peer, 30 globally), one-use TOTP time-step consumption, and bounded maintenance cleanup. Any missing configuration, failed database, malformed secret or mismatched identity fails closed. The front end has no mock-data fallback on failed sign-in. Unit/browser/integration coverage: `npm run test:future:owner-auth`, `npm run test:future:staff-console`, and real PostgreSQL CI.
 
 This is code readiness only. No real dashboard secrets, production database, official HTTPS domain, or live administrator enrollment have been set up. An unconfigured deployment cannot log in and must NOT be published.
+
+## 当前新增：单管理员首次安装资料（2026-10-24）
+
+`future/server/deploy/prepare-owner.mjs` 是独立**离线**初始化工具，按批准的 schema 生成一次性管理员 ID、随机强密码哈希、TOTP 身份验证器种子及独立签名/代理/IP 限流密钥。所有输出放在 Git 仓库外、权限 0700 的全新目录内，凭证文件 0600；用户需亲自完成 TOTP 绑定和秘密托管。`owner-enroll.sql` 只在空的历史管理员表内插入**唯一** `super_admin`；不打开额外员工身份、不接触微信用户记录、不执行真实 SQL。每小时受限维护任务已增加过期管理员登录尝试计数清理，避免把新的匿名 IP-HMAC 记录永久积累。完整操作条件与风险以 `future/server/deploy/README.md` 为准。
+
+**本次没有初始化真实管理员，没有生成实际部署密钥、购买云服务器、部署接口或上传你的私人数据**；所有测试资料均在隔离临时目录中使用后销毁。前端历史 npm 漏洞、上线合规和真机 QA 仍是正式发布关口。
