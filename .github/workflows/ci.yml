@@ -311,3 +311,22 @@ jobs:
           CUOSHI_TEST_RESTORE_DRILL: SYNTHETIC_POSTGRES_ONLY
           CUOSHI_TEST_POSTGRES_URL: postgresql://postgres:ci_only_disposable@127.0.0.1:5432/postgres
         run: npm test --prefix future/server
+      - name: Package allowlisted private deploy input and verify clean-room extraction
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm run test:future:private-release-bundle
+          mkdir -p -m 700 "$RUNNER_TEMP/cuoshi-private-release"
+          npm run package:future:private-release -- "$RUNNER_TEMP/cuoshi-private-release"
+          cd "$RUNNER_TEMP/cuoshi-private-release"
+          sha256sum cuoshi-private-deploy.tar.gz > cuoshi-private-deploy.tar.gz.sha256
+          sha256sum -c cuoshi-private-deploy.tar.gz.sha256
+      - name: Archive non-deployed, secret-free private cloud release input
+        uses: actions/upload-artifact@v4
+        with:
+          name: cuoshi-private-release-${{ github.run_id }}
+          path: |
+            ${{ runner.temp }}/cuoshi-private-release/cuoshi-private-deploy.tar.gz
+            ${{ runner.temp }}/cuoshi-private-release/cuoshi-private-deploy.tar.gz.sha256
+          if-no-files-found: error
+          retention-days: 7

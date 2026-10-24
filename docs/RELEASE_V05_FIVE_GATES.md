@@ -150,3 +150,7 @@ DCloud 旧插件固定的 Express 4.20.0 通过兼容 4.x 版本 override 定向
 已区分官方下发的**小程序备案号 `省ICP备数字号-数字X`** 与网站 `-数字`、App `-数字A`：`buildConfig.mjs` 在 `CUOSHI_V05_RELEASE_CANDIDATE=1` 时拒绝非小程序格式，仅为语法校验，不代表已获管局/微信批准；部署时必须核对真实原始备案信息。参考公开 ICP 编号说明：https://docs.volcengine.com/docs/Record/BasicConceptsofFilingFAQ?lang=zh 。首次告知页现在只在测试包显示“正式发布前……”提示；正式候选包改为指向「设置」中的数据说明、备案和联系渠道，不把测试提示展示给用户。新增 `test:future:rc-build`：在**仓库外临时私有目录**内使用完全虚构 AppID、HTTPS、备案和邮箱实际编译发布路径，检查编译结果的两页、备案/联系方式、首页条件告知和独立版本标志；测试结束一律销毁，不改变正常 CI 测试包，更不冒充微信实测或已核准备案。隐私草案已统一为**唯一管理员**，取消不适用的员工和客服审批陈述；历史 v0.4 JSON 导入导出真机指引明确标为停用存档。
 
 五项真实发布条件仍未齐全，本次没有 AppID、证件、个人资料、生产域名或云密钥接入，发布仍为 BLOCKED。
+
+#### 2026-10-24 · 可复核私有后端部署交付包（尚未部署）
+
+此前只有各源文件、systemd/Caddy 模板和编译后的本地二进制，真实服务器部署时仍需手工挑文件。现增加严格白名单的 `package-private-release.mjs`：将正式 PostgreSQL CI 通过的编译服务、8 份迁移、独立 server 锁文件、唯一管理员后台静态资源、保守的服务/代理模板及发布指引压缩为**不含生产 Secrets、无 node_modules**的 `cuoshi-private-deploy.tar.gz`；文件使用 `SHA256SUMS` 逐项复核并单独发布压缩文件 SHA-256。`test:future:private-release-bundle` 使用私有临时目录实际解包、校验全部文件、确认退出即清理、无凭据无法启动、唯一管理员网页资源可以独立读取。CI 打包后 Artifact 留存七天，**不自动部署、迁移、安装服务、绑定端口或签发真实管理员身份**。上线仍受全部五道真实关口约束。

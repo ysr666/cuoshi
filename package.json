@@ -78,7 +78,9 @@
     "test:future:framework-boundary": "node tests/check-future-framework-boundary.mjs",
     "test:future:vue-ssr-patch": "node tests/check-future-vue-ssr-patch.mjs",
     "test:future:vite-loopback": "node tests/check-vite-loopback-guard.mjs",
-    "test:future:rc-build": "node tests/check-future-rc-build.mjs"
+    "test:future:rc-build": "node tests/check-future-rc-build.mjs",
+    "test:future:private-release-bundle": "node tests/check-future-private-release-bundle.mjs",
+    "package:future:private-release": "node future/server/deploy/package-private-release.mjs"
   },
   "dependencies": {
     "@dcloudio/uni-app": "3.0.0-4080720251210001",

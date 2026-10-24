@@ -123,3 +123,13 @@ GitHub 真实 PostgreSQL Job 在完成 8 份正式 schema 迁移并上传**合�
 生成的秘密片段仍须配置到有权限保护的云端安全存储。登录接口只有在 `CUOSHI_OWNER_ADMIN_ID` 与唯一 `super_admin` 记录一致、密码哈希/TOTP 种子正确、可信 HTTPS 代理与两个独立 PostgreSQL 最小权限账号就绪时才会开放。测试使用全虚构、临时创建后立即销毁的密钥材料；`npm run test:future:owner-bootstrap` 检查输出权限、密码哈希可验证性、TOTP 格式、schema 限定、拒绝覆盖和不在日志泄漏秘密。
 
 升级注意：迁移 `008_owner_admin_login.sql` 为单人后台添加额外的登录限流与验证码使用状态，运行时维护任务现在也清理过期管理员 IP-HMAC 时间窗口。历史文档的七步迁移说明已被八步替代；迁移执行前仍需真实数据库管理员按顺序复核并做好备份、回滚方案。不存在自动生产迁移或“一键上线”。
+
+## 私有后端部署交付包（只打包，不安装、不开网、不启服务）
+
+自 Draft PR #4 的 2026-10-24 起，**真实 PostgreSQL 全部回归成功之后**，CI 用 `npm run package:future:private-release -- <私有绝对目录>` 产生 `cuoshi-private-deploy.tar.gz` 和旁边的 SHA-256 校验记录；GitHub Actions 提供 `cuoshi-private-release-<run_id>` Artifact。只有获授权的部署人员应将该文件视为审核后的**候选部署输入**，不能把 Artifact SUCCESS 理解为已经部署、已备案或已通过微信审核。仓库 public，Artifact 不允许含生产密钥及用户数据。
+
+包严格白名单包含：经 `npm run build:private --prefix future/server` 编译的 CommonJS 云服务、唯一管理员服务、每小时维护服务及核心模型；`future/server/package.json`、独立 `package-lock.json`（**不附加 node_modules**）；8 份经审核的 SQL 迁移；Caddy HTTPS 代理/systemd/service timer 模板；独立管理员网页四份受限静态资源；本 README 及五道发布关口指引。`RELEASE.txt` 标记 Git commit 和 `NOT AN INSTALLED DEPLOYMENT`，`SHA256SUMS` 覆盖每个实际文件的内容。压缩包权限 0600，临时组包目录创建后即清理，不放到 Git 目录或微信小程序中。
+
+`npm run test:future:private-release-bundle` 会对生成物执行**实际 tar 解包、超过 300 项逐文件摘要复核、危险路径与 `.env`/源码/`node_modules` 排除、真正的唯一管理员 HTML/CSS 资源装载**，并从解包后的三种独立可执行服务中抽查主服务及后台在缺密钥时明确拒绝启动。CI 和本地不会执行迁移、联网接触任何微信账号、写生产数据或激活 systemd。下载后用 `sha256sum -c cuoshi-private-deploy.tar.gz.sha256` 验证外层下载完整性，再校验 `SHA256SUMS`，才能由授权部署人员在**合法部署目标机**使用独立锁文件安装 `pg` 运行依赖、审查迁移/权限、注入正式 Secrets 并进行全套现场验收。
+
+切勿把这份技术部署压缩包当成微信审核上传包；微信候选版来自独立的 `build:future:mp-weixin`，生产云必须独立持有用户数据与秘密。管理员只有项目所有者一人；独立的技术数据库角色不是员工账号。正式域名和服务端密钥在所有发布包中一律不存在。
