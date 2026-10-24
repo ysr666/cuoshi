@@ -257,6 +257,9 @@ jobs:
             -e CUOSHI_PUBLIC_DOMAIN=api.cuoshi.invalid \
             -e CUOSHI_PRIVATE_PORT=18765 \
             -e CUOSHI_EDGE_PROOF_HEX=$(printf 'a%.0s' {1..64}) \
+            -e CUOSHI_STAFF_PORT=18766 \
+            -e CUOSHI_ADMIN_GATE_PORT=18767 \
+            -e CUOSHI_STAFF_EDGE_PROOF_HEX=$(printf 'b%.0s' {1..64}) \
             -v "$PWD/future/server/deploy/Caddyfile:/etc/caddy/Caddyfile:ro" \
             caddy:2.11.7-alpine caddy adapt --config /etc/caddy/Caddyfile --adapter caddyfile --pretty \
             > "$RUNNER_TEMP/cuoshi-caddy-adapt.json"

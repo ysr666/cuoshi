@@ -154,3 +154,7 @@ DCloud 旧插件固定的 Express 4.20.0 通过兼容 4.x 版本 override 定向
 #### 2026-10-24 · 可复核私有后端部署交付包（尚未部署）
 
 此前只有各源文件、systemd/Caddy 模板和编译后的本地二进制，真实服务器部署时仍需手工挑文件。现增加严格白名单的 `package-private-release.mjs`：将正式 PostgreSQL CI 通过的编译服务、8 份迁移、独立 server 锁文件、唯一管理员后台静态资源、保守的服务/代理模板及发布指引压缩为**不含生产 Secrets、无 node_modules**的 `cuoshi-private-deploy.tar.gz`；文件使用 `SHA256SUMS` 逐项复核并单独发布压缩文件 SHA-256。`test:future:private-release-bundle` 使用私有临时目录实际解包、校验全部文件、确认退出即清理、无凭据无法启动、唯一管理员网页资源可以独立读取。CI 打包后 Artifact 留存七天，**不自动部署、迁移、安装服务、绑定端口或签发真实管理员身份**。上线仍受全部五道真实关口约束。
+
+#### 2026-10-24: Only-admin ingress stays on loopback behind authenticated SSH
+
+Caddy now keeps the eight WeChat/public API paths on the approved HTTPS hostname, while serving the one owner's existing password+TOTP admin console via a different **127.0.0.1-only** listener. Seven fixed admin URL paths are forwarded to its independent loopback server with a separately derived trusted-edge proof; there is NO new public administrator site, no staff/employee account, and no user private note listing. Operator connects over authenticated SSH local forwarding, then signs in using password and a six-digit authenticator code. The Caddy environment generator now refuses colliding ports and reused signing proofs. Real Caddy adaptation CI validates the resulting listener and routing, and the file is part of the reviewed backend deployment bundle. Live SSH tunnel, cloud platform, firewall and domain validation have not occurred. Release stays BLOCKED.

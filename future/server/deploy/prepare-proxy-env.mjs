@@ -21,8 +21,20 @@ export function configLines(env){
  if(typeof port!=='string'||!/^\d{4,5}$/.test(port)||
   Number(port)<1024||Number(port)>65535)
   throw Error('proxy_requires_valid_private_port')
+ const gate=env.CUOSHI_ADMIN_GATE_PORT
+ const staff=env.CUOSHI_STAFF_PORT
+ if(typeof gate!=='string'||typeof staff!=='string'||
+    !/^[0-9]{4,5}$/.test(gate)||!/^[0-9]{4,5}$/.test(staff)||
+    [gate,staff].some(x=>Number(x)<1024||Number(x)>65535)||
+    new Set([Number(port),Number(gate),Number(staff)]).size!==3)
+   throw Error('proxy_requires_distinct_admin_private_ports')
+ const ownerProof=deriveProxyProof(env.CUOSHI_STAFF_EDGE_SHARED_SECRET_HEX)
+ const publicProof=deriveProxyProof(env.CUOSHI_EDGE_SHARED_SECRET_HEX)
+ if(ownerProof===publicProof)throw Error('proxy_requires_separated_service_secrets')
  return `CUOSHI_PUBLIC_DOMAIN=${domain}\nCUOSHI_PRIVATE_PORT=${port}\n`+
-  `CUOSHI_EDGE_PROOF_HEX=${deriveProxyProof(env.CUOSHI_EDGE_SHARED_SECRET_HEX)}\n`
+  `CUOSHI_ADMIN_GATE_PORT=${gate}\nCUOSHI_STAFF_PORT=${staff}\n`+
+  `CUOSHI_EDGE_PROOF_HEX=${publicProof}\n`+
+  `CUOSHI_STAFF_EDGE_PROOF_HEX=${ownerProof}\n`
 }
 export function createProxyEnvironmentFile(dest,env){
  if(typeof dest!=='string'||!isAbsolute(dest))

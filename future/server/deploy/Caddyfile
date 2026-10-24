@@ -29,3 +29,27 @@
         respond 404
     }
 }
+
+# The ONE owner's dashboard is private, never a public subdomain.
+# Access ONLY over an authenticated SSH port-forward to the target machine:
+# ssh -N -L 127.0.0.1:18767:127.0.0.1:18767 <approved-operator-host>
+# Browser: http://127.0.0.1:18767/admin/ ; SSH encrypts the transport.
+# Both the Caddy listener and backend listen on different local loopback ports.
+http://127.0.0.1:{$CUOSHI_ADMIN_GATE_PORT} {
+    bind 127.0.0.1
+
+    @cuoshi_owner {
+        path /admin/ /admin/app.js /admin/style.css /admin/base.css /internal/admin/login /internal/admin/logout /internal/admin/overview
+    }
+    handle @cuoshi_owner {
+        reverse_proxy 127.0.0.1:{$CUOSHI_STAFF_PORT} {
+            header_up -X-Cuoshi-Edge-Proof
+            header_up -X-Cuoshi-Client-Ip
+            header_up X-Cuoshi-Edge-Proof {$CUOSHI_STAFF_EDGE_PROOF_HEX}
+            header_up X-Cuoshi-Client-Ip {http.request.remote.host}
+        }
+    }
+    handle {
+        respond 404
+    }
+}
